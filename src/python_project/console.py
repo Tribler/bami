@@ -16,11 +16,13 @@ from . import __version__, wikipedia
     show_default=True,
 )
 @click.version_option(version=__version__)
-def main(language):
-    data = wikipedia.random_page(language=language)
+def main(language: str) -> None:
+    """Output extract from a random page with a language
 
-    title = data["title"]
-    extract = data["extract"]
+    Args:
+        language: Wikipedia page language, default 'en'.
+    """
+    page = wikipedia.random_page(language=language)
 
-    click.secho(title, fg="green")
-    click.echo(textwrap.fill(extract))
+    click.secho(page.title, fg="green")
+    click.echo(textwrap.fill(page.extract))

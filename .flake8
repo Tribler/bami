@@ -1,8 +1,9 @@
 # .flake8
 [flake8]
-select = B,B9,BLK,C,E,F,W,I,S
+select = ANN,B,B9,BLK,C,DAR,E,F,W,I,S
 ignore = E203,W503,E501
 max-line-length = 88
 application-import-names = python_project,tests
 import-order-style = google
-per-file-ignores = tests/*:S101
+per-file-ignores = tests/*:S101,ANN
+                   noxfile.py:ANN
