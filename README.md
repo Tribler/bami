@@ -5,4 +5,4 @@
 [![Codecov](https://codecov.io/gh/grimadas/python-project/branch/master/graph/badge.svg)](https://codecov.io/gh/grimadas/python-project)
 
 
-Hypermodern python project template
+Hypermodern python project template.
