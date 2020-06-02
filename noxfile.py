@@ -19,6 +19,7 @@ def install_with_constraints(session: Session, *args: str, **kwargs: Any) -> Non
             "poetry",
             "export",
             "--dev",
+            "--without-hashes",
             "--format=requirements.txt",
             f"--output={requirements.name}",
             external=True,
@@ -102,6 +103,27 @@ def coverage(session: Session) -> None:
 
 
 @nox.session(python="3.7")
+def collect_types(session: Session) -> None:
+    """Auto annotate the codebase"""
+    args = session.posargs or ["--monkeytype-output=./monkeytype.sqlite3"]
+    session.run("poetry", "install", external=True)
+    install_with_constraints(session, "monkeytype")
+    install_with_constraints(session, "pytest-monkeytype")
+    session.run("py.test", *args)
+    # session.run("monkeytype", *args)
+
+
+@nox.session(python="3.7")
+def annotate(session: Session) -> None:
+    """Auto annotate the codebase"""
+    # TODO: change to locations
+    args = session.posargs or ["list-modules | xargs -n1 monkeytype apply"]
+    session.run("poetry", "install", external=True)
+    install_with_constraints(session, "monkeytype")
+    session.run("monkeytype", *args)
+
+
+@nox.session(python="3.7")
 def xdoctest(session: Session) -> None:
     """Run examples with xdoctest."""
     args = session.posargs or ["all"]
@@ -124,6 +146,6 @@ def tests(session: Session) -> None:
     args = session.posargs or ["--cov", "-m", "not e2e"]
     session.run("poetry", "install", "--no-dev", external=True)
     install_with_constraints(
-        session, "coverage[toml]", "pytest", "pytest-cov", "pytest-mock"
+        session, "coverage[toml]", "pytest", "pytest-cov", "pytest-mock", "asynctest"
     )
     session.run("pytest", *args)

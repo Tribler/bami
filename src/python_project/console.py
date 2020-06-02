@@ -26,3 +26,7 @@ def main(language: str) -> None:
 
     click.secho(page.title, fg="green")
     click.echo(textwrap.fill(page.extract))
+
+
+def val() -> int:
+    return 42
