@@ -27,8 +27,14 @@ from python_project.attestation.wallet.irmaexact.gabi.proofs import (
     ProofU,
 )
 
-from python_project.attestation.wallet.irmaexact.gabi.keys import DefaultSystemParameters, signMessageBlockAndCommitment
-from python_project.attestation.wallet.irmaexact.gabi.proofs import createChallenge, hashCommit
+from python_project.attestation.wallet.irmaexact.gabi.keys import (
+    DefaultSystemParameters,
+    signMessageBlockAndCommitment,
+)
+from python_project.attestation.wallet.irmaexact.gabi.proofs import (
+    createChallenge,
+    hashCommit,
+)
 from python_project.attestation.wallet.irmaexact import secure_randint
 from python_project.attestation.wallet.primitives.value import FP2Value
 

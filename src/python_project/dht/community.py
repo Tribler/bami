@@ -1,4 +1,4 @@
-from __future__ import  annotations
+from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Set, Tuple, Type, Union, TYPE_CHECKING
 import hashlib

@@ -2,7 +2,10 @@ import asyncio
 import logging
 import socket
 
-from python_project.messaging.interfaces.endpoint import Endpoint, EndpointClosedException
+from python_project.messaging.interfaces.endpoint import (
+    Endpoint,
+    EndpointClosedException,
+)
 from typing import Tuple
 
 

@@ -1,16 +1,27 @@
-from __future__ import  annotations
+from __future__ import annotations
 
 import binascii
 import json
 import os
 
-from python_project.attestation.wallet.irmaexact.gabi.attributes import make_attribute_list
-from python_project.attestation.wallet.irmaexact.gabi.keys import DefaultSystemParameters
+from python_project.attestation.wallet.irmaexact.gabi.attributes import (
+    make_attribute_list,
+)
+from python_project.attestation.wallet.irmaexact.gabi.keys import (
+    DefaultSystemParameters,
+)
 from python_project.attestation.wallet.irmaexact.gabi.proofs import createChallenge
-from python_project.attestation.wallet.irmaexact.wrappers import challenge_response, serialize_proof_d, \
-    unserialize_proof_d
+from python_project.attestation.wallet.irmaexact.wrappers import (
+    challenge_response,
+    serialize_proof_d,
+    unserialize_proof_d,
+)
 from python_project.attestation.wallet.primitives.structs import ipack, iunpack
-from python_project.attestation.identity_formats import Attestation, FORMATS, IdentityAlgorithm
+from python_project.attestation.identity_formats import (
+    Attestation,
+    FORMATS,
+    IdentityAlgorithm,
+)
 from python_project.attestation.wallet.irmaexact.gabi.proofs import ProofD
 from typing import Dict, List, Optional, Tuple, Type, Union
 

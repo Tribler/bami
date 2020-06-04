@@ -87,7 +87,7 @@ class Trie(object):
         return list(self.itervalues())
 
     def longest_prefix_item(
-            self, key: str, default: Optional[Union[object, str]] = Null
+        self, key: str, default: Optional[Union[object, str]] = Null
     ) -> Optional[Union[str, Tuple[str, int]]]:
         prefix = u""
         value = None
@@ -108,13 +108,13 @@ class Trie(object):
         raise KeyError
 
     def longest_prefix(
-            self, key: str, default: Optional[Union[object, str]] = Null
+        self, key: str, default: Optional[Union[object, str]] = Null
     ) -> Optional[str]:
         result = self.longest_prefix_item(key, default=default)
         return result[0] if result != default else default
 
     def longest_prefix_value(
-            self, key: str, default: Optional[object] = Null
+        self, key: str, default: Optional[object] = Null
     ) -> Optional[Union[int]]:
         result = self.longest_prefix_item(key, default=default)
         return result[1] if result != default else default

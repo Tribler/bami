@@ -7,7 +7,6 @@ from collections import namedtuple
 from hashlib import sha256
 
 import orjson as json
-
 from python_project.attestation.noodle.payload import (
     HalfBlockBroadcastPayload,
     HalfBlockPayload,
@@ -20,7 +19,17 @@ from python_project.messaging.serialization import (
     PackError,
     default_serializer,
 )
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
     from python_project.attestation.noodle.memory_database import NoodleMemoryDatabase

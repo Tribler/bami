@@ -5,10 +5,13 @@ import asynctest
 from python_project.attestation.trustchain.consts import (
     EMPTY_SIG,
     GENESIS_HASH,
-    GENESIS_SEQ
+    GENESIS_SEQ,
 )
 
-from python_project.attestation.trustchain.block import TrustChainBlock, ValidationResult
+from python_project.attestation.trustchain.block import (
+    TrustChainBlock,
+    ValidationResult,
+)
 
 from python_project.keyvault.crypto import default_eccrypto
 from python_project.messaging.deprecated.encoding import encode
@@ -21,7 +24,7 @@ class TestBlock(TrustChainBlock):
     """
 
     def __init__(
-            self, transaction=None, previous=None, key=None, linked=None, block_type=b"test"
+        self, transaction=None, previous=None, key=None, linked=None, block_type=b"test"
     ):
         crypto = default_eccrypto
         if linked:
@@ -108,7 +111,7 @@ class MockDatabase(object):
             i
             for i in self.data[blk.link_public_key]
             if i.sequence_number == blk.link_sequence_number
-               or i.link_sequence_number == blk.sequence_number
+            or i.link_sequence_number == blk.sequence_number
         ]
         return item[0] if item else None
 

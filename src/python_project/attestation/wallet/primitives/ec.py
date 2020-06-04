@@ -7,9 +7,9 @@ from python_project.attestation.wallet.primitives.value import FP2Value
 
 
 def esum(
-        mod: int,
-        p: Union[Tuple[FP2Value, FP2Value], str],
-        q: Union[List[FP2Value], Tuple[FP2Value, FP2Value], str],
+    mod: int,
+    p: Union[Tuple[FP2Value, FP2Value], str],
+    q: Union[List[FP2Value], Tuple[FP2Value, FP2Value], str],
 ) -> Union[List[FP2Value], Tuple[FP2Value, FP2Value], str]:
     """
     Perform Elliptic Curve addition of points P and Q over Fp^2.
@@ -34,11 +34,11 @@ def esum(
 
 
 def H(
-        mod: int,
-        p: Tuple[FP2Value, FP2Value],
-        q: Tuple[FP2Value, FP2Value],
-        x: FP2Value,
-        y: FP2Value,
+    mod: int,
+    p: Tuple[FP2Value, FP2Value],
+    q: Tuple[FP2Value, FP2Value],
+    x: FP2Value,
+    y: FP2Value,
 ) -> FP2Value:
     """
     Perform the h_{T,T} function for the Miller calculation with divisors P and Q for coordinate (x,y).
@@ -55,10 +55,10 @@ def H(
 
 
 def millercalc(
-        mod: int,
-        M: int,
-        p: Tuple[FP2Value, FP2Value],
-        R: Union[List[FP2Value], Tuple[FP2Value, FP2Value]],
+    mod: int,
+    M: int,
+    p: Tuple[FP2Value, FP2Value],
+    R: Union[List[FP2Value], Tuple[FP2Value, FP2Value]],
 ) -> FP2Value:
     """
     Perform the Miller calculation for message M point P and coordinates given by R.
@@ -76,11 +76,11 @@ def millercalc(
 
 
 def weilpairing(
-        mod: int,
-        m: int,
-        P: Tuple[FP2Value, FP2Value],
-        Q: Tuple[FP2Value, FP2Value],
-        S: Tuple[FP2Value, FP2Value],
+    mod: int,
+    m: int,
+    P: Tuple[FP2Value, FP2Value],
+    Q: Tuple[FP2Value, FP2Value],
+    S: Tuple[FP2Value, FP2Value],
 ) -> FP2Value:
     """
     Create a Weil pairing for message m, points P and Q and DH secret S.

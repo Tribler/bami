@@ -82,7 +82,12 @@ class Community(EZPackOverlay):
     master_peer = ""
 
     def __init__(
-        self, my_peer, endpoint, network: Network, max_peers: int=DEFAULT_MAX_PEERS, anonymize: bool=False
+        self,
+        my_peer,
+        endpoint,
+        network: Network,
+        max_peers: int = DEFAULT_MAX_PEERS,
+        anonymize: bool = False,
     ) -> None:
         super(Community, self).__init__(self.master_peer, my_peer, endpoint, network)
 

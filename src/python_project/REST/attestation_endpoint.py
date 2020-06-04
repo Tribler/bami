@@ -8,7 +8,11 @@ from aiohttp import web
 from aiohttp.web_request import Request
 from aiohttp_apispec import docs
 from python_project.REST import json_util as json
-from python_project.REST.base_endpoint import BaseEndpoint, HTTP_BAD_REQUEST, HTTP_NOT_FOUND
+from python_project.REST.base_endpoint import (
+    BaseEndpoint,
+    HTTP_BAD_REQUEST,
+    HTTP_NOT_FOUND,
+)
 from python_project.REST.base_endpoint import Response
 from python_project.attestation.identity.community import IdentityCommunity
 from python_project.attestation.wallet.community import AttestationCommunity
@@ -66,7 +70,7 @@ class AttestationEndpoint(BaseEndpoint):
             self.persistent_key = self.identity_overlay.my_peer
 
     def on_request_attestation(
-            self, peer: Peer, attribute_name: str, metadata: Dict[Any, Any]
+        self, peer: Peer, attribute_name: str, metadata: Dict[Any, Any]
     ) -> Future:
         """
         Return the measurement of an attribute for a certain peer.
@@ -80,12 +84,12 @@ class AttestationEndpoint(BaseEndpoint):
         return future
 
     def on_attestation_complete(
-            self,
-            for_peer: Peer,
-            attribute_name: str,
-            attribute_hash: bytes,
-            id_format: str,
-            from_peer: Optional[Peer] = None,
+        self,
+        for_peer: Peer,
+        attribute_name: str,
+        attribute_hash: bytes,
+        id_format: str,
+        from_peer: Optional[Peer] = None,
     ) -> None:
         """
         Callback for when an attestation has been completed for another peer.
@@ -122,7 +126,7 @@ class AttestationEndpoint(BaseEndpoint):
         return future
 
     def on_verification_results(
-            self, attribute_hash: bytes, values: List[float]
+        self, attribute_hash: bytes, values: List[float]
     ) -> None:
         """
         Callback for when verification has concluded.
@@ -167,7 +171,7 @@ class AttestationEndpoint(BaseEndpoint):
                 for _ in range(len(keys_to_keep))
             )
             block_selection_stmt = (
-                    u" WHERE " + value_insert + u" ORDER BY block_timestamp"
+                u" WHERE " + value_insert + u" ORDER BY block_timestamp"
             )
             params = ()
             for key in keys_to_keep:
@@ -296,8 +300,8 @@ class AttestationEndpoint(BaseEndpoint):
                 for b in blocks:
                     owner = b.public_key
                     if (
-                            owner != peer.public_key.key_to_bin()
-                            or b.link_sequence_number != 0
+                        owner != peer.public_key.key_to_bin()
+                        or b.link_sequence_number != 0
                     ):
                         # We are only interested in blocks we made and are not attestations of other's attributes
                         continue

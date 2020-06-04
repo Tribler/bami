@@ -13,17 +13,35 @@ from functools import wraps
 from threading import RLock
 from typing import Any
 
-from python_project.attestation.trustchain.block import ValidationResult, TrustChainBlock
-from python_project.attestation.trustchain.consts import ANY_COUNTERPARTY_PK, EMPTY_PK, GENESIS_SEQ, \
-    UNKNOWN_SEQ
-from python_project.attestation.trustchain.caches import ChainCrawlCache, CrawlRequestCache, HalfBlockSignCache, \
-    IntroCrawlTimeout
+from python_project.attestation.trustchain.block import (
+    ValidationResult,
+    TrustChainBlock,
+)
+from python_project.attestation.trustchain.consts import (
+    ANY_COUNTERPARTY_PK,
+    EMPTY_PK,
+    GENESIS_SEQ,
+    UNKNOWN_SEQ,
+)
+from python_project.attestation.trustchain.caches import (
+    ChainCrawlCache,
+    CrawlRequestCache,
+    HalfBlockSignCache,
+    IntroCrawlTimeout,
+)
 from python_project.attestation.trustchain.database import TrustChainDB
 from python_project.attestation.trustchain.payload import *
 from python_project.attestation.trustchain.settings import TrustChainSettings
 from python_project.community import Community
-from python_project.lazy_community import lazy_wrapper, lazy_wrapper_unsigned, lazy_wrapper_unsigned_wd
-from python_project.messaging.payload_headers import BinMemberAuthenticationPayload, GlobalTimeDistributionPayload
+from python_project.lazy_community import (
+    lazy_wrapper,
+    lazy_wrapper_unsigned,
+    lazy_wrapper_unsigned_wd,
+)
+from python_project.messaging.payload_headers import (
+    BinMemberAuthenticationPayload,
+    GlobalTimeDistributionPayload,
+)
 from python_project.peer import Peer
 from python_project.requestcache import RandomNumberCache, RequestCache
 from python_project.taskmanager import task
