@@ -12,6 +12,7 @@ pytest = "^5.4.2"
 pytest-cov = "^2.9.0"
 desert = "^2020.1.6"
 marshmallow = "^3.6.0"
+pyipv8 = {git = "https://github.com/Tribler/py-ipv8"}
 
 [tool.poetry.scripts]
 console = "python_project.console:main"
