@@ -529,7 +529,7 @@ class PlexusCommunity(Community):
                     com_subs = random.sample(com_subs, f)
                     for p in com_subs:
                         self.outgoing_block_queue.put_nowait((p.address, packet))
-            self._add_broadcasted_blockid(block.block_id)
+            self._add_broadcasted_blockid(block.hash)
 
     async def evaluate_outgoing_block_queue(self):
         while True:
@@ -550,7 +550,7 @@ class PlexusCommunity(Community):
         fork_seq=None,
     ):
         if not transaction:
-            transaction = dict()
+            transaction = b''
         block = PlexusBlock.create(
             block_type,
             transaction,
@@ -633,7 +633,7 @@ class PlexusCommunity(Community):
         peer = Peer(payload.public_key, source_address)
         self.validate_persist_block(block, peer)
 
-        if block.block_id not in self.relayed_broadcasts and payload.ttl > 1:
+        if block.hash not in self.relayed_broadcasts and payload.ttl > 1:
             self.send_block(block, ttl=payload.ttl)
 
     def validate_persist_block(self, block, peer=None):

@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from python_project.backbone.block import PlexusBlock, EMPTY_PK
 from python_project.backbone.datastore.consistency import Chain
-from python_project.backbone.datastore.utils import key_to_id, expand_ranges
+from python_project.backbone.datastore.utils import shorten, expand_ranges
 
 
 class PlexusMemoryDatabase(object):
@@ -217,20 +217,20 @@ class PlexusMemoryDatabase(object):
         if peer.mid not in self.peer_map:
             self.peer_map[peer.mid] = peer.public_key.key_to_bin()
 
-    def add_block(self, block: PlexusBlock):
+    def add_block(self, block: PlexusBlock) -> None:
         """
         Add block to the database and update indexes
         @param block: PlexusBlock
         """
         if block.hash not in self.blocks:
             self.blocks[block.hash] = block
-            self.short_map[key_to_id(block.hash)] = block.hash
+            self.short_map[shorten(block.hash)] = block.hash
 
         if block.public_key not in self.block_cache:
             # This is a public key => new user
             self.block_cache[block.public_key] = dict()
 
-            self.short_map[key_to_id(block.public_key)] = block.public_key
+            self.short_map[shorten(block.public_key)] = block.public_key
             # Initialize identity chain
             self._create_identity_chain(block.public_key)
         block_id = block.sequence_number

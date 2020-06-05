@@ -1,27 +1,33 @@
+from ast import literal_eval
 from binascii import hexlify
+from typing import Set, List, Tuple, Any, Dict, NewType
+
 import orjson as json
 from hashlib import sha256
 
 KEY_LEN = 8
+ShortKey = NewType("ShortKey", str)
+BytesLinks = NewType("BytesLinks", bytes)
+Links = NewType("Links", Set[Tuple[int, ShortKey]])
 
 
-def key_to_id(key):
-    return hexlify(key)[-KEY_LEN:].decode()
+def shorten(key) -> ShortKey:
+    return ShortKey(hexlify(key)[-KEY_LEN:].decode())
 
 
-def hex_to_int(hex_val):
+def hex_to_int(hex_val) -> int:
     return int(hexlify(hex_val), 16) % 100000000
 
 
-def id_to_int(id):
-    return int(id, 16)
+def short_to_int(short_key: ShortKey) -> int:
+    return int(short_key, 16)
 
 
-def int_to_id(int_val):
+def int_to_short_key(int_val: int) -> ShortKey:
     val = hex(int_val)[2:]
     while len(val) < KEY_LEN:
         val = "0" + val
-    return val
+    return ShortKey(val)
 
 
 def decode_frontier(frontier: dict):
@@ -37,9 +43,12 @@ def decode_frontier(frontier: dict):
     return decoded
 
 
-def encode_frontier(frontier):
-    """
-    Encode to python dict
+# Key -> Value
+def encode_frontier(frontier: Dict[Any, Any]) -> Dict[Any, Any]:
+    """Encode to python dict
+
+    Args:
+        frontier:
     """
     encoded = dict()
     for k, v in frontier.items():
@@ -50,41 +59,60 @@ def encode_frontier(frontier):
     return encoded
 
 
-def json_hash(value):
+def json_hash(value: Any) -> bytes:
+    """Jsonify and take hash
+
+    Args:
+        value:
+
+    Returns:
+        Hash in bytes
+    """
     return sha256(json.dumps(value)).digest()
 
 
-def decode_links(link_val):
-    """
-    Decode to the sendable packet
-    @param link_val: set of links
-    """
-    if type(link_val) == set:
-        # set of tuples: seq_num, hash
-        res = list()
-        if link_val:
-            for s, h in link_val:
-                h_val = h.decode("utf-8") if type(h) == bytes else h
-                res.append((int(s), h_val))
-        return res
-    else:
-        return link_val
+def encode_raw(val: Any) -> bytes:
+    """Encode python to bytes"""
+    return repr(val).encode()
 
 
-def encode_links(link_val):
-    """
-    Encode list of links to python set
-    @param link_val: list of sendable links
-    """
-    res = set()
-    if not link_val:
-        return res
-    for s, h in link_val:
-        res.add((int(s), h))
-    return res
+def decode_raw(byte_raw: bytes) -> Any:
+    """Decode bytes to python struct"""
+    return literal_eval(byte_raw.decode())
 
 
-def expand_ranges(range_vals):
+def encode_links(link_val: Links) -> BytesLinks:
+    """Encode to the sendable packet
+    Args:
+        link_val:
+
+    Returns:
+        links encoded in bytes
+    """
+    return BytesLinks(encode_raw(link_val))
+
+
+def decode_links(bytes_links: BytesLinks) -> Links:
+    """Decode bytes to links
+
+    Args:
+        bytes_links: bytes containing links value
+
+    Returns:
+        Links values
+    """
+    return Links(decode_raw(bytes_links))
+
+
+def expand_ranges(range_vals: List[Tuple[int, int]]) -> Set[int]:
+    """Expand ranges to set of ints
+
+    Args:
+        range_vals: List of tuple ranges
+
+    Returns:
+        Set of ints with ranges expanded
+    """
     val_set = set()
     for b, e in range_vals:
         for val in range(b, e + 1):
@@ -92,7 +120,15 @@ def expand_ranges(range_vals):
     return val_set
 
 
-def ranges(nums):
+def ranges(nums: Set[int]) -> List[Tuple[int, int]]:
+    """Compress numbers to tuples of consequent ranges
+
+    Args:
+        nums: set of numbers
+
+    Returns:
+        List of tuples of ranges
+    """
     if not nums:
         return list()
     nums = sorted(nums)

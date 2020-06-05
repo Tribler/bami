@@ -30,7 +30,7 @@ class TestPlexusCommunityBase(TestBase):
 
         # Make sure every node has a community to listen to
         self.community_key = default_eccrypto.generate_key(u"curve25519").pub()
-        self.community_id =  self.community_key.key_to_bin()
+        self.community_id = self.community_key.key_to_bin()
         for node in self.nodes:
             node.overlay.subscribe_to_community(self.community_id)
 
@@ -53,7 +53,7 @@ class TestPlexusCommunityBase(TestBase):
         block = await self.nodes[0].overlay.sign_block(
             list(self.nodes[0].network.verified_peers)[0],
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         await self.deliver_messages()
 
@@ -77,10 +77,13 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
 
         await sleep(1)
+        self.assertTrue(
+            self.nodes[0].overlay.persistence.get_frontier(self.community_id)
+        )
 
         self.assertTrue(
             self.nodes[1].overlay.persistence.get_frontier(self.community_id)
@@ -95,7 +98,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         await sleep(1)
 
@@ -103,7 +106,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         self.assertTrue(block.links)
         await sleep(1)
@@ -122,13 +125,13 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         await sleep(1)
 
@@ -140,7 +143,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         self.assertEqual(len(list(block.links)), 2)
         await sleep(1)
@@ -163,25 +166,22 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={},
+            transaction=b'',
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
         self.nodes[0].overlay.sign_block(
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
 
         self.nodes[0].endpoint.open()
@@ -206,14 +206,12 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
         self.nodes[0].overlay.sign_block(
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
 
         await sleep(1)
@@ -221,8 +219,7 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
         self.nodes[1].overlay.sign_block(
             self.nodes[2].overlay.my_peer,
             com_id=self.community_id,
-            block_type=b"test",
-            transaction={},
+            block_type=b"test"
         )
 
         await sleep(1)
@@ -243,13 +240,13 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 40},
+            transaction=b'{"id": 40}',
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 45},
+            transaction=b'{"id": 45}',
         )
 
         await sleep(1)
@@ -258,7 +255,7 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
             self.nodes[2].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 50},
+            transaction=b'{"id": 50}',
         )
 
         await sleep(1)
@@ -287,13 +284,13 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 40},
+            transaction=b'{"id": 40}',
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 45},
+            transaction=b'{"id": 45}',
         )
 
         await sleep(1)
@@ -302,7 +299,7 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction={"id": 50},
+            transaction=b'{"id": 50}',
         )
 
         await sleep(1)

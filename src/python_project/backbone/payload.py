@@ -48,7 +48,7 @@ class BlockPayload(Payload):
     def from_block(cls, block):
         return BlockPayload(
             block.type,
-            block._transaction,
+            block.transaction,
             block.public_key,
             block.sequence_number,
             block._previous,
@@ -131,7 +131,7 @@ class BlockBroadcastPayload(BlockPayload):
     def from_block_gossip(cls, block, ttl):
         return BlockBroadcastPayload(
             block.type,
-            block._transaction,
+            block.transaction,
             block.public_key,
             block.sequence_number,
             block._previous,

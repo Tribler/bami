@@ -1,5 +1,5 @@
 from python_project.backbone.datastore.utils import (
-    key_to_id,
+    shorten,
     ranges,
     expand_ranges,
     json_hash,
@@ -210,7 +210,7 @@ class Chain:
     def add_block(self, block):
         block_links = block.previous if self.personal else block.links
         block_seq_num = block.sequence_number if self.personal else block.com_seq_num
-        block_hash = key_to_id(block.hash)
+        block_hash = shorten(block.hash)
 
         if block_seq_num not in self.chain:
             # new sequence number

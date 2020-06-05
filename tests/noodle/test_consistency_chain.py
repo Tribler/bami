@@ -1,19 +1,24 @@
+import unittest
 from binascii import hexlify, unhexlify
 from hashlib import sha256
+from typing import Any
 
-import asynctest
 import orjson as json
 from ipv8.keyvault.crypto import default_eccrypto
+from ipv8.keyvault.private.libnaclkey import LibNaCLSK
 from python_project.backbone.block import (
     EMPTY_SIG,
     GENESIS_HASH,
     PlexusBlock,
+    GENESIS_SEQ,
 )
 from python_project.backbone.datastore.consistency import ChainState
 from python_project.backbone.datastore.memory_database import PlexusMemoryDatabase
 from python_project.backbone.datastore.utils import (
-    decode_links,
-    key_to_id,
+    shorten,
+    encode_links,
+    Links,
+    ShortKey, decode_raw,
 )
 
 
@@ -24,26 +29,24 @@ class TestBlock(PlexusBlock):
     """
 
     def __init__(
-        self,
-        transaction=None,
-        previous=None,
-        key=None,
-        links=None,
-        com_id=None,
-        block_type=b"test",
+            self,
+            transaction: bytes = b'{"id": 42}',
+            previous: Links = None,
+            key: LibNaCLSK = None,
+            links: Links = None,
+            com_id: Any = None,
+            block_type: bytes = b"test",
     ):
         crypto = default_eccrypto
         if not links:
-            links = {(0, key_to_id(GENESIS_HASH))}
+            links = {(0, shorten(GENESIS_HASH))}
             com_seq_num = 1
         else:
             com_seq_num = max(links)[0] + 1
 
         if not previous:
-            previous = {(0, key_to_id(GENESIS_HASH))}
+            previous = {(0, shorten(GENESIS_HASH))}
         pers_seq_num = max(previous)[0] + 1
-
-        transaction = transaction or {"id": 42}
 
         if not com_id:
             com_id = crypto.generate_key(u"curve25519").pub().key_to_bin()
@@ -57,11 +60,11 @@ class TestBlock(PlexusBlock):
             self,
             (
                 block_type,
-                json.dumps(transaction),
+                transaction,
                 self.key.pub().key_to_bin(),
                 pers_seq_num,
-                json.dumps(decode_links(previous)),
-                json.dumps(decode_links(links)),
+                encode_links(previous),
+                encode_links(links),
                 com_id,
                 com_seq_num,
                 EMPTY_SIG,
@@ -81,10 +84,17 @@ class MockDatabase(PlexusMemoryDatabase):
         PlexusMemoryDatabase.__init__(self, "", "mock")
 
 
-class TestPlexusBlocks(asynctest.TestCase):
+class TestPlexusBlocks(unittest.TestCase):
     """
     This class contains tests for a TrustChain block.
     """
+
+    def setUp(self) -> None:
+        self.key = default_eccrypto.generate_key(u"curve25519")
+        self.db = MockDatabase()
+        self.block = PlexusBlock.create(
+            b"test", b'{"id": 42}', self.db, self.key.pub().key_to_bin()
+        )
 
     def test_sign(self):
         """
@@ -98,17 +108,32 @@ class TestPlexusBlocks(asynctest.TestCase):
             )
         )
 
+    def test_short_hash(self):
+        self.assertEqual(shorten(self.block.hash), self.block.short_hash)
+
+    def test_hash(self):
+        self.assertEqual(hash(self.block), self.block.hash_number)
+
+    def test_equal(self):
+        class NotPlexusBlock(object):
+            pass
+
+        not_block = NotPlexusBlock()
+        self.assertFalse(self.block == not_block)
+        block1 = TestBlock(key=self.key, com_id=self.key.pub().key_to_bin())
+        block2 = TestBlock(key=self.key, com_id=self.key.pub().key_to_bin())
+        self.assertEqual(block1, block2)
+
     def test_create_genesis(self):
         """
         Test creating a genesis block
         """
-        key = default_eccrypto.generate_key(u"curve25519")
-        db = MockDatabase()
-        block = PlexusBlock.create(b"test", {"id": 42}, db, key.pub().key_to_bin())
-        self.assertIn((0, key_to_id(GENESIS_HASH)), block.previous)
-        self.assertEqual(block.public_key, key.pub().key_to_bin())
+        block = self.block
+        self.assertIn((0, shorten(GENESIS_HASH)), block.previous)
+        self.assertTrue(block.is_peer_genesis)
+        self.assertEqual(block.public_key, self.key.pub().key_to_bin())
+        self.assertEqual(GENESIS_SEQ, block.sequence_number)
         self.assertEqual(block.signature, EMPTY_SIG)
-        self.assertEqual(1, block.sequence_number)
         self.assertEqual(block.type, b"test")
 
     def test_sign_state(self):
@@ -141,9 +166,9 @@ class TestPlexusBlocks(asynctest.TestCase):
         key = default_eccrypto.generate_key(u"curve25519")
         prev = TestBlock(key=key)
         db.add_block(prev)
-        block = PlexusBlock.create(b"test", {"id": 42}, db, prev.public_key)
+        block = PlexusBlock.create(b"test", b"{'id': 42}", db, prev.public_key)
 
-        self.assertEqual({(1, key_to_id(prev.hash))}, block.previous)
+        self.assertEqual({(1, shorten(prev.hash))}, block.previous)
         self.assertEqual(block.sequence_number, 2)
         self.assertEqual(block.public_key, prev.public_key)
 
@@ -158,22 +183,22 @@ class TestPlexusBlocks(asynctest.TestCase):
         db.add_block(gen)
         key = default_eccrypto.generate_key(u"curve25519")
         block = PlexusBlock.create(
-            b"test", {"id": 42}, db, key.pub().key_to_bin(), com_id=com_key
+            b"test", b'{"id": 42}', db, key.pub().key_to_bin(), com_id=com_key
         )
 
-        self.assertEqual({(1, key_to_id(gen.hash))}, block.links)
+        self.assertEqual({(1, shorten(gen.hash))}, block.links)
         self.assertEqual(2, block.com_seq_num)
         self.assertEqual(com_key, block.com_id)
 
 
-class TestPlexusConsistency(asynctest.TestCase):
+class TestPlexusConsistency(unittest.TestCase):
     def test_personal_chain_no_previous(self):
         """
         Scenario: a peer creates a block (seq = 2), linking to a missing block (seq = 1).
         The frontier is now block 2.
         """
         db = MockDatabase()
-        block = TestBlock(previous={(1, "1234")})
+        block = TestBlock(previous=Links({(1, ShortKey("1234"))}))
         db.add_block(block)
         front = db.get_frontier(block.public_key)
         # It's a frontier in a personal chain
@@ -188,7 +213,7 @@ class TestPlexusConsistency(asynctest.TestCase):
         Scenario: a peer creates a block in some community, linking to a missing previous block.
         """
         com_key = default_eccrypto.generate_key(u"curve25519").pub().key_to_bin()
-        block = TestBlock(com_id=com_key, links={(1, "1234")})
+        block = TestBlock(com_id=com_key, links=Links({(1, ShortKey("1234"))}))
         db = MockDatabase()
         db.add_block(block)
         front = db.get_frontier(com_key)
@@ -207,9 +232,9 @@ class TestPlexusConsistency(asynctest.TestCase):
         db = MockDatabase()
         block1 = TestBlock(key=key)
         db.add_block(block1)
-        block2 = TestBlock(key=key, previous={(1, key_to_id(block1.hash))})
+        block2 = TestBlock(key=key, previous=Links({(1, shorten(block1.hash))}))
         db.add_block(block2)
-        block3 = TestBlock(key=key, previous={(1, "123445")})
+        block3 = TestBlock(key=key, previous=Links({(1, ShortKey("123445"))}))
         db.add_block(block3)
         front = db.get_frontier(block1.public_key)
         # Frontier should contain the two blocks with seq 2
@@ -226,9 +251,9 @@ class TestPlexusConsistency(asynctest.TestCase):
         db = MockDatabase()
         block1 = TestBlock(com_id=com_key)
         db.add_block(block1)
-        block2 = TestBlock(com_id=com_key, links={(1, key_to_id(block1.hash))})
+        block2 = TestBlock(com_id=com_key, links=Links({(1, shorten(block1.hash))}))
         db.add_block(block2)
-        block3 = TestBlock(com_id=com_key, links={(1, "12345")})
+        block3 = TestBlock(com_id=com_key, links=Links({(1, ShortKey("12345"))}))
         db.add_block(block3)
         front = db.get_frontier(com_key)
         # Frontier should contain the two blocks with seq 2
@@ -249,22 +274,23 @@ class TestPlexusConsistency(asynctest.TestCase):
         self.assertSetEqual(expected_keys | {"hash"}, set(block_keys))
         # Check for duplicates
         self.assertEqual(len(block_keys) - 1, len(expected_keys))
-        self.assertEqual(dict(block)["transaction"]["id"], 42)
+
+        self.assertEqual(decode_raw(block.transaction).get('id'), 42)
 
     def test_reconcilation(self):
         db1 = MockDatabase()
         block = TestBlock()
         block2 = TestBlock(
-            com_id=block.com_id, links={(block.com_seq_num, block.short_hash)}
+            com_id=block.com_id, links=Links({(block.com_seq_num, block.short_hash)})
         )
         db1.add_block(block)
         db1.add_block(block2)
 
         db2 = MockDatabase()
         block2 = TestBlock(
-            transaction={"id": 43},
+            transaction=b'{"id": 43}',
             com_id=block.com_id,
-            links={(block.com_seq_num, block.short_hash)},
+            links=Links({(block.com_seq_num, block.short_hash)}),
         )
         db2.add_block(block)
         db2.add_block(block2)
@@ -290,17 +316,17 @@ class TestPlexusConsistency(asynctest.TestCase):
         db1.add_block(block)
 
         block2 = TestBlock(
-            transaction={"id": 40},
+            transaction=b'{"id": 40}',
             com_id=block.com_id,
-            links={(block.com_seq_num, block.short_hash)},
+            links=Links({(block.com_seq_num, block.short_hash)}),
         )
 
         db1.add_block(block2)
 
         block2 = TestBlock(
-            transaction={"id": 43},
+            transaction=b'{"id": 43}',
             com_id=block.com_id,
-            links={(block.com_seq_num, block.short_hash)},
+            links=Links({(block.com_seq_num, block.short_hash)}),
         )
 
         db1.add_block(block2)
@@ -312,9 +338,10 @@ class TestPlexusConsistency(asynctest.TestCase):
         # to_request, to_send = db2.reconcile(block.com_id, db1.get_frontier(block.com_id))
         # self.assertEqual(list(to_request['c'])[0][0], 2)
 
-        print(db1.get_state(com_id, 0))
-        print(db1.get_state(com_id, 1))
-        print(db1.get_state(com_id, 2))
+        # TODO: add state asserts
+        # print(db1.get_state(com_id, 0))
+        # print(db1.get_state(com_id, 1))
+        # print(db1.get_state(com_id, 2))
 
 
 class MockChainState(ChainState):
@@ -337,9 +364,10 @@ class MockChainState(ChainState):
         """
         # 1. Calculate delta between state and transaction
         # get from  front last value
-        delta = block.transaction["id"] - prev_state["vals"][0]
-        sh_hash = key_to_id(block.hash)
-        peer = key_to_id(block.public_key)
+        id_val = decode_raw(block.transaction).get('id')
+        delta = id_val - prev_state["vals"][0]
+        sh_hash = shorten(block.hash)
+        peer = shorten(block.public_key)
         total = prev_state["total"] + abs(delta)
         new_stakes = dict()
         new_stakes.update(prev_state["stakes"])
@@ -351,7 +379,7 @@ class MockChainState(ChainState):
         return {
             "total": total,
             "front": [sh_hash],
-            "vals": [block.transaction["id"], delta, peer],
+            "vals": [id_val, delta, peer],
             "stakes": new_stakes,
         }
 
@@ -385,7 +413,7 @@ class MockChainState(ChainState):
             if p not in merged_state["stakes"]:
                 merged_state["stakes"][p] = abs(delta)
             else:
-                merged_state["stakes"][p] += abs(delta)
+                merged_state["stakes"][p] = merged_state["stakes"][p] + abs(delta)
             merged_state["stakes"] = sorted(merged_state["stakes"].items())
 
             return merged_state

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import unittest
+
 import asynctest
 
 import orjson as json
+from python_project.backbone.datastore.utils import shorten
 
 from python_project.noodle.block import (
     EMPTY_SIG,
@@ -140,7 +143,7 @@ class MockDatabase(object):
         self.double_spends.append((block1, block2))
 
 
-class TestTrustChainBlock(asynctest.TestCase):
+class TestChainBlock(unittest.TestCase):
     """
     This class contains tests for a TrustChain block.
     """
@@ -156,6 +159,10 @@ class TestTrustChainBlock(asynctest.TestCase):
                 block.key, block.pack(signature=False), block.signature
             )
         )
+
+    def test_short_hash(self):
+        block = TestBlock()
+        self.assertEqual(shorten(), block.short_hash)
 
     def test_create_genesis(self):
         """
