@@ -9,6 +9,7 @@ KEY_LEN = 8
 ShortKey = NewType("ShortKey", str)
 BytesLinks = NewType("BytesLinks", bytes)
 Links = NewType("Links", Set[Tuple[int, ShortKey]])
+Ranges = NewType("Ranges", List[Tuple[int, int]])
 
 
 def shorten(key) -> ShortKey:
@@ -59,20 +60,20 @@ def encode_frontier(frontier: Dict[Any, Any]) -> Dict[Any, Any]:
     return encoded
 
 
-def json_hash(value: Any) -> bytes:
-    """Jsonify and take hash
+def take_hash(value: Any) -> bytes:
+    """Encode to bytes and return hash digest
 
     Args:
-        value:
+        value: python object with __repr__
 
     Returns:
         Hash in bytes
     """
-    return sha256(json.dumps(value)).digest()
+    return sha256(encode_raw(value)).digest()
 
 
 def encode_raw(val: Any) -> bytes:
-    """Encode python to bytes"""
+    """Encode python object with __repr__ to bytes"""
     return repr(val).encode()
 
 
@@ -104,7 +105,7 @@ def decode_links(bytes_links: BytesLinks) -> Links:
     return Links(decode_raw(bytes_links))
 
 
-def expand_ranges(range_vals: List[Tuple[int, int]]) -> Set[int]:
+def expand_ranges(range_vals: Ranges) -> Set[int]:
     """Expand ranges to set of ints
 
     Args:
@@ -120,7 +121,7 @@ def expand_ranges(range_vals: List[Tuple[int, int]]) -> Set[int]:
     return val_set
 
 
-def ranges(nums: Set[int]) -> List[Tuple[int, int]]:
+def ranges(nums: Set[int]) -> Ranges:
     """Compress numbers to tuples of consequent ranges
 
     Args:
@@ -130,8 +131,8 @@ def ranges(nums: Set[int]) -> List[Tuple[int, int]]:
         List of tuples of ranges
     """
     if not nums:
-        return list()
+        return Ranges(list())
     nums = sorted(nums)
     gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
     edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
-    return list(zip(edges, edges))
+    return Ranges(list(zip(edges, edges)))

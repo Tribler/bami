@@ -64,6 +64,10 @@ class TestPlexusCommunityBase(TestBase):
             )
         )
 
+    def test_subscription(self):
+        self.assertTrue(self.nodes[0].overlay.is_subscribed(self.community_id))
+        self.assertTrue(self.nodes[1].overlay.is_subscribed(self.community_id))
+
 
 class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
     __testing__ = True

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import time
 from binascii import hexlify
@@ -162,16 +164,16 @@ class PlexusBlock(object):
         """
         return int(hexlify(self.hash), 16) % 100000000
 
-    def calculate_hash(self):
+    def calculate_hash(self) -> bytes:
         return sha256(self.pack()).digest()
 
-    def __eq__(self, other):
+    def __eq__(self, other: PlexusBlock) -> bool:
         if not isinstance(other, PlexusBlock):
             return False
         return self.pack() == other.pack()
 
     @property
-    def is_peer_genesis(self):
+    def is_peer_genesis(self) -> bool:
         return (
             self.sequence_number == GENESIS_SEQ
             and (GENESIS_SEQ - 1, shorten(GENESIS_HASH)) in self.previous

@@ -8,10 +8,11 @@ from collections import defaultdict
 
 from python_project.backbone.block import PlexusBlock, EMPTY_PK
 from python_project.backbone.datastore.consistency import Chain
+from python_project.backbone.datastore.database import BasePlexusDB
 from python_project.backbone.datastore.utils import shorten, expand_ranges
 
 
-class PlexusMemoryDatabase(object):
+class PlexusMemoryDatabase(BasePlexusDB):
     """
     This class defines an optimized memory database for Plexus.
     """
@@ -63,9 +64,6 @@ class PlexusMemoryDatabase(object):
     def get_frontier(self, chain_id):
         val = self.get_peer_frontier(chain_id)
         return val if val else self.get_community_frontier(chain_id)
-
-    def get_peer_proofs(self, chain, blk_hash, state):
-        pass
 
     def is_state_consistent(self, chain_id):
         chain = self.get_chain(chain_id)
@@ -188,6 +186,9 @@ class PlexusMemoryDatabase(object):
     def get_block_by_short_hash(self, short_hash):
         full_hash = self.short_map.get(short_hash)
         return self.blocks.get(full_hash)
+
+    def get_block_by_hash(self, block_hash: bytes) -> Optional[PlexusBlock]:
+        return self.blocks.get(block_hash)
 
     def get_blocks_by_request(self, chain_id, request):
         blocks = set()

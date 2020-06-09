@@ -1,8 +1,12 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.utils import (
     shorten,
     ranges,
     expand_ranges,
-    json_hash,
+    take_hash, Links, decode_raw, encode_raw, Ranges,
 )
 
 
@@ -42,13 +46,56 @@ class ChainState:
         return
 
 
-class Chain:
+@dataclass
+class Frontier:
+    vector: Links
+    holes: Ranges
+    inconsistencies: Links
+
+    def to_bytes(self) -> bytes:
+        return encode_raw({'v': self.vector,
+                           'h': self.holes,
+                           'i': self.inconsistencies})
+
+    @classmethod
+    def from_bytes(cls, bytes_frontier: bytes):
+        front_dict = decode_raw(bytes_frontier)
+        return cls(front_dict.get('v'), front_dict.get('h'), front_dict.get('i'))
+
+
+@dataclass
+class FrontierDiff:
+    missing: Ranges
+    conflicts: Links
+
+    def to_bytes(self) -> bytes:
+        return encode_raw({'m': self.missing,
+                           'c': self.conflicts})
+
+    @classmethod
+    def from_bytes(cls, bytes_frontier: bytes):
+        val_dict = decode_raw(bytes_frontier)
+        return cls(val_dict.get('m'), val_dict.get('c'))
+
+
+class BaseChain(ABC):
+
+    @abstractmethod
+    def add_block(self, block: PlexusBlock) -> None:
+        pass
+
+    @abstractmethod
+    def reconcile(self, frontier: Frontier) -> FrontierDiff:
+        pass
+
+
+class Chain(BaseChain):
     """
     Index class for chain to ensure that each peer will converge into a consistent chain log.
     """
 
     def __init__(
-        self, chain_id, personal=True, num_frontiers_store=50, block_store=None
+            self, chain_id, personal=True, num_frontiers_store=50, block_store=None
     ):
         self.chain = dict()
         self.holes = set()
@@ -89,7 +136,7 @@ class Chain:
             self.state_checkpoints[chain_state.name] = dict()
         init_state = chain_state.init_state()
         self.state_checkpoints[chain_state.name][0] = init_state
-        self.hash_to_state[json_hash(init_state)] = 0
+        self.hash_to_state[take_hash(init_state)] = 0
 
     def add_audit_proof(self):
         pass
@@ -237,7 +284,7 @@ class Chain:
 
         # Update hash of the latest state
         if self.is_state_consistent():
-            state_hash = json_hash(self.get_state(block_seq_num))
+            state_hash = take_hash(self.get_state(block_seq_num))
             if state_hash not in self.hash_to_state:
                 self.hash_to_state[state_hash] = 0
             self.hash_to_state[state_hash] = max(
