@@ -9,7 +9,6 @@ class BaseLinkFilter(object):
 
 
 class AllLinkFilter(BaseLinkFilter):
-
     def filter(self, all_links: Links) -> Links:
         return all_links
 

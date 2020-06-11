@@ -53,7 +53,7 @@ class TestPlexusCommunityBase(TestBase):
         block = await self.nodes[0].overlay.sign_block(
             list(self.nodes[0].network.verified_peers)[0],
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         await self.deliver_messages()
 
@@ -81,7 +81,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
 
         await sleep(1)
@@ -102,7 +102,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         await sleep(1)
 
@@ -110,7 +110,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         self.assertTrue(block.links)
         await sleep(1)
@@ -129,13 +129,13 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         self.nodes[1].overlay.sign_block(
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         await sleep(1)
 
@@ -147,7 +147,7 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[1].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         self.assertEqual(len(list(block.links)), 2)
         await sleep(1)
@@ -170,22 +170,16 @@ class TestPlexusCommunityTwoNodes(TestPlexusCommunityBase):
             self.nodes[0].overlay.my_peer,
             com_id=self.community_id,
             block_type=b"test",
-            transaction=b'',
+            transaction=b"",
         )
         self.nodes[1].overlay.sign_block(
-            self.nodes[1].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[1].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
         self.nodes[0].overlay.sign_block(
-            self.nodes[0].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[0].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
         self.nodes[1].overlay.sign_block(
-            self.nodes[1].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[1].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
 
         self.nodes[0].endpoint.open()
@@ -208,22 +202,16 @@ class TestPlexusCommunityThreeNodes(TestPlexusCommunityBase):
         """
 
         self.nodes[0].overlay.sign_block(
-            self.nodes[0].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[0].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
         self.nodes[1].overlay.sign_block(
-            self.nodes[1].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[1].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
 
         await sleep(1)
 
         self.nodes[1].overlay.sign_block(
-            self.nodes[2].overlay.my_peer,
-            com_id=self.community_id,
-            block_type=b"test"
+            self.nodes[2].overlay.my_peer, com_id=self.community_id, block_type=b"test"
         )
 
         await sleep(1)

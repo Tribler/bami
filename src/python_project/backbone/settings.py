@@ -15,6 +15,7 @@ class SyncMode(Enum):
     """
     Gossip synchronization modes
     """
+
     BLOCK_SYNC = 1
     STATE_SYNC = 2
     FULL_SYNC = 3

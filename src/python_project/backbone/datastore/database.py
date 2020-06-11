@@ -21,7 +21,6 @@ class BaseBlockStore(ABC):
 
 
 class BasePlexusDB(ABC):
-
     @abstractmethod
     def get_frontier(self, chain_id) -> Frontier:
         pass

@@ -80,16 +80,16 @@ class PlexusBlock(object):
             )
 
             # previous hash in the personal chain
-            self.previous = Links({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))})
+            self.previous = Links(tuple({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))}))
             self._previous = encode_links(self.previous)
 
             # Linked blocks => links to the block in other chains
-            self.links = Links({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))})
+            self.links = Links(tuple({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))}))
             self._links = encode_links(self.links)
 
             # Metadata for community identifiers
             self.com_id = EMPTY_PK
-            self.com_seq_num = 0
+            self.com_seq_num: int = 0
 
             # Creation timestamp
             self.timestamp = int(time.time() * 1000)

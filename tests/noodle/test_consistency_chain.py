@@ -1,9 +1,10 @@
 import unittest
 from binascii import hexlify, unhexlify
 from hashlib import sha256
-from typing import Any
+from typing import Any, List
 
 import orjson as json
+import pytest
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
 from python_project.backbone.block import (
@@ -12,13 +13,14 @@ from python_project.backbone.block import (
     PlexusBlock,
     GENESIS_SEQ,
 )
-from python_project.backbone.datastore.consistency import ChainState
+from python_project.backbone.datastore.consistency import ChainState, Chain
 from python_project.backbone.datastore.memory_database import PlexusMemoryDatabase
 from python_project.backbone.datastore.utils import (
     shorten,
     encode_links,
     Links,
-    ShortKey, decode_raw,
+    ShortKey,
+    decode_raw,
 )
 
 
@@ -39,13 +41,13 @@ class TestBlock(PlexusBlock):
     ):
         crypto = default_eccrypto
         if not links:
-            links = {(0, shorten(GENESIS_HASH))}
+            links = tuple({(0, shorten(GENESIS_HASH))})
             com_seq_num = 1
         else:
             com_seq_num = max(links)[0] + 1
 
         if not previous:
-            previous = {(0, shorten(GENESIS_HASH))}
+            previous = tuple({(0, shorten(GENESIS_HASH))})
         pers_seq_num = max(previous)[0] + 1
 
         if not com_id:
@@ -82,6 +84,147 @@ class MockDatabase(PlexusMemoryDatabase):
 
     def __init__(self):
         PlexusMemoryDatabase.__init__(self, "", "mock")
+
+
+def test_chain_terminal_conflict():
+    key = default_eccrypto.generate_key(u"curve25519")
+    com_id = key.pub().key_to_bin()
+    block = TestBlock(com_id=com_id)
+    links = Links(((block.com_seq_num, block.short_hash),))
+    print(links)
+    block2 = TestBlock(com_id=com_id, links=links)
+    chain = Chain()
+    chain.add_block(block)
+    chain.add_block(block2)
+
+    print(chain.chain)
+    print(chain.forward_pointers)
+
+    init_link = (0, ShortKey("30303030"))
+
+    print(chain.terminal)
+    chain._recalc_terminal(init_link[0], init_link[1])
+    print(chain.terminal)
+
+    # Add conflicting block at level 1
+    c_block = TestBlock(com_id=com_id)
+    chain.add_block(c_block)
+    # Conflicting block at level 2
+    c_block2 = TestBlock(
+        com_id=com_id, links=Links(((c_block.com_seq_num, c_block.short_hash),))
+    )
+    chain.add_block(c_block2)
+
+    new_link = (c_block.com_seq_num, c_block.short_hash)
+    chain._recalc_terminal(new_link[0], new_link[1])
+    print(chain.terminal)
+
+
+def create_block_batch(com_id, num_blocks=100):
+    blocks = []
+    last_block_point = Links(((0, ShortKey("30303030")),))
+    for k in range(num_blocks):
+        blk = TestBlock(com_id=com_id, links=last_block_point)
+        blocks.append(blk)
+        last_block_point = Links(((blk.com_seq_num, blk.short_hash),))
+    return blocks
+
+
+@pytest.fixture
+def create_batches():
+    def _create_batches(num_batches=2, num_blocks=100):
+        key = default_eccrypto.generate_key(u"curve25519")
+        com_id = key.pub().key_to_bin()
+        return [create_block_batch(com_id, num_blocks) for _ in range(num_batches)]
+
+    return _create_batches
+
+
+def insert_batch_seq(chain: Chain, batch: List[PlexusBlock]) -> None:
+    for blk in batch:
+        chain.add_block(blk)
+        last_block_link = (blk.com_seq_num, blk.short_hash)
+        chain._recalc_terminal(*last_block_link)
+
+
+def insert_batch_reversed(chain: Chain, batch: List[PlexusBlock]) -> None:
+    for blk in reversed(batch):
+        chain.add_block(blk)
+        last_block_link = (blk.com_seq_num, blk.short_hash)
+        chain._recalc_terminal(*last_block_link)
+
+
+def insert_batch_random(chain: Chain, batch: List[PlexusBlock]) -> None:
+    from random import shuffle
+
+    shuffle(batch)
+    for blk in batch:
+        chain.add_block(blk)
+        last_block_link = (blk.com_seq_num, blk.short_hash)
+        chain._recalc_terminal(*last_block_link)
+
+
+def test_seq_insert(create_batches):
+    chain = Chain()
+    batches = create_batches(num_batches=1, num_blocks=10)
+    insert_batch_seq(chain, batches[0])
+    # Recalculate terminal after batch insert
+    print(chain.terminal)
+    assert len(chain.terminal) == 1
+
+
+def test_reversed_insert(create_batches):
+    chain = Chain()
+    batches = create_batches(num_batches=1, num_blocks=1000)
+    insert_batch_reversed(chain, batches[0])
+    assert len(chain.terminal) == 1
+
+
+def test_random_insert(create_batches):
+    chain = Chain()
+    batches = create_batches(num_batches=1, num_blocks=1000)
+    insert_batch_random(chain, batches[0])
+    assert len(chain.terminal) == 1
+
+
+batch_insert_functions = [insert_batch_seq, insert_batch_random, insert_batch_reversed]
+
+
+@pytest.mark.parametrize("insert1", batch_insert_functions)
+@pytest.mark.parametrize("insert2", batch_insert_functions)
+def test_two_conflict_seq_insert(create_batches, insert1, insert2):
+    chain = Chain()
+    batches = create_batches(num_batches=2, num_blocks=200)
+
+    # Insert first batch sequentially
+    last_blk = batches[0][-1]
+    last_blk_link = (last_blk.com_seq_num, last_blk.short_hash)
+    insert1(chain, batches[0])
+    assert len(chain.terminal) == 1
+    assert last_blk_link in chain.terminal
+
+    # Insert second batch sequentially
+    last_blk = batches[1][-1]
+    last_blk_link = (last_blk.com_seq_num, last_blk.short_hash)
+    insert2(chain, batches[1])
+    assert len(chain.terminal) == 2
+    assert last_blk_link in chain.terminal
+
+
+@pytest.mark.parametrize("num_batches", [2 ** i for i in range(4, 12, 2)])
+@pytest.mark.parametrize("insert_func", batch_insert_functions)
+def test_insert_many_conflicts(create_batches, num_batches, insert_func):
+    chain = Chain()
+    batches = create_batches(num_batches=num_batches, num_blocks=5)
+    # Insert first batch sequentially
+    i = 1
+    for batch in batches:
+        last_blk = batches[i - 1][-1]
+        insert_func(chain, batch)
+        last_blk_link = (last_blk.com_seq_num, last_blk.short_hash)
+        assert len(chain.terminal) == i
+        assert last_blk_link in chain.terminal
+        i += 1
 
 
 class TestPlexusBlocks(unittest.TestCase):
@@ -275,7 +418,7 @@ class TestPlexusConsistency(unittest.TestCase):
         # Check for duplicates
         self.assertEqual(len(block_keys) - 1, len(expected_keys))
 
-        self.assertEqual(decode_raw(block.transaction).get('id'), 42)
+        self.assertEqual(decode_raw(block.transaction).get("id"), 42)
 
     def test_reconcilation(self):
         db1 = MockDatabase()
@@ -364,7 +507,7 @@ class MockChainState(ChainState):
         """
         # 1. Calculate delta between state and transaction
         # get from  front last value
-        id_val = decode_raw(block.transaction).get('id')
+        id_val = decode_raw(block.transaction).get("id")
         delta = id_val - prev_state["vals"][0]
         sh_hash = shorten(block.hash)
         peer = shorten(block.public_key)

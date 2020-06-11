@@ -15,7 +15,7 @@ def lmdb_store(tmpdir):
 
 def test_add_block(lmdb_store):
     test_blob = b"123123123123123"
-    test_key = b'lopo1'
+    test_key = b"lopo1"
 
     lmdb_store.add_block(test_key, test_blob)
     res = lmdb_store.get_block(test_key)

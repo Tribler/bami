@@ -1,6 +1,6 @@
 from ast import literal_eval
 from binascii import hexlify
-from typing import Set, List, Tuple, Any, Dict, NewType
+from typing import Set, List, Tuple, Any, Dict, NewType, FrozenSet
 
 import orjson as json
 from hashlib import sha256
@@ -8,7 +8,7 @@ from hashlib import sha256
 KEY_LEN = 8
 ShortKey = NewType("ShortKey", str)
 BytesLinks = NewType("BytesLinks", bytes)
-Links = NewType("Links", Set[Tuple[int, ShortKey]])
+Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
 Ranges = NewType("Ranges", List[Tuple[int, int]])
 
 

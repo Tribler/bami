@@ -17,6 +17,8 @@ networkx = "^2.4"
 orjson = "^3.0.2"
 msgpack = "^1.0.0"
 lmdb = "^0.98"
+asynctest = "^0.13.0"
+cachetools = "^4.1.0"
 
 [tool.poetry.scripts]
 console = "python_project.console:main"
@@ -42,6 +44,7 @@ xdoctest = "^0.12.0"
 sphinx = "^3.0.4"
 sphinx-autodoc-typehints = "^1.10.3"
 codecov = "^2.1.3"
+asynctest = "^0.13.0"
 
 [tool.coverage.paths]
 source = ["src", "*/site-packages"]

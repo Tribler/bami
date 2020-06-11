@@ -179,7 +179,9 @@ class PlexusCommunity(Community):
             # Send them new subscribe collection
             self.send_subs_update(p.address, self.my_subscriptions)
 
-    def subscribe_to_community(self, community_id: bytes, personal: bool = False) -> None:
+    def subscribe_to_community(
+        self, community_id: bytes, personal: bool = False
+    ) -> None:
         """
         Subscribe to the SubCommunity with the public key master peer.
         Community is identified with a community_id.
@@ -269,12 +271,12 @@ class PlexusCommunity(Community):
         # This is a claim of a conditional transaction
         for hash_val, sig_set in state_val.items():
             if all(
-                    default_eccrypto.is_valid_signature(
-                        default_eccrypto.key_from_public_bin(unhexlify(p_id)),
-                        unhexlify(hash_val),
-                        unhexlify(sign),
-                    )
-                    for p_id, sign in sig_set
+                default_eccrypto.is_valid_signature(
+                    default_eccrypto.key_from_public_bin(unhexlify(p_id)),
+                    unhexlify(hash_val),
+                    unhexlify(sign),
+                )
+                for p_id, sign in sig_set
             ):
                 return unhexlify(hash_val)
             else:
@@ -445,8 +447,8 @@ class PlexusCommunity(Community):
     def remove_listener(self, listener, block_types):
         for block_type in block_types:
             if (
-                    block_type in self.listeners_map
-                    and listener in self.listeners_map[block_type]
+                block_type in self.listeners_map
+                and listener in self.listeners_map[block_type]
             ):
                 self.listeners_map[block_type].remove(listener)
             if block_type in self.persistence.block_types:
@@ -534,16 +536,16 @@ class PlexusCommunity(Community):
 
     @synchronized
     def sign_block(
-            self,
-            counterparty_peer=None,
-            block_type=b"unknown",
-            transaction=None,
-            com_id=None,
-            links=None,
-            fork_seq=None,
+        self,
+        counterparty_peer=None,
+        block_type=b"unknown",
+        transaction=None,
+        com_id=None,
+        links=None,
+        fork_seq=None,
     ):
         if not transaction:
-            transaction = b''
+            transaction = b""
         block = PlexusBlock.create(
             block_type,
             transaction,
@@ -563,8 +565,8 @@ class PlexusCommunity(Community):
         if counterparty_peer == self.my_peer or not counterparty_peer:
             # We created a self-signed block / initial claim, send to the neighbours
             if (
-                    block.type not in self.settings.block_types_bc_disabled
-                    and not self.settings.is_hiding
+                block.type not in self.settings.block_types_bc_disabled
+                and not self.settings.is_hiding
             ):
                 self.send_block(block)
             return succeed(block)
@@ -576,12 +578,12 @@ class PlexusCommunity(Community):
             return succeed(block)
 
     def self_sign_block(
-            self,
-            block_type=b"unknown",
-            transaction=None,
-            com_id=None,
-            links=None,
-            fork_seq=None,
+        self,
+        block_type=b"unknown",
+        transaction=None,
+        com_id=None,
+        links=None,
+        fork_seq=None,
     ):
         return self.sign_block(
             self.my_peer,
@@ -649,9 +651,9 @@ class PlexusCommunity(Community):
 
         # Avoid proceeding any further if the type of the block coincides with the UNIVERSAL_BLOCK_LISTENER
         if (
-                block.type not in self.listeners_map
-                or self.shutting_down
-                or block.type == self.UNIVERSAL_BLOCK_LISTENER
+            block.type not in self.listeners_map
+            or self.shutting_down
+            or block.type == self.UNIVERSAL_BLOCK_LISTENER
         ):
             return
 
@@ -660,7 +662,7 @@ class PlexusCommunity(Community):
 
     @synchronized
     async def process_block(
-            self, blk: PlexusBlock, peer, status=None, audit_proofs=None
+        self, blk: PlexusBlock, peer, status=None, audit_proofs=None
     ):
         """
         Process a received half block.
@@ -674,7 +676,7 @@ class PlexusCommunity(Community):
 
     # ------ State-based synchronization -------------
     def request_state(
-            self, peer_address, chain_id, state_name=None, include_other_witnesses=True
+        self, peer_address, chain_id, state_name=None, include_other_witnesses=True
     ):
         global_time = self.claim_global_time()
         dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
@@ -689,7 +691,7 @@ class PlexusCommunity(Community):
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateRequestPayload)
     def received_state_request(
-            self, source_address, dist, payload: StateRequestPayload
+        self, source_address, dist, payload: StateRequestPayload
     ):
         # I'm part of the community?
         if payload.key in self.my_subscriptions:
@@ -738,7 +740,7 @@ class PlexusCommunity(Community):
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateResponsePayload)
     def received_state_response(
-            self, source_address, dist, payload: StateResponsePayload
+        self, source_address, dist, payload: StateResponsePayload
     ):
         chain_id = payload.key
         hash_val = self.verify_state(json.loads(payload.value))
@@ -762,7 +764,7 @@ class PlexusCommunity(Community):
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateByHashRequestPayload)
     def received_state_by_hash_request(
-            self, source_address, dist, payload: StateByHashRequestPayload
+        self, source_address, dist, payload: StateByHashRequestPayload
     ):
         chain_id = payload.key
         hash_val = payload.value
@@ -780,7 +782,7 @@ class PlexusCommunity(Community):
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateByHashResponsePayload)
     def received_state_by_hash_response(
-            self, source_address, dist, payload: StateByHashResponsePayload
+        self, source_address, dist, payload: StateByHashResponsePayload
     ):
         chain_id = payload.key
         state, seq_num = json.loads(payload.value)
@@ -829,13 +831,13 @@ class PlexusCommunity(Community):
         )
 
     def create_introduction_response(
-            self,
-            lan_socket_address,
-            socket_address,
-            identifier,
-            introduction=None,
-            extra_bytes=b"",
-            prefix=None,
+        self,
+        lan_socket_address,
+        socket_address,
+        identifier,
+        introduction=None,
+        extra_bytes=b"",
+        prefix=None,
     ):
         communities = []
         for community_id in self.my_subscriptions:
