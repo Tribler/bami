@@ -1,5 +1,5 @@
 import pytest
-from python_project.backbone.datastore.kv_block_store import KVBLockStore
+from python_project.backbone.datastore.block_store import LMDBLockStore
 
 
 @pytest.fixture
@@ -7,7 +7,7 @@ def lmdb_store(tmpdir):
     tmp_val = tmpdir
     path = str(tmp_val)
     print(path)
-    db = KVBLockStore(path)
+    db = LMDBLockStore(path)
     yield db
     db.close()
     tmp_val.remove()

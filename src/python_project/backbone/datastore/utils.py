@@ -1,15 +1,13 @@
 from ast import literal_eval
 from binascii import hexlify
-from typing import Set, List, Tuple, Any, Dict, NewType, FrozenSet
-
-import orjson as json
 from hashlib import sha256
+from typing import Set, Tuple, Any, Dict, NewType
 
 KEY_LEN = 8
 ShortKey = NewType("ShortKey", str)
 BytesLinks = NewType("BytesLinks", bytes)
 Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
-Ranges = NewType("Ranges", List[Tuple[int, int]])
+Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
 
 
 def shorten(key) -> ShortKey:
@@ -131,8 +129,8 @@ def ranges(nums: Set[int]) -> Ranges:
         List of tuples of ranges
     """
     if not nums:
-        return Ranges(list())
+        return Ranges(tuple())
     nums = sorted(nums)
     gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
     edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
-    return Ranges(list(zip(edges, edges)))
+    return Ranges(tuple(zip(edges, edges)))

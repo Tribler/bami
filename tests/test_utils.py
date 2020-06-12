@@ -1,12 +1,10 @@
 from unittest.mock import Mock
 
-import orjson
 import pytest
 from python_project.backbone.datastore.utils import (
     ranges,
     expand_ranges,
     shorten,
-    ShortKey,
     KEY_LEN,
     Links,
     decode_links,
@@ -17,10 +15,10 @@ from python_project.noodle.block import GENESIS_HASH, EMPTY_SIG, EMPTY_PK
 
 @pytest.fixture(
     params=[
-        ({i for i in range(1, 100)}, [(1, 99)]),
-        ({1, 5, 6, 7, 8}, [(1, 1), (5, 8)]),
-        ({1}, [(1, 1)]),
-        (set(), list()),
+        ({i for i in range(1, 100)}, ((1, 99),)),
+        ({1, 5, 6, 7, 8}, ((1, 1), (5, 8),)),
+        ({1}, ((1, 1),)),
+        (set(), tuple()),
     ],
     ids=["no_holes", "holes", "one_val", "empty"],
 )
@@ -52,6 +50,6 @@ def test_shorten_size(keys_fixture):
 
 
 def test_encode_decode_links(keys_fixture):
-    links = Links([(1, shorten(keys_fixture))])
+    links = Links(((1, shorten(keys_fixture)), ))
     raw_bytes = encode_links(links)
     assert decode_links(raw_bytes) == links

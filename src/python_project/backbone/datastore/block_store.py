@@ -1,9 +1,22 @@
+from abc import ABC, abstractmethod
+
 import lmdb
-from python_project.backbone.datastore.database import BaseBlockStore
 
 
-class KVBLockStore(BaseBlockStore):
-    """BlockStore based on LMBD"""
+class BaseBlockStore(ABC):
+    """Store interface for block blobs"""
+
+    @abstractmethod
+    def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
+        pass
+
+    @abstractmethod
+    def get_block(self, block_hash: bytes) -> bytes:
+        pass
+
+
+class LMDBLockStore(BaseBlockStore):
+    """BlockStore implementation based on LMBD"""
 
     def __init__(self, block_dir: str) -> None:
         # Change the directory

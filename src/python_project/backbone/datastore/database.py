@@ -8,18 +8,6 @@ from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.chain_store import Frontier, BaseChain
 
 
-class BaseBlockStore(ABC):
-    """Store interface for block blobs"""
-
-    @abstractmethod
-    def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
-        pass
-
-    @abstractmethod
-    def get_block(self, block_hash: bytes) -> bytes:
-        pass
-
-
 class BasePlexusDB(ABC):
     @abstractmethod
     def get_frontier(self, chain_id) -> Frontier:

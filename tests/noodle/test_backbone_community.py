@@ -1,6 +1,6 @@
 from asyncio import sleep
 
-from .test_consistency_chain import MockChainState
+from tests.test_chain_store import MockChainState
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.test.base import TestBase
 
