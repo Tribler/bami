@@ -1782,7 +1782,7 @@ class NoodleCommunity(Community):
             self.logger.info(
                 "Dump chain for %s, balance before is %s", peer_id, prev_balance
             )
-            status = json.loads(payload.chain)
+            status = json.loads(payload.versions)
             result, affected_peers = self.verify_peer_status(peer_id, status)
             if result.state == ValidationResult.invalid:
                 # Alert: Peer is provably hiding a transaction

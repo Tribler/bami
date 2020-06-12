@@ -7,7 +7,7 @@ from typing import Optional
 from collections import defaultdict
 
 from python_project.backbone.block import PlexusBlock, EMPTY_PK
-from python_project.backbone.datastore.consistency import Chain
+from python_project.backbone.datastore.chain_store import Chain
 from python_project.backbone.datastore.database import BasePlexusDB
 from python_project.backbone.datastore.utils import shorten, expand_ranges
 
@@ -198,7 +198,7 @@ class PlexusMemoryDatabase(BasePlexusDB):
             else self.community_chains[chain_id]
         )
         for b_i in expand_ranges(request["m"]):
-            blocks.update({self.get_block_by_short_hash(sh) for sh in chain.chain[b_i]})
+            blocks.update({self.get_block_by_short_hash(sh) for sh in chain.versions[b_i]})
         for sn, sh in request["c"]:
             val = self.get_block_by_short_hash(sh)
             if val:

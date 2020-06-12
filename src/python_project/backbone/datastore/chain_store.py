@@ -1,4 +1,4 @@
-import operator
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Tuple, Optional, Set
@@ -94,56 +94,77 @@ class BaseChain(ABC):
     def reconcile(self, frontier: Frontier) -> FrontierDiff:
         pass
 
+    @property
+    @abstractmethod
+    def frontier(self) -> Frontier:
+        pass
+
 
 class Chain(BaseChain):
     def __init__(self, is_personal_chain=False, cache_num=100_000):
+        """DAG-Chain of one community based on in-memory dicts.
+
+        Args:
+            is_personal_chain: if the chain must follow personal links (previous). Default: False
+            cache_num: to store and support terminal calculation. Default= 100`000
+        """
         self.personal = is_personal_chain
 
         # Internal chain store of short hashes
-        self.chain = dict()
+        self.versions = dict()
         # Pointers to forward blocks
         self.forward_pointers = dict()
         # Known data structure inconsistencies
         self.inconsistencies = set()
         # Unknown blocks in the data structure
         self.holes = set()
-
-        # Current data frontier
-        self.frontier = None  # Frontier(None, None, None)
         # Current terminal nodes in the DAG
         self.terminal = Links(((0, ShortKey("30303030")),))
 
-        self.last_const_state = None
-        self.state_checkpoints = dict()
-        self.hash_to_state = dict()
-
         self.max_known_seq_num = 0
-
         # Cache to speed up bfs on links
         self.term_cache = cachetools.LRUCache(cache_num)
 
-    def _add_inconsistency(self, seq_num: int, exp_hash: ShortKey) -> None:
-        """"""
-        self.inconsistencies.add((seq_num, exp_hash))
-
-    def _fix_holes(self, block_seq_num: int) -> None:
-        """Fix any known holes """
-        if block_seq_num in self.holes:
-            self.holes.remove(block_seq_num)
-
-    def _check_new_holes(self, block_links: Links) -> None:
-        """Add hole if block_links not known"""
-        for s, h in block_links:
-            if s not in self.chain:
-                while s not in self.chain and s >= 1:
-                    self.holes.add(s)
-                    s -= 1
+        self.lock = threading.Lock()
 
     def get_next_link(self, link: Tuple[int, ShortKey]) -> Optional[Links]:
+        """Get forward link from the point.
+
+        Args:
+            link: tuple of sequence number and short hash key
+
+        Returns:
+            A tuple of links
+        """
         val = self.forward_pointers.get(link)
         return Links(tuple(val)) if val else None
 
-    def __calc_terminal2(self, current: Links) -> Set[Tuple[int, ShortKey]]:
+    def _update_holes(self, block_seq_num: int, block_links: Links) -> None:
+        """Fix known holes, or add any new"""
+        # Check if this block fixes known holes
+        if block_seq_num in self.holes:
+            self.holes.remove(block_seq_num)
+
+        # Check if block introduces new holes
+        for s, h in block_links:
+            if s not in self.versions:
+                while s not in self.versions and s >= 1:
+                    self.holes.add(s)
+                    s -= 1
+
+    def _update_inconsistencies(self, block_links: Links, block_seq_num: int, block_hash: ShortKey) -> None:
+        """Fix any inconsistencies in the data structure, and verify any new"""
+
+        # Check if block introduces new inconsistencies
+        for seq, hash_val in block_links:
+            if seq in self.versions and hash_val not in self.versions[seq]:
+                self.inconsistencies.add((seq, hash_val))
+
+        # Check if block fixes some inconsistencies
+        if (block_seq_num, block_hash) in self.inconsistencies:
+            self.inconsistencies.remove((block_seq_num, block_hash))
+
+    def __calc_terminal(self, current: Links) -> Set[Tuple[int, ShortKey]]:
         """Recursive iteration through the block links"""
         terminal = set()
         for blk_link in current:
@@ -164,7 +185,7 @@ class Chain(BaseChain):
                             terminal.update(cached_next)
                         else:
                             # This is not terminal, make next step and invalidate the cache
-                            new_val = self.__calc_terminal2(term_next)
+                            new_val = self.__calc_terminal(term_next)
                             if not new_cache:
                                 new_cache = set()
                             new_cache.update(new_val)
@@ -174,43 +195,62 @@ class Chain(BaseChain):
                 else:
                     # No cache, make step and update cache
                     next_blk = self.get_next_link(blk_link)
-                    new_term = self.__calc_terminal2(next_blk)
+                    new_term = self.__calc_terminal(next_blk)
                     self.term_cache[blk_link] = new_term
                     terminal.update(new_term)
         return terminal
 
-    @cachetools.cachedmethod(operator.attrgetter("term_cache"))
-    def __calc_terminal(self, current: Links) -> Links:
-        """Recursive iteration through the block links"""
-        terminal = set()
-        for s, h in current:
-            if (s, h) not in self.forward_pointers:
-                # Terminal nodes achieved
-                terminal.add((s, h))
-                # update the state if any
-            else:
-                # make a bfs step
-                terminal.update(
-                    self.__calc_terminal(Links(tuple(self.forward_pointers[(s, h)])))
-                )
-        return Links(tuple(terminal))
-
     # noinspection PyTypeChecker
-    def _recalc_terminal(self, block_seq_num: int, block_short_hash: ShortKey) -> None:
+    def _update_terminal(self, block_seq_num: int, block_short_hash: ShortKey) -> None:
         """Update current terminal nodes wrt new block"""
 
         # Check if the terminal nodes changed
         current_links = Links(((block_seq_num, block_short_hash),))
-        # self.terminal = set()
-
-        # val = self.term_cache.pop((self.terminal,), default=None)
         # Start traversal from the block
-        new_term = self.__calc_terminal2(current_links)
-
+        new_term = self.__calc_terminal(current_links)
         # Traversal from the current terminal nodes. Block can change the current terminal
-        new_term.update(self.__calc_terminal2(self.terminal))
+        new_term.update(self.__calc_terminal(self.terminal))
         new_term = sorted(new_term)
         self.terminal = Links(tuple(new_term))
+
+    def _update_forward_pointers(self, block_links: Links, block_seq_num: int, block_hash: ShortKey) -> None:
+        for seq, hash_val in block_links:
+            if (seq, hash_val) not in self.forward_pointers:
+                self.forward_pointers[(seq, hash_val)] = set()
+            self.forward_pointers[(seq, hash_val)].add((block_seq_num, block_hash))
+
+    def _update_versions(self, block_seq_num: int, block_hash: ShortKey):
+        if block_seq_num not in self.versions:
+            self.versions[block_seq_num] = set()
+            if block_seq_num > self.max_known_seq_num:
+                self.max_known_seq_num = block_seq_num
+        self.versions[block_seq_num].add(block_hash)
+
+    def add_block(self, block: PlexusBlock) -> None:
+        block_links = block.previous if self.personal else block.links
+        block_seq_num = block.sequence_number if self.personal else block.com_seq_num
+        block_hash = shorten(block.hash)
+
+        with self.lock:
+            # 1. Update versions
+            self._update_versions(block_seq_num, block_hash)
+            # 2. Update forward pointers
+            self._update_forward_pointers(block_links, block_seq_num, block_hash)
+            # 3. Update holes
+            self._update_holes(block_seq_num, block_links)
+            # 4. Update inconsistencies
+            self._update_inconsistencies(block_links, block_seq_num, block_hash)
+            # 5. Update terminal nodes
+            self._update_terminal(block_seq_num, block_hash)
+
+    @property
+    def frontier(self) -> Frontier:
+        with self.lock:
+            return Frontier(self.terminal, ranges(self.holes), Links(tuple(self.inconsistencies)))
+
+    def reconcile(self, frontier: Frontier) -> FrontierDiff:
+        pass
+
 
     def status_calc(self):
         if self.states and self.is_state_consistent():
@@ -226,53 +266,6 @@ class Chain(BaseChain):
                 merged_state = state.merge(known_state, new_state)
                 self.state_checkpoints[sn][s] = merged_state
 
-    def _update_frontiers(self, block_links, block_seq_num, block_hash):
-        # New block received
-        # 1. Does it fix some known holes?
-
-        # 2. Does it introduce new holes?
-
-        # 3. Does it change terminal nodes?
-        self.terminal = self._calc_terminal(self.terminal)
-        current = {(block_seq_num, block_hash)}
-        self.terminal.update(self.calc_terminal(current))
-
-        # Update frontier with holes, inconsistencies and terminal
-        self.frontier["v"] = self.terminal
-        self.frontier["h"] = ranges(self.holes)
-        self.frontier["i"] = self.inconsistencies
-
-    def add_block(self, block: PlexusBlock) -> None:
-        block_links = block.previous if self.personal else block.links
-        block_seq_num = block.sequence_number if self.personal else block.com_seq_num
-        block_hash = shorten(block.hash)
-
-        if block_seq_num not in self.chain:
-            # new sequence number
-            self.chain[block_seq_num] = set()
-            if block_seq_num > self.max_known_seq_num:
-                self.max_known_seq_num = block_seq_num
-
-        self.chain[block_seq_num].add(block_hash)
-
-        # Analyze inconsistencies and update the forward pointers
-        for seq, hash_val in block_links:
-            if (seq, hash_val) not in self.forward_pointers:
-                self.forward_pointers[(seq, hash_val)] = set()
-            self.forward_pointers[(seq, hash_val)].add((block_seq_num, block_hash))
-
-            if seq in self.chain and hash_val not in self.chain[seq]:
-                self._add_inconsistency(seq, hash_val)
-
-        # Check if block fixes some inconsistencies
-        if (block_seq_num, block_hash) in self.inconsistencies:
-            # There exits a block that links to this => inconsistency fixed
-            self.inconsistencies.remove((block_seq_num, block_hash))
-        # self._update_frontiers(block_links, block_seq_num, block_hash)
-
-    def reconcile(self, frontier: Frontier) -> FrontierDiff:
-        pass
-
 
 class FChain(BaseChain):
     """
@@ -280,7 +273,7 @@ class FChain(BaseChain):
     """
 
     def __init__(
-        self, chain_id, personal=True, num_frontiers_store=50, block_store=None
+            self, chain_id, personal=True, num_frontiers_store=50, block_store=None
     ):
         self.chain = dict()
         self.holes = set()
@@ -312,7 +305,7 @@ class FChain(BaseChain):
         return not self.inconsistencies and not self.holes
 
     def add_state(self, chain_state):
-        chain_state.chain = self
+        chain_state.versions = self
         chain_state.personal = self.personal
         self.states[chain_state.name] = chain_state
 

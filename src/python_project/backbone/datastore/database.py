@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from python_project.backbone.block import PlexusBlock
-from python_project.backbone.datastore.consistency import Frontier, BaseChain
+from python_project.backbone.datastore.chain_store import Frontier, BaseChain
 
 
 class BaseBlockStore(ABC):

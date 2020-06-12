@@ -13,7 +13,7 @@ from python_project.backbone.block import (
     PlexusBlock,
     GENESIS_SEQ,
 )
-from python_project.backbone.datastore.consistency import ChainState, Chain
+from python_project.backbone.datastore.chain_store import ChainState, Chain
 from python_project.backbone.datastore.memory_database import PlexusMemoryDatabase
 from python_project.backbone.datastore.utils import (
     shorten,
@@ -86,40 +86,6 @@ class MockDatabase(PlexusMemoryDatabase):
         PlexusMemoryDatabase.__init__(self, "", "mock")
 
 
-def test_chain_terminal_conflict():
-    key = default_eccrypto.generate_key(u"curve25519")
-    com_id = key.pub().key_to_bin()
-    block = TestBlock(com_id=com_id)
-    links = Links(((block.com_seq_num, block.short_hash),))
-    print(links)
-    block2 = TestBlock(com_id=com_id, links=links)
-    chain = Chain()
-    chain.add_block(block)
-    chain.add_block(block2)
-
-    print(chain.chain)
-    print(chain.forward_pointers)
-
-    init_link = (0, ShortKey("30303030"))
-
-    print(chain.terminal)
-    chain._recalc_terminal(init_link[0], init_link[1])
-    print(chain.terminal)
-
-    # Add conflicting block at level 1
-    c_block = TestBlock(com_id=com_id)
-    chain.add_block(c_block)
-    # Conflicting block at level 2
-    c_block2 = TestBlock(
-        com_id=com_id, links=Links(((c_block.com_seq_num, c_block.short_hash),))
-    )
-    chain.add_block(c_block2)
-
-    new_link = (c_block.com_seq_num, c_block.short_hash)
-    chain._recalc_terminal(new_link[0], new_link[1])
-    print(chain.terminal)
-
-
 def create_block_batch(com_id, num_blocks=100):
     blocks = []
     last_block_point = Links(((0, ShortKey("30303030")),))
@@ -143,25 +109,18 @@ def create_batches():
 def insert_batch_seq(chain: Chain, batch: List[PlexusBlock]) -> None:
     for blk in batch:
         chain.add_block(blk)
-        last_block_link = (blk.com_seq_num, blk.short_hash)
-        chain._recalc_terminal(*last_block_link)
 
 
 def insert_batch_reversed(chain: Chain, batch: List[PlexusBlock]) -> None:
     for blk in reversed(batch):
         chain.add_block(blk)
-        last_block_link = (blk.com_seq_num, blk.short_hash)
-        chain._recalc_terminal(*last_block_link)
 
 
 def insert_batch_random(chain: Chain, batch: List[PlexusBlock]) -> None:
     from random import shuffle
-
     shuffle(batch)
     for blk in batch:
         chain.add_block(blk)
-        last_block_link = (blk.com_seq_num, blk.short_hash)
-        chain._recalc_terminal(*last_block_link)
 
 
 def test_seq_insert(create_batches):
