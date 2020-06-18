@@ -1,19 +1,29 @@
 from abc import ABC, abstractmethod
+from enum import Enum
+from typing import Any
 
-from python_project.backbone.block import PlexusBlock
+from python_project.backbone.block import PlexusBlock, GENESIS_HASH
+from python_project.backbone.datastore.utils import shorten, take_hash
 
 
-class ChainState:
+class ChainState(ABC):
     """
     Interface for application logic for the state calculation.
     Class to collapse the chain and validate on integrity of invariants
     """
 
-    def __init__(self, name):
-        self.name = name
-        self.personal = False
+    @property
+    @abstractmethod
+    def is_personal_chain(self):
+        pass
 
-    def apply_block(self, prev_state, block):
+    @property
+    @abstractmethod
+    def is_delta_state(self):
+        pass
+
+    @abstractmethod
+    def apply_block(self, prev_state, block) -> Any:
         """
         Apply block(with delta) to the prev_state
 
@@ -23,47 +33,129 @@ class ChainState:
         Returns:
             New state with block applied
         """
-        return
+        pass
 
-    def init_state(self):
+    @abstractmethod
+    def init_state(self) -> Any:
         """
         Initialize state when there no blocks
         Returns:
              Fresh initial state
         """
-        return
+        pass
 
-    def merge(self, old_state, new_state):
+    @abstractmethod
+    def merge(self, old_state, new_state) -> Any:
         """
         Merge two potentially conflicting states
         @param old_state:
         @param new_state:
         @return: Fresh new state of merged states
         """
-        return
-
-
-class BaseStateStore(ABC):
-
-    @abstractmethod
-    def add_block(self, block: PlexusBlock):
         pass
 
 
-class StateStore(BaseStateStore):
+class DeltaBasedState(ABC):
+    @abstractmethod
+    def init_state(self) -> Any:
+        """
+        Initialize state when there no blocks
+        Returns:
+             Fresh initial state
+        """
+        pass
 
-    def add_block(self, block: PlexusBlock):
-        self.state.apply_block(None, block)
 
-    def __init__(self, chain_state: ChainState):
-        self.state = chain_state
+class BaseStateStore(ABC):
+    @abstractmethod
+    def add_block(self, block: PlexusBlock) -> bool:
+        pass
+
+
+class StateStore(ABC):
+    @abstractmethod
+    def get_last_dot(self):
+        pass
+
+    @abstractmethod
+    def get_last_dot_state(self):
+        pass
+
+    @abstractmethod
+    def insert(self, val: Any) -> bool:
+        pass
+
+    @abstractmethod
+    def init_state(self):
+        pass
+
+
+class ApplyMode(Enum):
+    NO_ORDER = 1
+    CASUAL_ORDER = 2
+    LINEAR_ORDER = 3
+
+
+class StateManager(BaseStateStore):
+    """
+    Try different modes:
+    1. No order
+    2. Casual order
+    3. Linear order
+    """
+
+    def add_block(self, block: PlexusBlock) -> bool:
+        links = (
+            block.previous
+            if self.state_code and self.state_code.is_personal_chain
+            else block.links
+        )
+        block_num = (
+            block.sequence_number
+            if self.state_code and self.state_code.is_personal_chain
+            else block.com_seq_num
+        )
+        block_id = (block_num, block.short_hash)
+
+        full_state = None
+
+        # No order important
+        return self.state.insert(block.transaction)
+
+        """
+        if all(self.state_code.is_delta_state or self.states.get(link) is not None for link in links if link):
+            # All previous links are known
+            for l in links:
+                state_val = self.states.get(l)
+                new_state = self.state_code.apply_block(state_val, block)
+                if not full_state:
+                    full_state = new_state
+                else:
+                    full_state = self.state_code.merge(full_state, new_state)
+            # Store new state
+            self.states[block_id] = full_state
+            # Block successfully applied
+            return True
+        else:
+            # Cannot apply block => not all previous links available
+            return False
+        """
+
+    def get_latest_state(self):
+        return self.state.get_last_state()
+
+    def __init__(
+        self, chain_state: ChainState, state_store: StateStore, state_mode: ApplyMode
+    ):
+        self.state_code = chain_state
+        init_block = (0, shorten(GENESIS_HASH))
+        self.state = state_store
         self.state.init_state()
 
+        self.apply_mode = state_mode
 
 
-
-
-class FChain(BaseChain):
+class FChain:
     """
     Index class for chain to ensure that each peer will converge into a consistent chain log.
     """
@@ -83,7 +175,7 @@ class FChain(BaseChain):
                 self.state_checkpoints[sn][s] = merged_state
 
     def __init__(
-            self, chain_id, personal=True, num_frontiers_store=50, block_store=None
+        self, chain_id, personal=True, num_frontiers_store=50, block_store=None
     ):
         self.chain = dict()
         self.holes = set()

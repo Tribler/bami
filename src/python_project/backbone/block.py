@@ -110,7 +110,7 @@ class PlexusBlock(object):
             self.links = decode_links(self._links)
 
             self.type, self.public_key, self.sequence_number = data[0], data[2], data[3]
-            self.com_id, self.com_seq_num = data[6], data[7]
+            self.com_id, self.com_seq_num = data[6], int(data[7])
             self.signature, self.timestamp, self.insert_time = (
                 data[8],
                 data[9],

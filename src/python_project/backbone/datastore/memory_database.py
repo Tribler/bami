@@ -198,7 +198,9 @@ class PlexusMemoryDatabase(BasePlexusDB):
             else self.community_chains[chain_id]
         )
         for b_i in expand_ranges(request["m"]):
-            blocks.update({self.get_block_by_short_hash(sh) for sh in chain.versions[b_i]})
+            blocks.update(
+                {self.get_block_by_short_hash(sh) for sh in chain.versions[b_i]}
+            )
         for sn, sh in request["c"]:
             val = self.get_block_by_short_hash(sh)
             if val:

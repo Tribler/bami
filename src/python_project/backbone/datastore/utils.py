@@ -1,17 +1,26 @@
-from ast import literal_eval
 from binascii import hexlify
 from hashlib import sha256
-from typing import Set, Tuple, Any, Dict, NewType
+from itertools import chain
+from typing import Set, Tuple, Any, NewType
+
+from msgpack import loads, dumps
 
 KEY_LEN = 8
 ShortKey = NewType("ShortKey", str)
 BytesLinks = NewType("BytesLinks", bytes)
+Dot = NewType("Dot", Tuple[int, ShortKey])
 Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
 Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
 
+GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
+GENESIS_SEQ = 0
 
-def shorten(key) -> ShortKey:
+
+def shorten(key: bytes) -> ShortKey:
     return ShortKey(hexlify(key)[-KEY_LEN:].decode())
+
+
+GENESIS_DOT = Dot((GENESIS_SEQ, shorten(GENESIS_HASH)))
 
 
 def hex_to_int(hex_val) -> int:
@@ -29,33 +38,8 @@ def int_to_short_key(int_val: int) -> ShortKey:
     return ShortKey(val)
 
 
-def decode_frontier(frontier: dict):
-    """
-    Decode for packet
-    """
-    decoded = dict()
-    for k, v in frontier.items():
-        if k in ("h", "m", "state"):
-            decoded[k] = v
-        else:
-            decoded[k] = decode_links(v)
-    return decoded
-
-
-# Key -> Value
-def encode_frontier(frontier: Dict[Any, Any]) -> Dict[Any, Any]:
-    """Encode to python dict
-
-    Args:
-        frontier:
-    """
-    encoded = dict()
-    for k, v in frontier.items():
-        if k in ("h", "m", "state"):
-            encoded[k] = v
-        else:
-            encoded[k] = encode_links(v)
-    return encoded
+def wrap_return(gener_val):
+    return list(chain(*(k for k in gener_val)))
 
 
 def take_hash(value: Any) -> bytes:
@@ -71,13 +55,13 @@ def take_hash(value: Any) -> bytes:
 
 
 def encode_raw(val: Any) -> bytes:
-    """Encode python object with __repr__ to bytes"""
-    return repr(val).encode()
+    """Encode python object to bytes"""
+    return dumps(val)
 
 
 def decode_raw(byte_raw: bytes) -> Any:
     """Decode bytes to python struct"""
-    return literal_eval(byte_raw.decode())
+    return loads(byte_raw)
 
 
 def encode_links(link_val: Links) -> BytesLinks:
@@ -100,7 +84,7 @@ def decode_links(bytes_links: BytesLinks) -> Links:
     Returns:
         Links values
     """
-    return Links(decode_raw(bytes_links))
+    return Links(tuple(tuple(x) for x in decode_raw(bytes_links)))
 
 
 def expand_ranges(range_vals: Ranges) -> Set[int]:
@@ -134,3 +118,18 @@ def ranges(nums: Set[int]) -> Ranges:
     gaps = [[s, e] for s, e in zip(nums, nums[1:]) if s + 1 < e]
     edges = iter(nums[:1] + sum(gaps, []) + nums[-1:])
     return Ranges(tuple(zip(edges, edges)))
+
+
+class Notifier(object):
+    def __init__(self):
+        self.observers = {}
+
+    def add_observer(self, subject: Any, callback):
+        self.observers[subject] = self.observers.get(subject, [])
+        self.observers[subject].append(callback)
+
+    def notify(self, subject, *args, **kwargs):
+        if subject not in self.observers:
+            return
+        for callback in self.observers[subject]:
+            callback(*args, **kwargs)

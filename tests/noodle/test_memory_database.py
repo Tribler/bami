@@ -6,6 +6,7 @@ from python_project.noodle.memory_database import NoodleMemoryDatabase
 from python_project.noodle.block import EMPTY_PK
 from tests.noodle.test_block import TestBlock
 
+
 class TestPlexusBlocks(unittest.TestCase):
     """
     This class contains tests for a TrustChain block.

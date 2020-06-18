@@ -9,6 +9,8 @@ from python_project.backbone.datastore.utils import (
     Links,
     decode_links,
     encode_links,
+    encode_raw,
+    decode_raw,
 )
 from python_project.noodle.block import GENESIS_HASH, EMPTY_SIG, EMPTY_PK
 
@@ -49,7 +51,12 @@ def test_shorten_size(keys_fixture):
     assert len(s_k) == KEY_LEN
 
 
+def test_encode_decode_raw():
+    vals = {"id": 42}
+    assert decode_raw(encode_raw(vals))["id"] == 42
+
+
 def test_encode_decode_links(keys_fixture):
-    links = Links(((1, shorten(keys_fixture)), ))
+    links = Links(((1, shorten(keys_fixture)),))
     raw_bytes = encode_links(links)
     assert decode_links(raw_bytes) == links

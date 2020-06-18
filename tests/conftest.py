@@ -1,15 +1,22 @@
 # tests/conftest.py
-from typing import Any, List
+from typing import Any, List, Union
 from unittest.mock import Mock
 
-from _pytest.config import Config
 import pytest
+from _pytest.config import Config
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
 from pytest_mock import MockFixture
 from python_project.backbone.block import PlexusBlock, EMPTY_SIG
-from python_project.backbone.datastore.chain_store import Chain
-from python_project.backbone.datastore.utils import Links, ShortKey, shorten, encode_links
+from python_project.backbone.datastore.chain_store import BaseChain
+from python_project.backbone.datastore.state_store import BaseStateStore
+from python_project.backbone.datastore.utils import (
+    Links,
+    ShortKey,
+    encode_links,
+    encode_raw,
+    wrap_return,
+)
 
 
 def pytest_configure(config: Config) -> None:
@@ -42,13 +49,13 @@ class TestBlock(PlexusBlock):
     """
 
     def __init__(
-            self,
-            transaction: bytes = b'{"id": 42}',
-            previous: Links = None,
-            key: LibNaCLSK = None,
-            links: Links = None,
-            com_id: Any = None,
-            block_type: bytes = b"test",
+        self,
+        transaction: bytes = encode_raw({"id": 42}),
+        previous: Links = None,
+        key: LibNaCLSK = None,
+        links: Links = None,
+        com_id: Any = None,
+        block_type: bytes = b"test",
     ):
         crypto = default_eccrypto
         if not links:
@@ -108,21 +115,28 @@ def create_batches():
     return _create_batches
 
 
-def insert_batch_seq(chain: Chain, batch: List[PlexusBlock]) -> None:
+def insert_batch_seq(
+    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+) -> None:
     for blk in batch:
-        chain.add_block(blk)
+        yield chain_obj.add_block(blk)
 
 
-def insert_batch_reversed(chain: Chain, batch: List[PlexusBlock]) -> None:
+def insert_batch_reversed(
+    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+) -> None:
     for blk in reversed(batch):
-        chain.add_block(blk)
+        yield chain_obj.add_block(blk)
 
 
-def insert_batch_random(chain: Chain, batch: List[PlexusBlock]) -> None:
+def insert_batch_random(
+    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+) -> None:
     from random import shuffle
+
     shuffle(batch)
     for blk in batch:
-        chain.add_block(blk)
+        yield chain_obj.add_block(blk)
 
 
 batch_insert_functions = [insert_batch_seq, insert_batch_random, insert_batch_reversed]
