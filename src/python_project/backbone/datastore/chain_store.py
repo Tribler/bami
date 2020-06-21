@@ -1,4 +1,3 @@
-import itertools
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -35,15 +34,6 @@ class Frontier:
     def from_bytes(cls, bytes_frontier: bytes):
         front_dict = decode_raw(bytes_frontier)
         return cls(front_dict.get("t"), front_dict.get("h"), front_dict.get("i"))
-
-    def get_consistent_terminal(self) -> Links:
-        const_terminal = set()
-        for link in self.terminal:
-            links_num = link[0]
-            # Check if all previous blocks are known
-            if all(k > links_num for k in expand_ranges(self.holes)):
-                const_terminal.add(link)
-            # Check if
 
 
 @dataclass
@@ -94,7 +84,11 @@ class BaseChain(ABC):
 
 class BaseChainFactory(ABC):
     @abstractmethod
-    def create_chain(self, **kwargs) -> BaseChain:
+    def create_personal_chain(self, **kwargs) -> BaseChain:
+        pass
+
+    @abstractmethod
+    def create_community_chain(self, **kwargs) -> BaseChain:
         pass
 
 
@@ -192,7 +186,7 @@ class Chain(BaseChain):
             next_links = next_val
 
     def _add_inconsistencies(
-            self, block_links: Links, block_dot: Dot, update_trigger: Any = None
+        self, block_links: Links, block_dot: Dot, update_trigger: Any = None
     ) -> bool:
         """Fix any inconsistencies in the data structure, and verify any new"""
 
@@ -225,7 +219,7 @@ class Chain(BaseChain):
                         yield from self.consistency_fix(next_dot)
 
     def __calc_terminal(
-            self, current: Links, make_consistent_step: bool = False
+        self, current: Links, make_consistent_step: bool = False
     ) -> Set[Tuple[int, ShortKey]]:
         """Recursive iteration through the block links"""
         terminal = set()
@@ -266,8 +260,7 @@ class Chain(BaseChain):
                     next_blk = self.get_next_links(blk_link)
                     new_term = self.__calc_terminal(next_blk, make_consistent_step)
                     val_with_const = {
-                        (dot, self._is_block_dot_consistent(dot))
-                        for dot in new_term
+                        (dot, self._is_block_dot_consistent(dot)) for dot in new_term
                     }
                     self.term_cache[blk_link] = val_with_const
                     terminal.update(new_term)
@@ -275,10 +268,10 @@ class Chain(BaseChain):
 
     # noinspection PyTypeChecker
     def _update_terminal(
-            self,
-            block_seq_num: int,
-            block_short_hash: ShortKey,
-            consistent_update: bool = True,
+        self,
+        block_seq_num: int,
+        block_short_hash: ShortKey,
+        consistent_update: bool = True,
     ) -> None:
         """Update current terminal nodes wrt new block"""
 
@@ -289,7 +282,9 @@ class Chain(BaseChain):
         # Traversal from the current terminal nodes. Block can change the current terminal
 
         if consistent_update:
-            const_step = self.__calc_terminal(self.const_terminal, make_consistent_step=True)
+            const_step = self.__calc_terminal(
+                self.const_terminal, make_consistent_step=True
+            )
             const_step.update(new_term)
             const_step = sorted(const_step)
             self.const_terminal = Links(tuple(const_step))
@@ -333,7 +328,7 @@ class Chain(BaseChain):
             if missing:
                 last_dot = missing[-1]
                 for dot in missing[:-1]:
-                    self.term_cache[Links((dot,))] = (Links((last_dot, )), True)
+                    self.term_cache[Links((dot,))] = (Links((last_dot,)), True)
             # 5. Update terminal nodes if consistent
             old_terminal = self.const_terminal
             self._update_terminal(block_seq_num, block_hash, block_consistent)
@@ -365,7 +360,7 @@ class Chain(BaseChain):
 
         front_known_seq = expand_ranges(Ranges(((1, max_term_seq),))) - f_holes
         peer_known_seq = (
-                expand_ranges(Ranges(((1, self.max_known_seq_num),))) - self.holes
+            expand_ranges(Ranges(((1, self.max_known_seq_num),))) - self.holes
         )
 
         # External frontier has blocks that peer is missing => Request from front these blocks
@@ -382,9 +377,9 @@ class Chain(BaseChain):
         for i in self.inconsistencies:
             for t in self.__calc_terminal(Links((i,))):
                 if (
-                        t in frontier.terminal
-                        and t not in frontier.inconsistencies
-                        and t[0] not in frontier.holes
+                    t in frontier.terminal
+                    and t not in frontier.inconsistencies
+                    and t[0] not in frontier.holes
                 ):
                     conflicts.add(i)
 
@@ -394,13 +389,12 @@ class Chain(BaseChain):
 
 
 class ChainFactory(BaseChainFactory):
-    def create_chain(self, **kwargs) -> BaseChain:
+    def create_personal_chain(self, **kwargs) -> BaseChain:
+        """ **kwargs: chache_num: specify the cache number used in the chain
         """
+        return Chain(is_personal_chain=True, **kwargs)
 
-        Args:
-            **kwargs: is_personal_chain, cache_num
-
-        Returns:
-            In-memory chain
+    def create_community_chain(self, **kwargs) -> BaseChain:
+        """ **kwargs:chache_num: specify the cache number used in the chain
         """
-        return Chain(**kwargs)
+        return Chain(is_personal_chain=False, **kwargs)

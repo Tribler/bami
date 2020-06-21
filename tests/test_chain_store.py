@@ -352,9 +352,7 @@ class TestNewConsistentDots:
     def test_one_insert(self, create_batches):
         batchs = create_batches(1, 10)
         chain = Chain()
-        vals = chain.add_block(batchs[0][0])
-        res = [k for k in vals]
-
+        res = chain.add_block(batchs[0][0])
         assert len(res) == 1
         assert res[0][0] == 1
 
@@ -363,9 +361,7 @@ class TestNewConsistentDots:
         chain = Chain()
 
         for i in range(10):
-            vals = chain.add_block(batchs[0][i])
-            res = [k for k in vals]
-
+            res = chain.add_block(batchs[0][i])
             assert len(res) == 1
             assert res[0][0] == i + 1
 

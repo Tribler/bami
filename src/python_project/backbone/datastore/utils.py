@@ -128,7 +128,7 @@ class Notifier(object):
         self.observers[subject] = self.observers.get(subject, [])
         self.observers[subject].append(callback)
 
-    def notify(self, subject, *args, **kwargs):
+    def notify(self, subject: Any, *args, **kwargs):
         if subject not in self.observers:
             return
         for callback in self.observers[subject]:

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import lmdb
 
@@ -11,7 +12,7 @@ class BaseBlockStore(ABC):
         pass
 
     @abstractmethod
-    def get_block_by_hash(self, block_hash: bytes) -> bytes:
+    def get_block_by_hash(self, block_hash: bytes) -> Optional[bytes]:
         pass
 
     @abstractmethod
@@ -23,11 +24,11 @@ class BaseBlockStore(ABC):
         pass
 
     @abstractmethod
-    def get_hash_by_dot(self, dot: bytes) -> bytes:
+    def get_hash_by_dot(self, dot: bytes) -> Optional[bytes]:
         pass
 
     @abstractmethod
-    def get_tx_by_hash(self, block_hash: bytes) -> bytes:
+    def get_tx_by_hash(self, block_hash: bytes) -> Optional[bytes]:
         pass
 
 
@@ -50,12 +51,12 @@ class LMDBLockStore(BaseBlockStore):
         with self.env.begin(write=True) as txn:
             txn.put(block_hash, tx_blob, db=self.txs)
 
-    def get_block_by_hash(self, block_hash: bytes) -> bytes:
+    def get_block_by_hash(self, block_hash: bytes) -> Optional[bytes]:
         with self.env.begin() as txn:
             val = txn.get(block_hash, db=self.blocks)
         return val
 
-    def get_tx_by_hash(self, block_hash: bytes) -> bytes:
+    def get_tx_by_hash(self, block_hash: bytes) -> Optional[bytes]:
         with self.env.begin() as txn:
             val = txn.get(block_hash, db=self.txs)
         return val
@@ -64,7 +65,7 @@ class LMDBLockStore(BaseBlockStore):
         with self.env.begin(write=True) as txn:
             txn.put(dot, block_hash, db=self.dots)
 
-    def get_hash_by_dot(self, dot: bytes) -> bytes:
+    def get_hash_by_dot(self, dot: bytes) -> Optional[bytes]:
         with self.env.begin() as txn:
             val = txn.get(dot, db=self.dots)
         return val

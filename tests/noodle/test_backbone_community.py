@@ -8,7 +8,7 @@ from python_project.backbone.block import PlexusBlock
 from python_project.backbone.community import PlexusCommunity
 from python_project.backbone.settings import PlexusSettings
 
-from tests.noodle.mocking.fake_ipv8 import FakeIPv8
+from tests.mocking.fake_ipv8 import FakeIPv8
 
 
 class DummyBlock(PlexusBlock):
