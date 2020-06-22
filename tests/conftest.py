@@ -50,7 +50,7 @@ class TestBlock(PlexusBlock):
 
     def __init__(
         self,
-        transaction: bytes = encode_raw({"id": 42}),
+        transaction: bytes = None,
         previous: Links = None,
         key: LibNaCLSK = None,
         links: Links = None,
@@ -76,6 +76,9 @@ class TestBlock(PlexusBlock):
         else:
             self.key = crypto.generate_key(u"curve25519")
 
+        if not transaction:
+            transaction = encode_raw({"id": 42})
+
         PlexusBlock.__init__(
             self,
             (
@@ -95,11 +98,12 @@ class TestBlock(PlexusBlock):
         self.sign(self.key)
 
 
-def create_block_batch(com_id, num_blocks=100):
+def create_block_batch(com_id, num_blocks=100, txs=None):
     blocks = []
     last_block_point = GENESIS_LINK
     for k in range(num_blocks):
-        blk = TestBlock(com_id=com_id, links=last_block_point)
+        tx = txs[k] if txs else None
+        blk = TestBlock(com_id=com_id, links=last_block_point, transaction=tx)
         blocks.append(blk)
         last_block_point = Links(((blk.com_seq_num, blk.short_hash),))
     return blocks
@@ -107,10 +111,13 @@ def create_block_batch(com_id, num_blocks=100):
 
 @pytest.fixture
 def create_batches():
-    def _create_batches(num_batches=2, num_blocks=100):
+    def _create_batches(num_batches=2, num_blocks=100, txs=None):
         key = default_eccrypto.generate_key(u"curve25519")
         com_id = key.pub().key_to_bin()
-        return [create_block_batch(com_id, num_blocks) for _ in range(num_batches)]
+        return [
+            create_block_batch(com_id, num_blocks, txs[i] if txs else None)
+            for i in range(num_batches)
+        ]
 
     return _create_batches
 

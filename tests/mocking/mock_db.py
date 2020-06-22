@@ -2,7 +2,13 @@ from typing import Optional
 
 from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.block_store import BaseBlockStore
-from python_project.backbone.datastore.chain_store import BaseChain, FrontierDiff, Frontier, BaseChainFactory
+from python_project.backbone.datastore.chain_store import (
+    BaseChain,
+    FrontierDiff,
+    Frontier,
+    BaseChainFactory,
+)
+from python_project.backbone.datastore.database import BaseDB
 from python_project.backbone.datastore.utils import Dot, Links
 
 
@@ -23,6 +29,20 @@ class MockBlockStore(BaseBlockStore):
         pass
 
     def get_tx_by_hash(self, block_hash: bytes) -> Optional[bytes]:
+        pass
+
+
+class MockDBManager(BaseDB):
+    def get_chain(self, chain_id) -> Optional[BaseChain]:
+        pass
+
+    def add_block(self, block: PlexusBlock, block_serializer) -> None:
+        pass
+
+    def get_block_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
+        pass
+
+    def get_tx_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
         pass
 
 

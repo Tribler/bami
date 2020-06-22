@@ -19,21 +19,21 @@ from python_project.backbone.datastore.utils import (
 )
 
 
-class BasePlexusDB(ABC):
-    @abstractmethod
-    def get_frontier(self, chain_id) -> Frontier:
-        pass
-
+class BaseDB(ABC):
     @abstractmethod
     def get_chain(self, chain_id) -> Optional[BaseChain]:
         pass
 
     @abstractmethod
-    def add_block(self, block: PlexusBlock) -> None:
+    def add_block(self, block: PlexusBlock, block_serializer) -> None:
         pass
 
     @abstractmethod
-    def get_block_by_hash(self, block_hash: bytes) -> PlexusBlock:
+    def get_block_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
+        pass
+
+    @abstractmethod
+    def get_tx_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
         pass
 
 
@@ -41,7 +41,7 @@ class ChainTopic(Enum):
     ALL = 1
 
 
-class DBManager(Notifier):
+class DBManager(BaseDB, Notifier):
     def __init__(self, chain_factory: BaseChainFactory, block_store: BaseBlockStore):
         super().__init__()
         self.chain_factory = chain_factory
@@ -49,6 +49,12 @@ class DBManager(Notifier):
 
         self.chains = dict()
         self.last_dots = dict()
+
+    def get_chain(self, chain_id: bytes) -> Optional[BaseChain]:
+        return self.chains.get(chain_id)
+
+    def get_block_store(self) -> BaseBlockStore:
+        return self.block_store
 
     def get_block_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
         dot_id = chain_id + encode_raw(block_dot)
@@ -89,6 +95,9 @@ class DBManager(Notifier):
         full_dot_id = pers + encode_raw(pers_block_dot)
         self.block_store.add_dot(full_dot_id, block_hash)
 
+        # Notify subs of the personal chain
+        self.notify(ChainTopic.ALL, pers, pers_dots_list)
+
         # 2.2: add block to the community chain
         if com not in self.chains:
             self.chains[com] = self.chain_factory.create_community_chain()
@@ -99,18 +108,4 @@ class DBManager(Notifier):
         self.block_store.add_dot(full_dot_id, block_hash)
 
         # TODO: add more chain topics
-
-        # Notify subs of the community chain
-        self.notify(ChainTopic.ALL, {pers: pers_dots_list, com: com_dots_list})
-
-
-class StateManager(object):
-    def __init__(self, block_db: DBManager) -> None:
-        self.block_db = block_db
-
-    def process_dot_list(self, dot_dict):
-        for k, v in dot_dict.keys():
-            pass
-
-    def val(self):
-        self.block_db.add_observer()
+        self.notify(ChainTopic.ALL, com, com_dots_list)
