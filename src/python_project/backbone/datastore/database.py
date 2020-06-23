@@ -3,12 +3,10 @@ This file contains everything related to persistence for TrustChain.
 """
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Optional, Any
 
-from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.block_store import BaseBlockStore
 from python_project.backbone.datastore.chain_store import (
-    Frontier,
     BaseChain,
     BaseChainFactory,
 )
@@ -21,11 +19,11 @@ from python_project.backbone.datastore.utils import (
 
 class BaseDB(ABC):
     @abstractmethod
-    def get_chain(self, chain_id) -> Optional[BaseChain]:
+    def get_chain(self, chain_id: bytes) -> Optional[BaseChain]:
         pass
 
     @abstractmethod
-    def add_block(self, block: PlexusBlock, block_serializer) -> None:
+    def add_block(self, block: Any, block_serializer) -> None:
         pass
 
     @abstractmethod
@@ -74,7 +72,7 @@ class DBManager(BaseDB, Notifier):
 
     def add_block(self, block_blob: bytes, block_serializer) -> None:
 
-        parsed_block: PlexusBlock = block_serializer.serialize(block_blob)
+        parsed_block = block_serializer.serialize(block_blob)
         block_hash = parsed_block.hash
         block_tx = parsed_block.transaction
 

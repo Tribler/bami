@@ -12,10 +12,9 @@ from python_project.backbone.datastore.chain_store import BaseChain
 from python_project.backbone.datastore.state_store import BaseStateStore
 from python_project.backbone.datastore.utils import (
     Links,
-    ShortKey,
     encode_links,
     encode_raw,
-    wrap_return,
+    GENESIS_LINK,
 )
 
 
@@ -31,14 +30,6 @@ def mock_requests_get(mocker: MockFixture) -> Mock:
         "extract": "Lorem ipsum dolor sit amet",
     }
     return mock
-
-
-GENESIS_LINK = Links(((0, ShortKey("30303030")),))
-
-
-@pytest.fixture
-def genesis_link():
-    return GENESIS_LINK
 
 
 # Fixtures

@@ -14,6 +14,7 @@ Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
 
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
 GENESIS_SEQ = 0
+GENESIS_LINK = Links(((0, ShortKey("30303030")),))
 
 
 def shorten(key: bytes) -> ShortKey:

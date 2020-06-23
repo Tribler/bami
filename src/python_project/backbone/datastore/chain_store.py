@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Tuple, Optional, Set, Any, List
 
 import cachetools
-from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.utils import (
     shorten,
     ranges,
@@ -56,7 +55,7 @@ def _get_first(set_val):
 
 class BaseChain(ABC):
     @abstractmethod
-    def add_block(self, block: PlexusBlock) -> Dot:
+    def add_block(self, block: Any) -> Dot:
         pass
 
     @abstractmethod
@@ -307,7 +306,7 @@ class Chain(BaseChain):
             self.versions[block_seq_num] = set()
         self.versions[block_seq_num].add(block_hash)
 
-    def add_block(self, block: PlexusBlock) -> List[Dot]:
+    def add_block(self, block: Any) -> List[Dot]:
         block_links = block.previous if self.personal else block.links
         block_seq_num = block.sequence_number if self.personal else block.com_seq_num
         block_hash = shorten(block.hash)

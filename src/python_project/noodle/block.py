@@ -7,6 +7,7 @@ from collections import namedtuple
 from hashlib import sha256
 
 import orjson as json
+from python_project.backbone.datastore.utils import Dot
 from python_project.noodle.payload import (
     HalfBlockBroadcastPayload,
     HalfBlockPayload,
@@ -34,7 +35,7 @@ from typing import (
 if TYPE_CHECKING:
     from python_project.noodle.memory_database import NoodleMemoryDatabase
     from ipv8.keyvault.private.libnaclkey import LibNaCLSK
-    from tests.noodle.test_block import MockDatabase, TestBlock
+    from tests.test_block import MockDatabase, TestBlock
 
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
 GENESIS_SEQ = 1
@@ -291,6 +292,7 @@ class NoodleBlock(object):
 
     def calculate_hash(self) -> bytes:
         return sha256(self.pack()).digest()
+
 
     @property
     def block_id(self) -> bytes:

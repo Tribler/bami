@@ -5,19 +5,17 @@ import time
 from binascii import hexlify
 from collections import namedtuple
 from hashlib import sha256
-from typing import Any
 
-import orjson as json
 from ipv8.keyvault.crypto import default_eccrypto
-from ipv8.messaging.serialization import default_serializer
+from ipv8.messaging.serialization import default_serializer, PackError
+from python_project.backbone.datastore.database import BaseDB
 from python_project.backbone.datastore.utils import (
     decode_links,
     encode_links,
     shorten,
     Links,
-    BytesLinks,
+    BytesLinks, GENESIS_DOT, Dot,
 )
-from python_project.backbone.filters import BaseLinkFilter, DefaultLinkFilter
 from python_project.backbone.payload import BlockPayload
 
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
@@ -63,7 +61,7 @@ class PlexusBlock(object):
         Create a new PlexusBlock or load from an existing database entry.
 
         :param data: Optional data to initialize this block with.
-        :type data: TrustChainBlock.Data or list
+        :type data: Block.Data or list
         :param serializer: An optional custom serializer to use for this block.
         :type serializer: Serializer
         """
@@ -80,11 +78,11 @@ class PlexusBlock(object):
             )
 
             # previous hash in the personal chain
-            self.previous = Links(tuple({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))}))
+            self.previous = Links((GENESIS_DOT,))
             self._previous = encode_links(self.previous)
 
             # Linked blocks => links to the block in other chains
-            self.links = Links(tuple({(GENESIS_SEQ - 1, shorten(GENESIS_HASH))}))
+            self.links = Links((GENESIS_DOT,))
             self._links = encode_links(self.links)
 
             # Metadata for community identifiers
@@ -158,6 +156,14 @@ class PlexusBlock(object):
         return self.hash_number
 
     @property
+    def pers_dot(self) -> Dot:
+        return Dot((self.sequence_number, self.short_hash))
+
+    @property
+    def com_dot(self) -> Dot:
+        return Dot((self.com_seq_num, self.short_hash))
+
+    @property
     def hash_number(self):
         """
         Return the hash of this block as a number (used as crawl ID).
@@ -175,11 +181,11 @@ class PlexusBlock(object):
     @property
     def is_peer_genesis(self) -> bool:
         return (
-            self.sequence_number == GENESIS_SEQ
-            and (GENESIS_SEQ - 1, shorten(GENESIS_HASH)) in self.previous
+                self.sequence_number == GENESIS_SEQ
+                and (GENESIS_SEQ - 1, shorten(GENESIS_HASH)) in self.previous
         )
 
-    def pack(self, signature=True):
+    def pack(self, signature: bool = True) -> bytes:
         """
         Encode this block for transport
         Args:
@@ -234,28 +240,27 @@ class PlexusBlock(object):
 
     @classmethod
     def create(
-        cls,
-        block_type: bytes,
-        transaction: bytes,
-        database: Any,
-        public_key: Any,
-        link_filter: BaseLinkFilter = None,
-        com_id: Any = None,
-        links: Links = None,
-        fork_seq: int = None,
+            cls,
+            block_type: bytes,
+            transaction: bytes,
+            database: BaseDB,
+            public_key: bytes,
+            com_id: bytes = None,
+            com_links: Links = None,
+            pers_links: Links = None,
     ):
         """
-        Create PlexusBlock
+        Create PlexusBlock wrt local database knowledge.
 
         Args:
             block_type: type of the block in bytes
             transaction: transaction blob bytes
             database: local database with chains
             public_key: public key of the block creator
-            link_filter: Filter object to attack to block that are valid according to the buisness logic
+            link_filter: Filter object to attack to block that are valid according to the business logic
             com_id: id of the community which block is part of [optional]
-            links: Explicitly link with these blocks [optional]
-            fork_seq: Fork personal chain at this level [optional]
+            com_links: Explicitly link with these blocks [optional]
+            pers_links: Create a block at a certain [optional]
 
         Returns:
             PlexusBlock
@@ -263,46 +268,43 @@ class PlexusBlock(object):
         """
 
         # Decide to link blocks in the personal chain:
-        if fork_seq:
-            blks = database.get(public_key, fork_seq)
-            # choose any block in blks
-            blk = list(blks.values())[0]
-            prevs = blk.previous
-            seq_num = blk.sequence_number - 1
+        personal_chain = database.get_chain(public_key)
+        if not personal_chain:
+            # There are no blocks in the personal chain yet
+            last_link = Links((GENESIS_DOT,))
         else:
-            frontier = database.get_lastest_peer_frontier(public_key)
-            prevs = None
-            seq_num = 0
-            if frontier:
-                prevs = frontier["v"]
-                seq_num = max(frontier["v"])[0]
+            last_link = personal_chain.consistent_terminal
 
-        if not link_filter:
-            link_filter = DefaultLinkFilter()
+        # Fork personal chain at the
+        if pers_links:
+            # There is an explicit link for the previous link
+            last_link = pers_links
 
+        per_seq_num = max(last_link)[0] + 1
+
+        # TODO: Add link filtering and choose links
         ret = cls()
         ret.type = block_type
         ret.transaction = transaction
+        ret.sequence_number = per_seq_num
+        ret.previous = last_link
 
-        # Community related logic
+        # --- Community related logic ---
         if com_id:
             ret.com_id = com_id
             # There is community specified => will base block on the latest known information + filters
-            if links:
-                linked = links
-                link_seq_num = max(links)[0]
+            if com_links:
+                last_com_links = com_links
+                com_seq_num = max(last_com_links)[0]
             else:
-                frontier = database.get_latest_community_frontier(com_id)
-                linked = link_filter.filter(frontier["v"] if frontier else set())
-                link_seq_num = max(linked)[0] if linked else 0
+                com_chain = database.get_chain(com_id)
+                last_com_links = com_chain.consistent_terminal if com_chain else Links((GENESIS_DOT,))
+                # TODO: add link filtering here
+                com_seq_num = max(last_com_links)[0] + 1
 
-            ret.links = linked
-            ret.com_seq_num = link_seq_num + 1
+            ret.links = last_com_links
+            ret.com_seq_num = com_seq_num
             ret.com_id = com_id
-
-        if prevs:
-            ret.previous = prevs
-            ret.sequence_number = seq_num + 1
 
         ret._links = encode_links(ret.links)
         ret._previous = encode_links(ret.previous)
@@ -312,21 +314,24 @@ class PlexusBlock(object):
         ret.hash = ret.calculate_hash()
         return ret
 
-    def __iter__(self):
-        """
-        This override allows one to take the dict(<block>) of a block.
-        :return: generator to iterate over all properties of this block
-        """
-        for key, value in self.__dict__.items():
-            if key in SKIP_ATTRIBUTES:
-                continue
-            if key == "transaction":
-                yield key, self.transaction
-            elif key == "links":
-                yield key, decode_links(self._links)
-            elif key == "previous":
-                yield key, decode_links(self._previous)
-            elif isinstance(value, bytes) and key != "insert_time" and key != "type":
-                yield key, hexlify(value).decode("utf-8")
-            else:
-                yield key, value.decode("utf-8") if isinstance(value, bytes) else value
+    def block_invariants_valid(self) -> bool:
+        """Verify that block is valid wrt block invariants"""
+        # 1. Sequence number should not be prior to genesis
+        if self.sequence_number < GENESIS_SEQ or self.com_seq_num < GENESIS_SEQ:
+            return False
+        # 2. Timestamp should be non negative
+        if self.timestamp < 0:
+            return False
+        # 3. Public key and signature should be valid
+        if not self.crypto.is_valid_public_bin(self.public_key):
+            return False
+        else:
+            try:
+                pck = self.pack(signature=False)
+            except PackError as _:
+                pck = None
+            if pck is None or not self.crypto.is_valid_signature(
+                self.crypto.key_from_public_bin(self.public_key), pck, self.signature
+            ):
+                return False
+        return True
