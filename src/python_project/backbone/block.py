@@ -14,16 +14,17 @@ from python_project.backbone.datastore.utils import (
     encode_links,
     shorten,
     Links,
-    BytesLinks, GENESIS_DOT, Dot,
+    BytesLinks,
+    GENESIS_DOT,
+    Dot,
+    EMPTY_PK,
+    GENESIS_SEQ,
+    GENESIS_LINK,
+    UNKNOWN_SEQ,
+    EMPTY_SIG,
 )
 from python_project.backbone.payload import BlockPayload
 
-GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
-GENESIS_SEQ = 1
-UNKNOWN_SEQ = 0
-EMPTY_SIG = b"0" * 64
-EMPTY_PK = b"0" * 74
-ANY_COUNTERPARTY_PK = EMPTY_PK
 SKIP_ATTRIBUTES = {
     "key",
     "serializer",
@@ -73,21 +74,19 @@ class PlexusBlock(object):
             self.transaction = b""
             # block identity
             self.public_key = EMPTY_PK
-            self.sequence_number = (
-                GENESIS_SEQ  # sequence number related to the personal chain
-            )
+            self.sequence_number = GENESIS_SEQ
 
             # previous hash in the personal chain
-            self.previous = Links((GENESIS_DOT,))
+            self.previous = GENESIS_LINK
             self._previous = encode_links(self.previous)
 
             # Linked blocks => links to the block in other chains
-            self.links = Links((GENESIS_DOT,))
+            self.links = GENESIS_LINK
             self._links = encode_links(self.links)
 
             # Metadata for community identifiers
             self.com_id = EMPTY_PK
-            self.com_seq_num: int = 0
+            self.com_seq_num: int = UNKNOWN_SEQ
 
             # Creation timestamp
             self.timestamp = int(time.time() * 1000)
@@ -180,10 +179,7 @@ class PlexusBlock(object):
 
     @property
     def is_peer_genesis(self) -> bool:
-        return (
-                self.sequence_number == GENESIS_SEQ
-                and (GENESIS_SEQ - 1, shorten(GENESIS_HASH)) in self.previous
-        )
+        return self.sequence_number == GENESIS_SEQ and self.previous == GENESIS_LINK
 
     def pack(self, signature: bool = True) -> bytes:
         """
@@ -208,7 +204,7 @@ class PlexusBlock(object):
         return self.serializer.pack_multiple(BlockPayload(*args).to_pack_list())[0]
 
     @classmethod
-    def from_payload(cls, payload, serializer):
+    def from_payload(cls, payload, serializer=default_serializer):
         """
         Create a block according to a given payload and serializer.
         This method can be used when receiving a block from the network.
@@ -240,14 +236,14 @@ class PlexusBlock(object):
 
     @classmethod
     def create(
-            cls,
-            block_type: bytes,
-            transaction: bytes,
-            database: BaseDB,
-            public_key: bytes,
-            com_id: bytes = None,
-            com_links: Links = None,
-            pers_links: Links = None,
+        cls,
+        block_type: bytes,
+        transaction: bytes,
+        database: BaseDB,
+        public_key: bytes,
+        com_id: bytes = None,
+        com_links: Links = None,
+        pers_links: Links = None,
     ):
         """
         Create PlexusBlock wrt local database knowledge.
@@ -298,7 +294,11 @@ class PlexusBlock(object):
                 com_seq_num = max(last_com_links)[0]
             else:
                 com_chain = database.get_chain(com_id)
-                last_com_links = com_chain.consistent_terminal if com_chain else Links((GENESIS_DOT,))
+                last_com_links = (
+                    com_chain.consistent_terminal
+                    if com_chain
+                    else Links((GENESIS_DOT,))
+                )
                 # TODO: add link filtering here
                 com_seq_num = max(last_com_links)[0] + 1
 

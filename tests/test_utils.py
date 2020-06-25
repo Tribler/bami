@@ -56,6 +56,11 @@ def test_encode_decode_raw():
     assert decode_raw(encode_raw(vals))["id"] == 42
 
 
+def test_encode_decode_bytelist():
+    vals = {b"1", b"2", b"3", b"4", b"100", b"10", b"21", b"5"}
+    assert set(decode_raw(encode_raw(list(vals)))) == vals
+
+
 def test_encode_decode_links(keys_fixture):
     links = Links(((1, shorten(keys_fixture)),))
     raw_bytes = encode_links(links)

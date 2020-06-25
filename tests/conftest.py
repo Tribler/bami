@@ -113,28 +113,53 @@ def create_batches():
     return _create_batches
 
 
+def insert_to_chain(
+    chain_obj: BaseChain, blk: PlexusBlock, personal_chain: bool = True
+):
+    block_links = blk.links if not personal_chain else blk.previous
+    block_seq_num = blk.com_seq_num if not personal_chain else blk.sequence_number
+    yield chain_obj.add_block(block_links, block_seq_num, blk.hash)
+
+
+def insert_to_chain_or_blk_store(
+    chain_obj: Union[BaseChain, BaseStateStore],
+    blk: PlexusBlock,
+    personal_chain: bool = True,
+):
+    if isinstance(chain_obj, BaseChain):
+        yield from insert_to_chain(chain_obj, blk, personal_chain)
+    else:
+        yield chain_obj.add_block(blk)
+
+
 def insert_batch_seq(
-    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+    chain_obj: Union[BaseChain, BaseStateStore],
+    batch: List[PlexusBlock],
+    personal_chain: bool = False,
 ) -> None:
     for blk in batch:
-        yield chain_obj.add_block(blk)
+        yield from insert_to_chain_or_blk_store(chain_obj, blk, personal_chain)
 
 
 def insert_batch_reversed(
-    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+    chain_obj: Union[BaseChain, BaseStateStore],
+    batch: List[PlexusBlock],
+    personal_chain: bool = False,
 ) -> None:
     for blk in reversed(batch):
-        yield chain_obj.add_block(blk)
+        yield from insert_to_chain_or_blk_store(chain_obj, blk, personal_chain)
 
 
 def insert_batch_random(
-    chain_obj: Union[BaseChain, BaseStateStore], batch: List[PlexusBlock]
+    chain_obj: Union[BaseChain, BaseStateStore],
+    batch: List[PlexusBlock],
+    personal_chain: bool = False,
 ) -> None:
     from random import shuffle
 
     shuffle(batch)
     for blk in batch:
-        yield chain_obj.add_block(blk)
+        yield from insert_to_chain_or_blk_store(chain_obj, blk, personal_chain)
 
 
 batch_insert_functions = [insert_batch_seq, insert_batch_random, insert_batch_reversed]

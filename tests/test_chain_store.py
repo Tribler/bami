@@ -8,6 +8,7 @@ from python_project.backbone.datastore.utils import (
     Ranges,
     wrap_return,
     Dot,
+    GENESIS_LINK,
 )
 
 from tests.conftest import TestBlock
@@ -63,14 +64,14 @@ class TestConflictsInsert:
 
 
 class TestFrontiers:
-    def test_empty_frontier(self, genesis_link):
+    def test_empty_frontier(self):
         chain = Chain()
         frontier = chain.frontier
         assert not frontier.holes
         assert not frontier.inconsistencies
 
         assert len(frontier.terminal) == 1
-        assert frontier.terminal == genesis_link
+        assert frontier.terminal == GENESIS_LINK
 
     def test_insert_no_conflict(self, create_batches, insert_function):
         chain = Chain()
@@ -352,7 +353,8 @@ class TestNewConsistentDots:
     def test_one_insert(self, create_batches):
         batchs = create_batches(1, 10)
         chain = Chain()
-        res = chain.add_block(batchs[0][0])
+        blk = batchs[0][0]
+        res = chain.add_block(blk.previous, blk.sequence_number, blk.hash)
         assert len(res) == 1
         assert res[0][0] == 1
 
@@ -361,7 +363,8 @@ class TestNewConsistentDots:
         chain = Chain()
 
         for i in range(10):
-            res = chain.add_block(batchs[0][i])
+            blk = batchs[0][i]
+            res = chain.add_block(blk.links, blk.com_seq_num, blk.hash)
             assert len(res) == 1
             assert res[0][0] == i + 1
 
@@ -400,6 +403,9 @@ class TestNewConsistentDots:
         assert len(vals) == 10 + 4
         assert min(vals)[0] == 7 and max(vals)[0] == 20
 
+        for i in range(1, 21):
+            assert len(list(chain.get_dots_by_seq_num(i))) == 2
+
     def test_insert_with_merge_block(self, create_batches, insert_function):
         batches = create_batches(2, 10)
         chain = Chain()
@@ -415,10 +421,19 @@ class TestNewConsistentDots:
         assert vals[0][0] == 1 and vals[-1][0] == 10
 
         merge_block = TestBlock(links=Links((dot1, dot2)))
-        blk_dot = Dot((merge_block.com_seq_num, merge_block.short_hash))
-
-        val = list(chain.add_block(merge_block))
+        chain.add_block(merge_block.links, merge_block.com_seq_num, merge_block.hash)
 
         vals = wrap_return(insert_function(chain, batches[1]))
         assert len(vals) == 11
         assert vals[0][0] == 1 and vals[-1][0] == 11
+
+        assert len(list(chain.get_dots_by_seq_num(11))) == 1
+
+
+def test_empty_get_dots(create_batches):
+    chain = Chain()
+    v = chain.get_dots_by_seq_num(1)
+    assert len(list(v)) == 0
+
+
+

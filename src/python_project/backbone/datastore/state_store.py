@@ -147,6 +147,7 @@ class FChain:
     """
     Index class for chain to ensure that each peer will converge into a consistent chain log.
     """
+
     def get_latest_max_votes(self):
         return max(self.state_votes.items(), key=lambda x: (len(x[1]), x[0]))
 

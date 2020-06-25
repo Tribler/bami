@@ -31,6 +31,10 @@ class BaseBlockStore(ABC):
     def get_tx_by_hash(self, block_hash: bytes) -> Optional[bytes]:
         pass
 
+    @abstractmethod
+    def close(self) -> None:
+        pass
+
 
 class LMDBLockStore(BaseBlockStore):
     """BlockStore implementation based on LMBD"""

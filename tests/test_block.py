@@ -1,7 +1,14 @@
 import pytest
 from ipv8.keyvault.crypto import default_eccrypto
 from python_project.backbone.block import PlexusBlock, EMPTY_PK, UNKNOWN_SEQ
-from python_project.backbone.datastore.utils import shorten, encode_raw, Links, GENESIS_DOT, ShortKey
+from python_project.backbone.datastore.utils import (
+    shorten,
+    encode_raw,
+    Links,
+    GENESIS_DOT,
+    ShortKey,
+)
+from python_project.backbone.payload import BlockPayload
 from python_project.noodle.block import (
     EMPTY_SIG,
     GENESIS_SEQ,
@@ -84,13 +91,19 @@ class TestChainBlock:
         link = TestBlock()
 
         monkeypatch.setattr(
-            MockDBManager, "get_chain", lambda _, chain_id: MockChain() if chain_id == link.public_key else None,
+            MockDBManager,
+            "get_chain",
+            lambda _, chain_id: MockChain() if chain_id == link.public_key else None,
         )
         monkeypatch.setattr(
             MockChain, "consistent_terminal", Links((link.pers_dot,)),
         )
         block = PlexusBlock.create(
-            b"test", encode_raw({"id": 42}), db, key.pub().key_to_bin(), com_id=link.public_key
+            b"test",
+            encode_raw({"id": 42}),
+            db,
+            key.pub().key_to_bin(),
+            com_id=link.public_key,
         )
 
         # include the personal community
@@ -117,7 +130,9 @@ class TestChainBlock:
         link = TestBlock(com_id=com_key, links=com_link)
 
         monkeypatch.setattr(
-            MockDBManager, "get_chain", lambda _, chain_id: MockChain() if chain_id == com_key else None,
+            MockDBManager,
+            "get_chain",
+            lambda _, chain_id: MockChain() if chain_id == com_key else None,
         )
         monkeypatch.setattr(
             MockChain, "consistent_terminal", Links((link.com_dot,)),
@@ -173,6 +188,25 @@ class TestChainBlock:
         block = TestBlock()
         block.com_seq_num = -1
         assert not block.block_invariants_valid()
+
+    def test_invalid_sign(self):
+        key = default_eccrypto.generate_key(u"curve25519")
+
+        blk = TestBlock()
+        blk.sign(key)
+
+        assert not blk.block_invariants_valid()
+
+    def test_block_valid(self):
+        blk = TestBlock()
+        assert blk.block_invariants_valid()
+
+    def test_block_payload(self):
+        blk = TestBlock()
+        blk_bytes = blk.pack()
+        unpacked = blk.serializer.ez_unpack_serializables([BlockPayload], blk_bytes)
+        blk2 = PlexusBlock.from_payload(unpacked[0])
+        assert blk2 == blk
 
     @pytest.mark.skip
     def test_iter(self):

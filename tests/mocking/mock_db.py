@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Iterable
 
 from python_project.backbone.block import PlexusBlock
 from python_project.backbone.datastore.block_store import BaseBlockStore
@@ -13,6 +13,9 @@ from python_project.backbone.datastore.utils import Dot, Links
 
 
 class MockBlockStore(BaseBlockStore):
+    def close(self) -> None:
+        pass
+
     def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
         pass
 
@@ -33,6 +36,17 @@ class MockBlockStore(BaseBlockStore):
 
 
 class MockDBManager(BaseDB):
+    def close(self) -> None:
+        pass
+
+    @property
+    def chain_factory(self) -> BaseChainFactory:
+        return MockChainFactory()
+
+    @property
+    def block_store(self) -> BaseBlockStore:
+        return MockBlockStore()
+
     def get_chain(self, chain_id) -> Optional[BaseChain]:
         pass
 
@@ -47,7 +61,12 @@ class MockDBManager(BaseDB):
 
 
 class MockChain(BaseChain):
-    def add_block(self, block: PlexusBlock) -> Dot:
+    def get_dots_by_seq_num(self, seq_num: int) -> Iterable[Dot]:
+        pass
+
+    def add_block(
+        self, block_links: Links, block_seq_num: int, block_hash: bytes
+    ) -> Dot:
         pass
 
     def reconcile(self, frontier: Frontier) -> FrontierDiff:
@@ -69,8 +88,5 @@ class MockChain(BaseChain):
 
 
 class MockChainFactory(BaseChainFactory):
-    def create_personal_chain(self, **kwargs) -> BaseChain:
-        return MockChain()
-
-    def create_community_chain(self, **kwargs) -> BaseChain:
+    def create_chain(self, **kwargs) -> BaseChain:
         return MockChain()

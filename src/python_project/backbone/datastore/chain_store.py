@@ -1,52 +1,19 @@
 import threading
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Tuple, Optional, Set, Any, List
+from typing import Tuple, Optional, Set, Any, List, Iterable
 
 import cachetools
+from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
 from python_project.backbone.datastore.utils import (
     shorten,
     ranges,
     expand_ranges,
     Links,
-    decode_raw,
-    encode_raw,
     Ranges,
     ShortKey,
     Dot,
     GENESIS_DOT,
 )
-
-
-@dataclass
-class Frontier:
-    terminal: Links
-    holes: Ranges
-    inconsistencies: Links
-
-    def to_bytes(self) -> bytes:
-        return encode_raw(
-            {"t": self.terminal, "h": self.holes, "i": self.inconsistencies}
-        )
-
-    @classmethod
-    def from_bytes(cls, bytes_frontier: bytes):
-        front_dict = decode_raw(bytes_frontier)
-        return cls(front_dict.get("t"), front_dict.get("h"), front_dict.get("i"))
-
-
-@dataclass
-class FrontierDiff:
-    missing: Ranges
-    conflicts: Links
-
-    def to_bytes(self) -> bytes:
-        return encode_raw({"m": self.missing, "c": self.conflicts})
-
-    @classmethod
-    def from_bytes(cls, bytes_frontier: bytes):
-        val_dict = decode_raw(bytes_frontier)
-        return cls(val_dict.get("m"), val_dict.get("c"))
 
 
 def _get_first(set_val):
@@ -55,7 +22,9 @@ def _get_first(set_val):
 
 class BaseChain(ABC):
     @abstractmethod
-    def add_block(self, block: Any) -> Dot:
+    def add_block(
+        self, block_links: Links, block_seq_num: int, block_hash: bytes
+    ) -> Iterable[Dot]:
         pass
 
     @abstractmethod
@@ -80,27 +49,30 @@ class BaseChain(ABC):
     def get_prev_links(self, block_dot: Dot) -> Optional[Links]:
         pass
 
+    @abstractmethod
+    def get_dots_by_seq_num(self, seq_num: int) -> Iterable[Dot]:
+        pass
+
 
 class BaseChainFactory(ABC):
     @abstractmethod
-    def create_personal_chain(self, **kwargs) -> BaseChain:
-        pass
-
-    @abstractmethod
-    def create_community_chain(self, **kwargs) -> BaseChain:
+    def create_chain(self, **kwargs) -> BaseChain:
         pass
 
 
 class Chain(BaseChain):
-    def __init__(self, is_personal_chain=False, cache_num=10_000):
+    def get_dots_by_seq_num(self, seq_num: int) -> Optional[Iterable[Dot]]:
+        if not self.versions.get(seq_num):
+            return None
+        for k in self.versions.get(seq_num):
+            yield Dot((seq_num, k))
+
+    def __init__(self, cache_num=10_000):
         """DAG-Chain of one community based on in-memory dicts.
 
         Args:
-            is_personal_chain: if the chain must follow personal links (previous). Default: False
             cache_num: to store and support terminal calculation. Default= 100`000
         """
-        self.personal = is_personal_chain
-
         # Internal chain store of short hashes
         self.versions = dict()
         # Pointers to forward blocks
@@ -184,9 +156,7 @@ class Chain(BaseChain):
                         yield dot
             next_links = next_val
 
-    def _add_inconsistencies(
-        self, block_links: Links, block_dot: Dot, update_trigger: Any = None
-    ) -> bool:
+    def _add_inconsistencies(self, block_links: Links, block_dot: Dot) -> bool:
         """Fix any inconsistencies in the data structure, and verify any new"""
 
         # Check if block introduces new inconsistencies
@@ -306,15 +276,15 @@ class Chain(BaseChain):
             self.versions[block_seq_num] = set()
         self.versions[block_seq_num].add(block_hash)
 
-    def add_block(self, block: Any) -> List[Dot]:
-        block_links = block.previous if self.personal else block.links
-        block_seq_num = block.sequence_number if self.personal else block.com_seq_num
-        block_hash = shorten(block.hash)
-        block_dot = Dot((block_seq_num, block_hash))
+    def add_block(
+        self, block_links: Links, block_seq_num: int, block_hash: bytes
+    ) -> List[Dot]:
+        blk_hash = shorten(block_hash)
+        block_dot = Dot((block_seq_num, blk_hash))
 
         with self.lock:
-            # 1. Update versions
-            self._update_versions(block_seq_num, block_hash)
+            # 0. Update versions
+            self._update_versions(block_seq_num, blk_hash)
             # 1. Update back pointers
             self._update_back_pointers(block_dot, block_links)
             # 2. Update forward pointers
@@ -330,7 +300,7 @@ class Chain(BaseChain):
                     self.term_cache[Links((dot,))] = (Links((last_dot,)), True)
             # 5. Update terminal nodes if consistent
             old_terminal = self.const_terminal
-            self._update_terminal(block_seq_num, block_hash, block_consistent)
+            self._update_terminal(block_seq_num, blk_hash, block_consistent)
 
         diff = set(self.consistent_terminal) - set(old_terminal)
         if diff and missing:
@@ -388,12 +358,8 @@ class Chain(BaseChain):
 
 
 class ChainFactory(BaseChainFactory):
-    def create_personal_chain(self, **kwargs) -> BaseChain:
-        """ **kwargs: chache_num: specify the cache number used in the chain
+    def create_chain(self, **kwargs) -> BaseChain:
+        """ Args:
+            cache_num: specify the cache number used in the chain
         """
-        return Chain(is_personal_chain=True, **kwargs)
-
-    def create_community_chain(self, **kwargs) -> BaseChain:
-        """ **kwargs:chache_num: specify the cache number used in the chain
-        """
-        return Chain(is_personal_chain=False, **kwargs)
+        return Chain(**kwargs)

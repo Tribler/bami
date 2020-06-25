@@ -8,11 +8,10 @@ from collections import defaultdict
 
 from python_project.backbone.block import PlexusBlock, EMPTY_PK
 from python_project.backbone.datastore.chain_store import Chain
-from python_project.backbone.datastore.database import BasePlexusDB
 from python_project.backbone.datastore.utils import shorten, expand_ranges
 
 
-class PlexusMemoryDatabase(BasePlexusDB):
+class PlexusMemoryDatabase:
     """
     This class defines an optimized memory database for Plexus.
     """

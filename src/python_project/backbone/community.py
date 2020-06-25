@@ -9,29 +9,11 @@ from collections import defaultdict
 from collections import deque
 from functools import wraps
 from threading import RLock
-from typing import List
+from typing import List, Any, Iterable
 
 import orjson as json
-
-from python_project.backbone.datastore.memory_database import PlexusMemoryDatabase
-from python_project.backbone.block import EMPTY_PK, PlexusBlock
-from python_project.backbone.caches import (
-    PingRequestCache,
-    CommunitySyncCache,
-)
-from python_project.backbone.consts import *
-from python_project.backbone.datastore.utils import (
-    decode_frontier,
-    encode_frontier,
-    hex_to_int,
-    take_hash,
-)
-from python_project.backbone.listener import BlockListener
-from python_project.backbone.payload import *
-from python_project.backbone.settings import SecurityMode, PlexusSettings
-
 from ipv8.community import Community
-from ipv8.keyvault.crypto import default_eccrypto
+from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.messaging.payload_headers import (
     BinMemberAuthenticationPayload,
@@ -40,6 +22,27 @@ from ipv8.messaging.payload_headers import (
 from ipv8.peer import Peer
 from ipv8.requestcache import RequestCache
 from ipv8.util import maybe_coroutine, succeed
+from python_project.backbone.block import EMPTY_PK, PlexusBlock
+from python_project.backbone.caches import (
+    PingRequestCache,
+    CommunitySyncCache,
+)
+from python_project.backbone.community_routines import StateRoutines
+from python_project.backbone.consts import *
+from python_project.backbone.datastore.block_store import LMDBLockStore
+from python_project.backbone.datastore.chain_store import Frontier, ChainFactory
+from python_project.backbone.datastore.database import DBManager
+from python_project.backbone.datastore.frontiers import FrontierDiff
+from python_project.backbone.datastore.utils import (
+    hex_to_int,
+    encode_raw,
+    decode_raw,
+    StateVote,
+)
+from python_project.backbone.listener import BlockListener
+from python_project.backbone.payload import *
+from python_project.backbone.settings import PlexusSettings
+from python_project.backbone.sub_community import SubCommunityMixin
 
 
 def synchronized(f):
@@ -69,7 +72,50 @@ class PlexusBlockListener(BlockListener):
         pass
 
 
-class PlexusCommunity(Community):
+class IntroductionMixin:
+
+    # ---- Introduction handshakes => Exchange your subscriptions ----------------
+    def create_introduction_request(
+        self, socket_address: Any, extra_bytes: bytes = b""
+    ):
+        extra_bytes = self.encode_subcom(self.my_subcoms)
+        return super().create_introduction_request(socket_address, extra_bytes)
+
+    def create_introduction_response(
+        self,
+        lan_socket_address,
+        socket_address,
+        identifier,
+        introduction=None,
+        extra_bytes=b"",
+        prefix=None,
+    ):
+        extra_bytes = self.encode_subcom(self.my_subcoms)
+        return super(PlexusCommunity, self).create_introduction_response(
+            lan_socket_address,
+            socket_address,
+            identifier,
+            introduction,
+            extra_bytes,
+            prefix,
+        )
+
+    def introduction_response_callback(self, peer, dist, payload):
+        subcoms = decode_raw(payload.extra_bytes)
+        self.process_peer_subscriptions(peer, subcoms)
+        # TODO: add subscription strategy
+        if self.settings.track_neighbours_chains:
+            self.subscribe_to_subcom(peer.public_key.key_to_bin())
+
+    def introduction_request_callback(self, peer, dist, payload):
+        communities = decode_raw(payload.extra_bytes)
+        self.process_peer_subscriptions(peer, communities)
+        # TODO: add subscription strategy
+        if self.settings.track_neighbours_chains:
+            self.subscribe_to_subcom(peer.public_key.key_to_bin())
+
+
+class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRoutines):
     """
     Community for secure backbone.
     """
@@ -86,16 +132,23 @@ class PlexusCommunity(Community):
     version = b"\x02"
 
     def __init__(self, *args, **kwargs):
-        working_directory = kwargs.pop("working_directory", "")
+
+        # initialize the community database
+
+        working_directory = kwargs.pop("working_directory", ".")
         self.persistence = kwargs.pop("persistence", None)
         db_name = kwargs.pop("db_name", self.DB_NAME)
         self.settings = kwargs.pop("settings", PlexusSettings())
+
+        # TODO: Change it to dependency injection
+        self.persistence = DBManager(ChainFactory(), LMDBLockStore(working_directory))
+
         self.receive_block_lock = RLock()
         super(PlexusCommunity, self).__init__(*args, **kwargs)
+
         self.request_cache = RequestCache()
         self.logger = logging.getLogger(self.__class__.__name__)
-
-        self.persistence = PlexusMemoryDatabase(working_directory, db_name)
+        # Create DB Manager
 
         self.relayed_broadcasts = set()
         self.relayed_broadcasts_order = deque()
@@ -129,7 +182,7 @@ class PlexusCommunity(Community):
 
         # Communities logic
         self.interest = dict()
-        self.my_subscriptions = list()
+        self.my_subscriptions = set()
 
         self.peer_subscriptions = (
             dict()
@@ -137,13 +190,15 @@ class PlexusCommunity(Community):
         self.bootstrap_master = None
         self.proof_requests = {}
 
+        self.add_message_handler(BlockPayload, self.received_block)
+        self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
+        self.add_message_handler(RawBlockPayload, self.received_raw_block)
+
         self.decode_map.update(
             {
                 chr(BLOCKS_REQ_MSG): self.received_blocks_request,
-                chr(BLOCK_MSG): self.received_block,
                 chr(BLOCK_CAST_MSG): self.received_block_broadcast,
                 chr(FRONTIER_MSG): self.received_frontier,
-                chr(SUBS_MSG): self.received_subs_update,
                 chr(STATE_REQ_MSG): self.received_state_request,
                 chr(STATE_RESP_MSG): self.received_state_response,
                 chr(STATE_BY_HASH_REQ_MSG): self.received_state_by_hash_request,
@@ -151,86 +206,45 @@ class PlexusCommunity(Community):
             }
         )
 
-        # Enable the memory database
-        orig_db = self.persistence
+    @property
+    def my_pub_key(self) -> bytes:
+        return self.my_peer.public_key.key_to_bin()
+
+    def send_packet(self, peer: Peer, packet: Any) -> None:
+        self.ez_send(peer, packet)
+
+    @property
+    def my_peer_key(self) -> Key:
+        return self.my_peer.key
 
     # ----- SubCommunity routines ------
-    def is_subscribed(self, community_id: bytes) -> bool:
-        return community_id in self.my_subscriptions
+    @property
+    def my_subcoms(self) -> Iterable[bytes]:
+        return list(self.my_subscriptions)
 
-    def subscribe_to_multi_community(self, communties: List[bytes]) -> None:
-        """
-        Subscribe to the community with the public key master peer.
-        Community is identified with a peer.mid.
+    def encode_subcom(self, subcom: Iterable[bytes]) -> bytes:
+        return encode_raw(self.my_subcoms)
 
-        If bootstrap_master is not specified will use RandomWalks to discover other peers for the same community.
-        Peer will be connect to maximum  `settings.max_peers_subtrust` peers.
-        """
-        for c_id in communties:
-            if c_id not in self.my_subscriptions:
-                self.my_subscriptions.append(c_id)
-                # Join the protocol audits
-                self.join_community_gossip(
-                    c_id, self.settings.security_mode, self.settings.sync_time
-                )
+    def add_subcom(self, sub_com: bytes) -> None:
+        self.my_subscriptions.add(sub_com)
 
-        # Find other peers in the community
-        for p in self.get_peers():
-            # Send them new subscribe collection
-            self.send_subs_update(p.address, self.my_subscriptions)
+    def get_subcom_notify_peers(self) -> Iterable[Peer]:
+        return self.get_peers()
 
-    def subscribe_to_community(
-        self, community_id: bytes, personal: bool = False
+    def process_peer_subscriptions(
+        self, peer: Peer, communities: Iterable[bytes]
     ) -> None:
-        """
-        Subscribe to the SubCommunity with the public key master peer.
-        Community is identified with a community_id.
+        for c in communities:
+            if c not in self.peer_subscriptions:
+                self.peer_subscriptions[c] = set()
+            self.peer_subscriptions[c].add(peer)
 
-        If bootstrap_master is not specified will use RandomWalks to discover other peers for the same community.
-        Peer will be connect to maximum  `settings.max_peers_subtrust` peers.
+    @lazy_wrapper(SubscriptionsPayload)
+    def received_peer_subs(self, peer: Peer, payload: SubscriptionsPayload) -> None:
+        subcoms = decode_raw(payload.subcoms)
+        self.process_peer_subscriptions(peer, subcoms)
 
-        Args:
-            community_id: bytes identifier of the community
-            personal: this is community is on personal chain
-        """
-        if community_id not in self.my_subscriptions:
-            self.my_subscriptions.append(community_id)
-            self.logger.info(
-                "Joining community with mid %s (personal? %s)", community_id, personal
-            )
-
-            # Find other peers in the community
-            for p in self.get_peers():
-                # Send them new subscribe collection
-                self.send_subs_update(p.address, self.my_subscriptions)
-
-            # Join the protocol audits
-            self.join_community_gossip(
-                community_id, self.settings.security_mode, self.settings.sync_time
-            )
-
-    def send_subs_update(self, peer_address, peer_subs):
-        """
-        Send to all known peer subscription update
-        """
-        decoded_list = [hexlify(x).decode() for x in peer_subs]
-        global_time = self.claim_global_time()
-        auth = BinMemberAuthenticationPayload(
-            self.my_peer.public_key.key_to_bin()
-        ).to_pack_list()
-        payload = SubscriptionsPayload(
-            self.my_peer.public_key.key_to_bin(), json.dumps(decoded_list)
-        ).to_pack_list()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-        packet = self._ez_pack(self._prefix, SUBS_MSG, [auth, dist, payload])
-        self.endpoint.send(peer_address, packet)
-
-    @lazy_wrapper(GlobalTimeDistributionPayload, SubscriptionsPayload)
-    def received_subs_update(self, peer, dist, payload: SubscriptionsPayload):
-        peer_subs = json.loads(payload.value)
-        self.process_peer_interests(peer, peer_subs)
-
-    def join_community_gossip(self, community_mid: bytes, mode, sync_time):
+    def join_subcommunity_gossip(self, sub_com_id: bytes):
         """
         Periodically exchange latest information in the community.
         There are two possibilities:
@@ -242,141 +256,102 @@ class PlexusCommunity(Community):
             If community requires prevention of certain violation that can be guaranteed with probability (1-epsilon).
             Epsilon depends on multiple parameters, but the main one: fraction of malicious peers in the community.
         Periodically gossip latest information to the community.
-        @param community_mid: master_peer_mid identification for community
-        @param mode: security mode to which join the community: see settings.SecurityMode
-        @param sync_time: interval in seconds to run the task
+
+        Args:
+            sub_com_id: identifier for the sub-community
         """
         # Start sync task after the discovery
-        task = self.gossip_sync_task if mode == SecurityMode.VANILLA else None
+        # TODO: Use GossipStrategies
+        pass
 
-        self.periodic_sync_lc[community_mid] = self.register_task(
-            "sync_" + str(community_mid),
-            task,
-            community_mid,
-            delay=random.random(),
-            interval=sync_time,
-        )
+        # task = self.gossip_sync_task if mode == SecurityMode.VANILLA else None
 
-    def sign_state(self, state):
-        state_hash = take_hash(state)
-        signature = default_eccrypto.create_signature(self.my_peer.key, state_hash)
-        # Prepare for send
-        my_id = hexlify(self.my_peer.public_key.key_to_bin()).decode()
-        signature = hexlify(signature).decode()
-        state_hash = hexlify(state_hash).decode()
+        # self.periodic_sync_lc[community_mid] = self.register_task(
+        #    "sync_" + str(community_mid),
+        #    task,
+        #    community_mid,
+        #    delay=random.random(),
+        #    interval=sync_time,
+        # )
 
-        return my_id, signature, state_hash
-
-    def verify_state(self, state_val):
-        # This is a claim of a conditional transaction
-        for hash_val, sig_set in state_val.items():
-            if all(
-                default_eccrypto.is_valid_signature(
-                    default_eccrypto.key_from_public_bin(unhexlify(p_id)),
-                    unhexlify(hash_val),
-                    unhexlify(sign),
-                )
-                for p_id, sign in sig_set
-            ):
-                return unhexlify(hash_val)
-            else:
-                return None
+    def get_next_gossip_peers(self, subcom_id: bytes):
+        # TODO: move this selection to the strategy?
+        #  # There could be a strategy based on the predictable randomness - seed
+        peer_set = self.peer_subscriptions.get(subcom_id)
+        if not peer_set:
+            peer_set = list()
+        f = min(len(peer_set), self.settings.gossip_fanout)
+        return random.sample(peer_set, f)
 
     @synchronized
-    def gossip_sync_task(self, community_id):
-        frontier = self.persistence.get_frontier(community_id)
-        self.logger.debug("Gossip sync %s (%s) ", community_id, frontier)
-        if frontier and "v" in frontier:
-            seq_num = max(frontier["v"])[0]
-            # Include the state in the frontier dissemination or not?
-
-            state = (
-                self.persistence.get_state(community_id, seq_num)
-                if self.persistence.is_state_consistent(community_id)
-                else None
-            )
-            # sign state => sign and send hash
+    def gossip_sync_task(self, subcom_id: bytes) -> None:
+        """Start of the gossip state machine"""
+        chain = self.persistence.get_chain(subcom_id)
+        if chain:
+            frontier = chain.frontier
+            # Extended Frontier?
+            # TODO: add options for the extended frontier package
+            state = False
             if state:
-                frontier["state"] = self.sign_state(state)
-                self.persistence.add_state_vote(
-                    community_id, seq_num, frontier["state"]
-                )
+                # Sign state/ or get latest sign
+                # Add your signature to the local storage
+                pass
+            else:
+                peers = self.get_next_gossip_peers(subcom_id)
+                self.send_frontier(subcom_id, frontier, peers)
 
-            # select max num randomly
-            peer_set = self.peer_subscriptions[community_id]
-            f = min(len(peer_set), self.settings.gossip_fanout)
-            self.send_frontier(community_id, frontier, random.sample(peer_set, f))
-
-    def send_frontier(self, community_id, frontier, peers):
-        global_time = self.claim_global_time()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-
-        self.logger.debug("Gossiping frontier (%s)", frontier)
-
-        serialized = json.dumps(decode_frontier(frontier))
-
-        payload = FrontierPayload(community_id, serialized).to_pack_list()
-        packet = self._ez_pack(self._prefix, FRONTIER_MSG, [dist, payload], False)
-
+    def send_frontier(
+        self, chain_id: bytes, frontier: Frontier, peers: Iterable[Peer]
+    ) -> None:
         for p in peers:
-            self.endpoint.send(p.address, packet)
+            self.ez_send(p, FrontierPayload(chain_id, frontier.to_bytes()))
 
-    @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, FrontierPayload)
-    def received_frontier(self, source_address, dist, payload: FrontierPayload):
-        frontier = encode_frontier(json.loads(payload.value))
-        chain_id = payload.key
+    def send_extended_frontier(
+        self,
+        chain_id: bytes,
+        frontier: Frontier,
+        state_vote: StateVote,
+        peers: Iterable[Peer],
+    ) -> None:
+        for p in peers:
+            self.ez_send(p, ExtendedFrontierPayload(chain_id, frontier, *state_vote))
 
+    @lazy_wrapper(FrontierPayload)
+    def received_frontier(self, peer: Peer, payload: FrontierPayload) -> None:
+        frontier = Frontier.from_bytes(payload.frontier)
+        chain_id = payload.chain_id
         cache = self.request_cache.get(COMMUNITY_CACHE, hex_to_int(chain_id))
         if cache:
-            cache.receive_frontier(source_address, frontier)
+            cache.receive_frontier(peer, frontier)
         else:
             # Create new cache
-            # TODO: what to do with `send` diff - revisit
-            to_request, to_send = self.persistence.reconcile_or_create(
-                chain_id, frontier
-            )
+            diff = self.persistence.reconcile(chain_id=chain_id,)
+
             if any(to_request.values()):
                 self.send_blocks_request(source_address, chain_id, to_request)
                 self.request_cache.add(CommunitySyncCache(self, chain_id))
 
-    def send_blocks_request(self, peer_address, chain_id, request_set):
+    def send_blocks_request(
+        self, peer: Peer, subcom_id: bytes, request: FrontierDiff
+    ) -> None:
         """
         Request blocks for a peer from a chain
         """
-        self._logger.debug(
-            "Requesting blocks %s from peer %s:%d",
-            request_set,
-            peer_address[0],
-            peer_address[1],
-        )
-        global_time = self.claim_global_time()
-        auth = BinMemberAuthenticationPayload(
-            self.my_peer.public_key.key_to_bin()
-        ).to_pack_list()
-        payload = BlocksRequestPayload(
-            chain_id, json.dumps(decode_frontier(request_set))
-        ).to_pack_list()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
+        self.ez_send(peer, BlocksRequestPayload(subcom_id, request.to_bytes()))
 
-        packet = self._ez_pack(self._prefix, BLOCKS_REQ_MSG, [auth, dist, payload])
-        self.endpoint.send(peer_address, packet)
+    @lazy_wrapper(BlocksRequestPayload)
+    def received_blocks_request(
+        self, peer: Peer, payload: BlocksRequestPayload
+    ) -> None:
+        f_diff = FrontierDiff.from_bytes(payload.frontier_diff)
+        self._logger.debug("Received block request %s {%s}", f_diff, peer)
+        chain_id = payload.subcom_id
+        blocks = self.persistence.get_block_blobs_by_frontier_diff(chain_id, f_diff)
+        self.send_multi_raw_blocks(peer, blocks)
 
-    @lazy_wrapper(GlobalTimeDistributionPayload, BlocksRequestPayload)
-    def received_blocks_request(self, peer, dist, payload: BlocksRequestPayload):
-        blocks_request = encode_frontier(json.loads(payload.value))
-        self._logger.debug("Received block request %s {%s}", blocks_request, peer)
-        chain_id = payload.key
-        blocks = self.persistence.get_blocks_by_request(chain_id, blocks_request)
-        self.send_multi_blocks(peer.address, chain_id, blocks)
-
-    def send_multi_blocks(self, address, chain_id, blocks):
-        self._logger.debug("Sending blocks %s to {%s}", blocks, address)
+    def send_multi_raw_blocks(self, peer: Peer, blocks: Iterable[bytes]) -> None:
         for block in blocks:
-            global_time = self.claim_global_time()
-            dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-            payload = BlockPayload.from_block(block).to_pack_list()
-            packet = self._ez_pack(self._prefix, BLOCK_MSG, [dist, payload], False)
-            self.endpoint.send(address, packet)
+            self.ez_send(peer, RawBlockPayload(block), sig=False)
 
     def get_peer(self, pub_key):
         for peer in self.get_peers():
@@ -385,49 +360,6 @@ class PlexusCommunity(Community):
         return None
 
     # -------- Ping Functions -------------
-    async def ping(self, peer):
-        self.logger.debug("Pinging peer %s", peer)
-
-        cache = self.request_cache.add(PingRequestCache(self, u"ping", peer))
-
-        global_time = self.claim_global_time()
-        auth = BinMemberAuthenticationPayload(
-            self.my_peer.public_key.key_to_bin()
-        ).to_pack_list()
-        payload = PingPayload(cache.number).to_pack_list()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-
-        packet = self._ez_pack(self._prefix, 15, [auth, dist, payload])
-        self.endpoint.send(peer.address, packet)
-
-        await cache.future
-
-    @lazy_wrapper(GlobalTimeDistributionPayload, PingPayload)
-    def on_ping_request(self, peer, dist, payload):
-        self.logger.debug("Got ping-request from %s", peer.address)
-
-        global_time = self.claim_global_time()
-        auth = BinMemberAuthenticationPayload(
-            self.my_peer.public_key.key_to_bin()
-        ).to_pack_list()
-        payload = PingPayload(payload.identifier).to_pack_list()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-
-        packet = self._ez_pack(self._prefix, 16, [auth, dist, payload])
-        self.endpoint.send(peer.address, packet)
-
-    @lazy_wrapper(GlobalTimeDistributionPayload, PingPayload)
-    def on_ping_response(self, peer, dist, payload):
-        if not self.request_cache.has(u"ping", payload.identifier):
-            self.logger.error(
-                "Got ping-response with unknown identifier, dropping packet"
-            )
-            return
-
-        self.logger.debug("Got ping-response from %s", peer.address)
-        cache = self.request_cache.pop(u"ping", payload.identifier)
-        cache.future.set_result(None)
-
     def init_mem_db_flush(self, flush_time):
         if not self.mem_db_flush_lc:
             self.mem_db_flush_lc = self.register_task(
@@ -593,6 +525,10 @@ class PlexusCommunity(Community):
             links=links,
             fork_seq=fork_seq,
         )
+
+    @lazy_wrapper_unsigned(RawBlockPayload)
+    def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
+        pass
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, BlockPayload)
     async def received_block(self, source_address, dist, payload):
@@ -819,57 +755,6 @@ class PlexusCommunity(Community):
             if vals:
                 peers.update(vals)
         return peers
-
-    # ---- Introduction handshakes => Exchange your subscriptions ----------------
-    def create_introduction_request(self, socket_address, extra_bytes=b""):
-        communities = []
-        for community_id in self.my_subscriptions:
-            communities.append(hexlify(community_id).decode())
-        extra_bytes = json.dumps(communities)
-        return super(PlexusCommunity, self).create_introduction_request(
-            socket_address, extra_bytes
-        )
-
-    def create_introduction_response(
-        self,
-        lan_socket_address,
-        socket_address,
-        identifier,
-        introduction=None,
-        extra_bytes=b"",
-        prefix=None,
-    ):
-        communities = []
-        for community_id in self.my_subscriptions:
-            communities.append(hexlify(community_id).decode())
-        extra_bytes = json.dumps(communities)
-        return super(PlexusCommunity, self).create_introduction_response(
-            lan_socket_address,
-            socket_address,
-            identifier,
-            introduction,
-            extra_bytes,
-            prefix,
-        )
-
-    def process_peer_interests(self, peer, communities):
-        for community in communities:
-            community_id = unhexlify(community)
-            if community_id not in self.peer_subscriptions:
-                self.peer_subscriptions[community_id] = set()
-            self.peer_subscriptions[community_id].add(peer)
-
-    def introduction_response_callback(self, peer, dist, payload):
-        communities = json.loads(payload.extra_bytes)
-        self.process_peer_interests(peer, communities)
-        if self.settings.track_neighbours_chains:
-            self.subscribe_to_community(peer.public_key.key_to_bin(), personal=True)
-
-    def introduction_request_callback(self, peer, dist, payload):
-        communities = json.loads(payload.extra_bytes)
-        self.process_peer_interests(peer, communities)
-        if self.settings.track_neighbours_chains:
-            self.subscribe_to_community(peer.public_key.key_to_bin(), personal=True)
 
     async def unload(self):
         self.logger.debug("Unloading the Plexus Community.")

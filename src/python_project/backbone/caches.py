@@ -3,8 +3,11 @@ import time
 from asyncio import Future
 from binascii import hexlify
 from functools import reduce
+from typing import List, Tuple
 
+from ipv8.peer import Peer
 from python_project.backbone.consts import COMMUNITY_CACHE
+from python_project.backbone.datastore.chain_store import Frontier, FrontierDiff
 from python_project.backbone.datastore.utils import (
     expand_ranges,
     hex_to_int,
@@ -130,51 +133,58 @@ class CommunitySyncCache(NumberCache):
     This cache tracks outstanding sync requests with other peers in a community
     """
 
-    def __init__(self, community, chain_id):
+    def __init__(
+        self, community: "PlexusCommunity", chain_id: bytes, is_personal_chain: bool
+    ) -> None:
         cache_num = hex_to_int(chain_id)
         NumberCache.__init__(self, community.request_cache, COMMUNITY_CACHE, cache_num)
         self.logger = logging.getLogger(self.__class__.__name__)
         self.community = community
 
         self.chain_id = chain_id
+        self.is_personal_chain = is_personal_chain
         self.working_front = dict()
 
     @property
     def timeout_delay(self):
         return self.community.settings.sync_timeout
 
-    def receive_frontier(self, peer_address, frontier):
-        self.working_front[peer_address] = frontier
+    def receive_frontier(self, peer: Peer, frontier: Frontier) -> None:
+        # TODO: add verification for the frontier
+        self.working_front[peer.mid] = frontier
 
-    def process_working_front(self):
+    def process_working_front(self) -> List[Tuple[Peer, FrontierDiff]]:
         candidate = None
         cand_max = 0
+
         for peer, front in self.working_front.items():
-            to_request, _ = self.community.persistence.reconcile_or_create(
-                self.chain_id, front
+            frontier_diff = self.community.persistence.reconcile(self.chain_id, front)
+
+            num = len(expand_ranges(frontier_diff.missing)) + len(
+                frontier_diff.conflicts
             )
-            if (
-                any(to_request.values())
-                and len(expand_ranges(to_request["m"])) + len(to_request["c"])
-                > cand_max
-            ):
-                candidate = (peer, to_request)
-                cand_max = len(expand_ranges(to_request["m"])) + len(to_request["c"])
-        return candidate
+
+            if not frontier_diff.is_empty() and num > cand_max:
+                candidate = (peer, frontier_diff)
+                cand_max = num
+        return [candidate]
 
     def on_timeout(self):
         # TODO convert this to a queue
         async def add_later():
             try:
                 self.community.request_cache.add(
-                    CommunitySyncCache(self.community, self.chain_id)
+                    CommunitySyncCache(
+                        self.community, self.chain_id, self.is_personal_chain
+                    )
                 )
             except RuntimeError:
                 pass
 
-        # Process all frontiers received
-        cand = self.process_working_front()
-        if cand:
+        # Process received frontiers
+        candidates = self.process_working_front()
+        # Send requests to candidates
+        for cand in candidates:
             # Send request to candidate peer
             self.community.send_blocks_request(cand[0], self.chain_id, cand[1])
             self.community.request_cache.register_anonymous_task(

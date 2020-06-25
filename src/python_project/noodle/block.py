@@ -293,7 +293,6 @@ class NoodleBlock(object):
     def calculate_hash(self) -> bytes:
         return sha256(self.pack()).digest()
 
-
     @property
     def block_id(self) -> bytes:
         return b"%s.%d" % (hexlify(self.public_key), self.sequence_number)

@@ -11,17 +11,23 @@ BytesLinks = NewType("BytesLinks", bytes)
 Dot = NewType("Dot", Tuple[int, ShortKey])
 Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
 Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
+StateVote = NewType("StateVote", Tuple[bytes, bytes, bytes])
+
 
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
-GENESIS_SEQ = 0
-GENESIS_LINK = Links(((0, ShortKey("30303030")),))
+GENESIS_SEQ = 1
+UNKNOWN_SEQ = 0
+EMPTY_SIG = b"0" * 64
+EMPTY_PK = b"0" * 74
+ANY_COUNTERPARTY_PK = EMPTY_PK
 
 
 def shorten(key: bytes) -> ShortKey:
     return ShortKey(hexlify(key)[-KEY_LEN:].decode())
 
 
-GENESIS_DOT = Dot((GENESIS_SEQ, shorten(GENESIS_HASH)))
+GENESIS_DOT = Dot((GENESIS_SEQ - 1, shorten(GENESIS_HASH)))
+GENESIS_LINK = Links(((GENESIS_SEQ - 1, shorten(GENESIS_HASH)),))
 
 
 def hex_to_int(hex_val) -> int:

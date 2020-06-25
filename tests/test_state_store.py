@@ -13,8 +13,6 @@ from tests.mocking.mock_db import MockDBManager, MockChain
 class KVState(State):
     def __init__(self, back_db: BaseDB) -> None:
         super().__init__(back_db)
-
-        self.applied_dots = {GENESIS_DOT}
         self.state_dict = {GENESIS_DOT: 0}
 
     def apply_tx(self, chain_id: bytes, prev_links: Links, dot: Dot, tx: Any) -> bool:
@@ -24,12 +22,7 @@ class KVState(State):
             if prev_dot in self.state_dict:
                 # replace in state
                 self.state_dict.pop(prev_dot)
-                self.state_dict[dot] = id_val
-            else:
-                # This dot is not in state dict
-                if prev_dot in self.applied_dots:
-                    # Previous dot is known and can be applied
-                    self.state_dict[dot] = id_val
+        self.state_dict[dot] = id_val
         return True
 
 
@@ -70,15 +63,14 @@ class BaseTestConvergentStates:
                 prev_links[com_dot] = self.blocks[i][j].links
             self.dots.append(batch_dots)
 
+        # noinspection PyTypeChecker
         self.last_links = Links(
             tuple(
-                [
-                    (
-                        self.blocks[i][self.N - 1].com_seq_num,
-                        self.blocks[i][self.N - 1].short_hash,
-                    )
-                    for i in range(self.B)
-                ]
+                (
+                    self.blocks[i][self.N - 1].com_seq_num,
+                    self.blocks[i][self.N - 1].short_hash,
+                )
+                for i in range(self.B)
             )
         )
         self.last_block = TestBlock(
