@@ -9,7 +9,7 @@ from python_project.backbone.datastore.chain_store import Frontier
 from python_project.backbone.datastore.utils import Links, Ranges
 from python_project.backbone.settings import PlexusSettings
 
-from tests.mocking.fake_ipv8 import FakeIPv8
+from tests.mocking.ipv8 import FakeIPv8
 
 
 class DummyBlock(PlexusBlock):

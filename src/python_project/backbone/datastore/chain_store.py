@@ -134,11 +134,11 @@ class Chain(BaseChain):
             for dot in block_links
         )
 
-    def _is_block_dot_consistent(self, block_dot: Dot):
+    def _is_block_dot_consistent(self, block_dot: Dot) -> bool:
         back_links = self.get_prev_links(block_dot)
         return back_links is not None and self._is_block_links_consistent(back_links)
 
-    def consistency_fix(self, block_dot: Dot):
+    def consistency_fix(self, block_dot: Dot) -> Iterable[Dot]:
         if block_dot in self.inconsistent_blocks:
             self.inconsistent_blocks.remove(block_dot)
             yield block_dot
@@ -176,7 +176,9 @@ class Chain(BaseChain):
 
         return is_block_consistent
 
-    def _remove_inconsistencies(self, block_dot: Dot, is_block_consistent: bool):
+    def _remove_inconsistencies(
+        self, block_dot: Dot, is_block_consistent: bool
+    ) -> Iterable[Dot]:
         # Check if block fixes some inconsistencies
         if block_dot in self.inconsistencies:
             self.inconsistencies.remove(block_dot)
@@ -314,12 +316,20 @@ class Chain(BaseChain):
             return []
 
     @property
+    def terminal_bits(self):
+        term_bits = []
+        for dot in self.terminal:
+            term_bits.append(dot in self.const_terminal)
+        return tuple(term_bits)
+
+    @property
     def frontier(self) -> Frontier:
         with self.lock:
             return Frontier(
                 self.terminal,
                 ranges(self.holes),
                 Links(tuple(sorted(self.inconsistencies))),
+                self.terminal_bits,
             )
 
     def reconcile(self, frontier: Frontier) -> FrontierDiff:

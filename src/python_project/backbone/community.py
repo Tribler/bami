@@ -9,30 +9,25 @@ from collections import defaultdict
 from collections import deque
 from functools import wraps
 from threading import RLock
-from typing import List, Any, Iterable
+from typing import Any, Iterable, Optional
 
 import orjson as json
 from ipv8.community import Community
 from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
-from ipv8.messaging.payload_headers import (
-    BinMemberAuthenticationPayload,
-    GlobalTimeDistributionPayload,
-)
+from ipv8.messaging.payload_headers import GlobalTimeDistributionPayload
 from ipv8.peer import Peer
 from ipv8.requestcache import RequestCache
 from ipv8.util import maybe_coroutine, succeed
 from python_project.backbone.block import EMPTY_PK, PlexusBlock
-from python_project.backbone.caches import (
-    PingRequestCache,
-    CommunitySyncCache,
-)
+from python_project.backbone.caches import GossipFrontierSyncCache
 from python_project.backbone.community_routines import StateRoutines
 from python_project.backbone.consts import *
 from python_project.backbone.datastore.block_store import LMDBLockStore
 from python_project.backbone.datastore.chain_store import Frontier, ChainFactory
-from python_project.backbone.datastore.database import DBManager
+from python_project.backbone.datastore.database import DBManager, BaseDB, ChainTopic
 from python_project.backbone.datastore.frontiers import FrontierDiff
+from python_project.backbone.datastore.state_store import State
 from python_project.backbone.datastore.utils import (
     hex_to_int,
     encode_raw,
@@ -42,7 +37,7 @@ from python_project.backbone.datastore.utils import (
 from python_project.backbone.listener import BlockListener
 from python_project.backbone.payload import *
 from python_project.backbone.settings import PlexusSettings
-from python_project.backbone.sub_community import SubCommunityMixin
+from python_project.backbone.sub_community import SubCommunityMixin, SubCommunity
 
 
 def synchronized(f):
@@ -136,18 +131,19 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         # initialize the community database
 
         working_directory = kwargs.pop("working_directory", ".")
-        self.persistence = kwargs.pop("persistence", None)
         db_name = kwargs.pop("db_name", self.DB_NAME)
         self.settings = kwargs.pop("settings", PlexusSettings())
 
         # TODO: Change it to dependency injection
-        self.persistence = DBManager(ChainFactory(), LMDBLockStore(working_directory))
+
+        self._persistence = DBManager(ChainFactory(), LMDBLockStore(working_directory))
+        self.ipv8 = kwargs.pop("ipv8", None)
 
         self.receive_block_lock = RLock()
         super(PlexusCommunity, self).__init__(*args, **kwargs)
 
         self.request_cache = RequestCache()
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self._logger = logging.getLogger(self.__class__.__name__)
         # Create DB Manager
 
         self.relayed_broadcasts = set()
@@ -182,7 +178,9 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
         # Communities logic
         self.interest = dict()
-        self.my_subscriptions = set()
+        self.my_subscriptions = dict()
+
+        self._states = dict()
 
         self.peer_subscriptions = (
             dict()
@@ -207,15 +205,31 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         )
 
     @property
+    def persistence(self) -> BaseDB:
+        return self._persistence
+
+    def get_ipv8(self) -> Optional[Any]:
+        return self.ipv8
+
+    @property
+    def logger(self) -> logging.Logger:
+        return self._logger
+
+    @property
     def my_pub_key(self) -> bytes:
         return self.my_peer.public_key.key_to_bin()
 
-    def send_packet(self, peer: Peer, packet: Any) -> None:
-        self.ez_send(peer, packet)
+    def send_packet(self, peer: Peer, packet: Any, sig: bool = True) -> None:
+        self.ez_send(peer, packet, sig=sig)
 
     @property
     def my_peer_key(self) -> Key:
         return self.my_peer.key
+
+    def add_state_db(self, state: State, chain_topic: ChainTopic) -> None:
+        if chain_topic not in self._states:
+            self._states[chain_topic] = set()
+        self._states[chain_topic].add(state)
 
     # ----- SubCommunity routines ------
     @property
@@ -225,8 +239,10 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
     def encode_subcom(self, subcom: Iterable[bytes]) -> bytes:
         return encode_raw(self.my_subcoms)
 
-    def add_subcom(self, sub_com: bytes) -> None:
-        self.my_subscriptions.add(sub_com)
+    def add_subcom(
+        self, subcom_id: bytes, subcom_obj: Optional[SubCommunity] = None
+    ) -> None:
+        self.my_subscriptions[subcom_id] = subcom_obj
 
     def get_subcom_notify_peers(self) -> Iterable[Peer]:
         return self.get_peers()
@@ -300,59 +316,6 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
                 peers = self.get_next_gossip_peers(subcom_id)
                 self.send_frontier(subcom_id, frontier, peers)
 
-    def send_frontier(
-        self, chain_id: bytes, frontier: Frontier, peers: Iterable[Peer]
-    ) -> None:
-        for p in peers:
-            self.ez_send(p, FrontierPayload(chain_id, frontier.to_bytes()))
-
-    def send_extended_frontier(
-        self,
-        chain_id: bytes,
-        frontier: Frontier,
-        state_vote: StateVote,
-        peers: Iterable[Peer],
-    ) -> None:
-        for p in peers:
-            self.ez_send(p, ExtendedFrontierPayload(chain_id, frontier, *state_vote))
-
-    @lazy_wrapper(FrontierPayload)
-    def received_frontier(self, peer: Peer, payload: FrontierPayload) -> None:
-        frontier = Frontier.from_bytes(payload.frontier)
-        chain_id = payload.chain_id
-        cache = self.request_cache.get(COMMUNITY_CACHE, hex_to_int(chain_id))
-        if cache:
-            cache.receive_frontier(peer, frontier)
-        else:
-            # Create new cache
-            diff = self.persistence.reconcile(chain_id=chain_id,)
-
-            if any(to_request.values()):
-                self.send_blocks_request(source_address, chain_id, to_request)
-                self.request_cache.add(CommunitySyncCache(self, chain_id))
-
-    def send_blocks_request(
-        self, peer: Peer, subcom_id: bytes, request: FrontierDiff
-    ) -> None:
-        """
-        Request blocks for a peer from a chain
-        """
-        self.ez_send(peer, BlocksRequestPayload(subcom_id, request.to_bytes()))
-
-    @lazy_wrapper(BlocksRequestPayload)
-    def received_blocks_request(
-        self, peer: Peer, payload: BlocksRequestPayload
-    ) -> None:
-        f_diff = FrontierDiff.from_bytes(payload.frontier_diff)
-        self._logger.debug("Received block request %s {%s}", f_diff, peer)
-        chain_id = payload.subcom_id
-        blocks = self.persistence.get_block_blobs_by_frontier_diff(chain_id, f_diff)
-        self.send_multi_raw_blocks(peer, blocks)
-
-    def send_multi_raw_blocks(self, peer: Peer, blocks: Iterable[bytes]) -> None:
-        for block in blocks:
-            self.ez_send(peer, RawBlockPayload(block), sig=False)
-
     def get_peer(self, pub_key):
         for peer in self.get_peers():
             if peer.public_key.key_to_bin() == pub_key:
@@ -366,26 +329,6 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
                 "mem_db_flush", self.mem_db_flush, flush_time
             )
 
-    def add_listener(self, listener, block_types):
-        """
-        Add a listener for specific block types.
-        """
-        for block_type in block_types:
-            if block_type not in self.listeners_map:
-                self.listeners_map[block_type] = []
-            self.listeners_map[block_type].append(listener)
-            self.persistence.block_types[block_type] = listener.BLOCK_CLASS
-
-    def remove_listener(self, listener, block_types):
-        for block_type in block_types:
-            if (
-                block_type in self.listeners_map
-                and listener in self.listeners_map[block_type]
-            ):
-                self.listeners_map[block_type].remove(listener)
-            if block_type in self.persistence.block_types:
-                self.persistence.block_types.pop(block_type, None)
-
     def get_block_class(self, block_type):
         """
         Get the block class for a specific block type.
@@ -394,21 +337,6 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
             return PlexusBlock
 
         return self.listeners_map[block_type][0].BLOCK_CLASS
-
-    async def should_sign(self, block):
-        """
-        Return whether we should sign the block in the passed message.
-        @param block: the block we want to sign or not.
-        """
-        if block.type not in self.listeners_map:
-            return False  # There are no listeners for this block
-
-        for listener in self.listeners_map[block.type]:
-            should_sign = await maybe_coroutine(listener.should_sign, block)
-            if should_sign:
-                return True
-
-        return False
 
     def _add_broadcasted_blockid(self, block_id):
         self.relayed_broadcasts.add(block_id)

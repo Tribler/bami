@@ -73,6 +73,9 @@ class TestFrontiers:
         assert len(frontier.terminal) == 1
         assert frontier.terminal == GENESIS_LINK
 
+        assert len(frontier.terminal_bits) == 1
+        assert frontier.terminal_bits == (True,)
+
     def test_insert_no_conflict(self, create_batches, insert_function):
         chain = Chain()
         batches = create_batches(1, 10)
@@ -84,6 +87,9 @@ class TestFrontiers:
 
         assert len(frontier.terminal) == 1
         assert all(10 in term for term in frontier.terminal)
+
+        assert len(frontier.terminal_bits) == 1
+        assert frontier.terminal_bits == (True,)
 
     def test_insert_with_one_hole(self, create_batches, insert_function):
         chain = Chain()
@@ -103,6 +109,9 @@ class TestFrontiers:
 
         assert front.terminal[0][0] == 4 and front.terminal[1][0] == 10
 
+        assert len(front.terminal_bits) == len(front.terminal)
+        assert front.terminal_bits == (True, False)
+
     def test_insert_seq_holes(self, create_batches, insert_function):
         chain = Chain()
         batches = create_batches(1, 100)
@@ -121,6 +130,9 @@ class TestFrontiers:
 
         assert len(front.terminal) == 2
         assert front.terminal[0][0] == 10 and front.terminal[1][0] == 100
+
+        assert len(front.terminal_bits) == len(front.terminal)
+        assert front.terminal_bits == (True, False)
 
     def test_insert_multi_holes(self, create_batches, insert_function):
         chain = Chain()
@@ -146,6 +158,9 @@ class TestFrontiers:
             and front.terminal[1][0] == 50
             and front.terminal[2][0] == 100
         )
+
+        assert len(front.terminal_bits) == len(front.terminal)
+        assert front.terminal_bits == (True, False, False)
 
     def test_insert_conflicts_no_holes(self, create_batches, insert_function):
         chain = Chain()
@@ -434,6 +449,3 @@ def test_empty_get_dots(create_batches):
     chain = Chain()
     v = chain.get_dots_by_seq_num(1)
     assert len(list(v)) == 0
-
-
-

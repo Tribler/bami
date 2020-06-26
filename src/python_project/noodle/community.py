@@ -91,27 +91,6 @@ def synchronized(f):
     return wrapper
 
 
-class SubTrustCommunity(Community):
-    def __init__(self, *args, **kwargs):
-        self.master_peer = kwargs.pop("master_peer")
-        self._prefix = b"\x00" + self.version + self.master_peer.mid
-        super(SubTrustCommunity, self).__init__(*args, **kwargs)
-
-
-class NoodleBlockListener(BlockListener):
-    """
-    This block listener simply signs all blocks it receives.
-    """
-
-    BLOCK_CLASS = NoodleBlock
-
-    def should_sign(self, block):
-        return True
-
-    def received_block(self, block):
-        pass
-
-
 class NoodleCommunity(Community):
     """
     Community for secure payments.

@@ -8,7 +8,7 @@ from python_project.noodle.exceptions import (
     NoPathFoundException,
 )
 
-from tests.mocking.fake_ipv8 import FakeIPv8
+from tests.mocking.ipv8 import FakeIPv8
 
 
 class DummyBlock(NoodleBlock):

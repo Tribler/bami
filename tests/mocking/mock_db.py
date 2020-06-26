@@ -36,6 +36,11 @@ class MockBlockStore(BaseBlockStore):
 
 
 class MockDBManager(BaseDB):
+    def get_block_blobs_by_frontier_diff(
+        self, chain_id: bytes, frontier_diff: FrontierDiff
+    ) -> Iterable[bytes]:
+        pass
+
     def close(self) -> None:
         pass
 

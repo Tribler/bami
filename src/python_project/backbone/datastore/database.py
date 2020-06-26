@@ -18,10 +18,11 @@ from python_project.backbone.datastore.utils import (
     Notifier,
     EMPTY_PK,
     expand_ranges,
+    Links,
 )
 
 
-class BaseDB(ABC):
+class BaseDB(ABC, Notifier):
     @abstractmethod
     def get_chain(self, chain_id: bytes) -> Optional[BaseChain]:
         pass
@@ -72,7 +73,7 @@ class ChainTopic(Enum):
     ALL = 1
 
 
-class DBManager(BaseDB, Notifier):
+class DBManager(BaseDB):
     def get_block_blobs_by_frontier_diff(
         self, chain_id: bytes, frontier_diff: FrontierDiff
     ) -> Iterable[bytes]:

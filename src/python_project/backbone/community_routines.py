@@ -1,46 +1,74 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple
+from typing import Any, Optional, Type, Callable
 
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.keys import Key
+from ipv8.messaging.payload import Payload
 from ipv8.peer import Peer
-from python_project.backbone.datastore.utils import take_hash, StateVote
+from ipv8.peerdiscovery.network import Network
+from ipv8.requestcache import RequestCache
+from python_project.backbone.datastore.database import BaseDB
 
 
-class CommonRoutines(ABC):
+class CommunityRoutines(ABC):
     @property
-    @abstractmethod
     def my_peer_key(self) -> Key:
+        return self.my_peer.key
+
+    @property
+    def my_pub_key_bin(self) -> bytes:
+        return self.my_peer.public_key.key_to_bin()
+
+    @property
+    @abstractmethod
+    def my_peer(self) -> Peer:
+        pass
+
+    @abstractmethod
+    def send_packet(self, peer: Peer, packet: Payload, sig: bool = True) -> None:
+        """Send packet payload to the peer"""
         pass
 
     @property
     @abstractmethod
-    def my_pub_key(self) -> bytes:
+    def persistence(self) -> BaseDB:
         pass
 
-    @abstractmethod
-    def send_packet(self, peer: Peer, packet: Any) -> None:
-        pass
-
-
-class StateRoutines(CommonRoutines, ABC):
     @property
     def crypto(self):
         return default_eccrypto
 
-    def sign_state(self, state_blob: bytes) -> StateVote:
-        """Sign state blob and return StateVote
-        Args:
-            state_blob: blob of state to sign
-        Returns:
-            Tuple with public key, signature and state hash
-        """
-        signature = self.crypto.create_signature(self.my_peer_key, state_blob)
-        return StateVote((self.my_pub_key, signature, state_blob))
+    @property
+    @abstractmethod
+    def logger(self) -> Any:
+        pass
 
-    def verify_state_vote(self, state_vote: StateVote) -> bool:
-        # This is a claim of a conditional transaction
-        pub_key, signature, state_blob = state_vote
-        return self.crypto.is_valid_signature(
-            self.crypto.key_from_public_bin(pub_key), state_blob, signature
-        )
+    @property
+    @abstractmethod
+    def ipv8(self) -> Optional[Any]:
+        pass
+
+    @property
+    @abstractmethod
+    def settings(self) -> Any:
+        pass
+
+    @property
+    @abstractmethod
+    def network(self) -> Network:
+        pass
+
+    @property
+    @abstractmethod
+    def request_cache(self) -> RequestCache:
+        pass
+
+
+class MessageStateMachine(ABC):
+    @abstractmethod
+    def add_message_handler(self, msg_id: Type[Payload], handler: Callable) -> None:
+        pass
+
+    @abstractmethod
+    def setup_messages(self) -> None:
+        pass

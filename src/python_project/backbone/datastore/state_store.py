@@ -8,6 +8,7 @@ from python_project.backbone.datastore.utils import (
     Dot,
     decode_raw,
     Links,
+    StateVote,
 )
 
 
@@ -119,13 +120,17 @@ class State:
     def __init__(self, db_manager: BaseDB) -> None:
         self.back_db = db_manager
 
-    def get_state_hash(self):
-        return
+    def get_last_state_blob(self) -> Optional[bytes]:
+        """
+        Get latest state blob that summarizing all state.
+        Returns: None if is not applicable
+        """
+        return None
 
-    def add_state_vote(self, dot: Dot, state_vote: Any):
+    def add_state_vote(self, links: Links, state_vote: StateVote) -> None:
         pass
 
-    def receive_chain_dots(self, chain_id: bytes, chain_dots: List):
+    def receive_chain_dots(self, chain_id: bytes, chain_dots: List) -> None:
         if not chain_dots or not chain_id:
             return
 

@@ -48,7 +48,7 @@ class TestDBManager:
         )
 
         assert (
-                self.dbms.get_tx_blob_by_dot(self.chain_id, self.block_dot) == self.tx_blob
+            self.dbms.get_tx_blob_by_dot(self.chain_id, self.block_dot) == self.tx_blob
         )
 
     def test_get_block_blob(self, monkeypatch, std_vals):
@@ -66,8 +66,8 @@ class TestDBManager:
         )
 
         assert (
-                self.dbms.get_block_blob_by_dot(self.chain_id, self.block_dot)
-                == self.block_blob
+            self.dbms.get_block_blob_by_dot(self.chain_id, self.block_dot)
+            == self.block_blob
         )
 
     def test_add_notify_block(self, monkeypatch, std_vals):
@@ -100,7 +100,7 @@ class TestDBManager:
         # init chain
         chain_id = self.chain_id
         self.dbms.chains[chain_id] = MockChain()
-        frontier_diff = FrontierDiff(Ranges(((1, 2),)), Links(((1, ShortKey('efef')),)))
+        frontier_diff = FrontierDiff(Ranges(((1, 2),)), Links(((1, ShortKey("efef")),)))
 
         blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
         assert len(list(blobs)) == 5
@@ -129,7 +129,9 @@ class TestDBManager:
         monkeypatch.setattr(
             MockBlockStore, "get_block_by_hash", lambda _, blob_hash: self.block_blob
         )
-        monkeypatch.setattr(MockChain, "get_dots_by_seq_num", lambda _, seq_num: list('dot1'))
+        monkeypatch.setattr(
+            MockChain, "get_dots_by_seq_num", lambda _, seq_num: list("dot1")
+        )
 
         # init chain
         chain_id = self.chain_id

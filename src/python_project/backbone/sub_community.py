@@ -1,39 +1,205 @@
-from abc import ABC, abstractmethod
-from typing import Iterable
+from abc import ABC, abstractmethod, ABCMeta
+from typing import Iterable, Union, Type, Optional
 
+from ipv8.community import Community
 from ipv8.peer import Peer
-from python_project.backbone.community_routines import CommonRoutines
-from python_project.backbone.payload import SubscriptionsPayload
+from ipv8.peerdiscovery.discovery import RandomWalk
+from python_project.backbone.community_routines import CommunityRoutines
 
 
-class SubCommunityGossipStrategy:
-    pass
+class BaseSubCommunity(ABC):
+    @property
+    @abstractmethod
+    def subcom_id(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def get_known_peers(self) -> Iterable[Peer]:
+        """
+        Get all peers known to be in this sub-community
+        Returns: list of known peers in the sub-community
+        """
+        pass
 
 
-class SubCommunityMixin(CommonRoutines):
+class IPv8SubCommunity(BaseSubCommunity, Community):
+    def get_known_peers(self) -> Iterable[Peer]:
+        return self.get_peers()
+
+    @property
+    def subcom_id(self) -> bytes:
+        return self._subcom_id
+
+    def __init__(self, *args, **kwargs):
+        self._subcom_id = kwargs.pop("subcom_id")
+        self.master_peer = Peer(self.subcom_id)
+        self._prefix = b"\x00" + self.version + self.master_peer.mid
+        super().__init__(*args, **kwargs)
+
+
+class LightSubCommunity(BaseSubCommunity):
+    def __init__(self, subcom_id=None):
+        self._subcom_id = subcom_id
+        self.peers = []
+
+    @property
+    def subcom_id(self) -> bytes:
+        return self._subcom_id
+
+    def get_known_peers(self) -> Iterable[Peer]:
+        return self.peers
+
+
+class SubCommunityDiscoveryStrategy(ABC):
+    @abstractmethod
+    def discover(self, subcom: BaseSubCommunity) -> None:
+        """
+        Discovery routine for the sub-community.
+        Args:
+            subcom: SubCommunity object or sub-community identifier.
+        """
+        pass
+
+
+class RandomWalkDiscoveryStrategy(
+    SubCommunityDiscoveryStrategy, CommunityRoutines, metaclass=ABCMeta
+):
+    def discover(self, subcom: IPv8SubCommunity) -> None:
+        self.ipv8.strategies.append(
+            (RandomWalk(subcom), self.settings.max_peers_subtrust)
+        )
+
+
+class BootstrapServersDiscoveryStrategy(SubCommunityDiscoveryStrategy):
+    @abstractmethod
+    def get_bootstrap_servers(self, subcom_id: bytes) -> Iterable[Peer]:
+        pass
+
+    def discover(self, subcom: IPv8SubCommunity) -> None:
+        for k in self.get_bootstrap_servers(subcom.subcom_id):
+            subcom.walk_to(k)
+
+
+class BaseSubCommunityFactory(ABC):
+    @abstractmethod
+    def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
+        pass
+
+
+class IPv8SubCommunityFactory(
+    BaseSubCommunityFactory, CommunityRoutines, metaclass=ABCMeta
+):
+    def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
+        """
+        Args:
+            subcom_id: id of the community
+            max_peers: maximum number of peer to connect to in the community
+        Returns:
+            SubCommunity as an IPv8 community
+        """
+        network = self.network
+        subcom = IPv8SubCommunity(
+            self.my_peer, self.ipv8.endpoint, network, *args, **kwargs
+        )
+        self.ipv8.overlays.append(subcom)
+        return subcom
+
+
+class LightSubCommunityFactory(BaseSubCommunityFactory):
+    @staticmethod
+    def create_subcom(*args, **kwargs) -> BaseSubCommunity:
+        """
+        Args:
+            subcom_id: id of the community
+        Returns:
+            SubCommunity as a LightCommunity (just set of peers)
+        """
+        return LightSubCommunity(*args, **kwargs)
+
+
+class SubCommunityRoutines(ABC):
     @property
     @abstractmethod
     def my_subcoms(self) -> Iterable[bytes]:
+        """
+        All sub-communities that my peer is part of
+        Returns: list with sub-community ids
+        """
         pass
 
     @abstractmethod
-    def encode_subcom(self, subcom: Iterable[bytes]) -> bytes:
+    def get_subcom(self, sub_com: bytes) -> Optional[BaseSubCommunity]:
         pass
 
     @abstractmethod
-    def add_subcom(self, sub_com: bytes) -> None:
+    def add_subcom(self, sub_com: bytes, subcom_obj: BaseSubCommunity) -> None:
+        """
+        Add sub-community to the community object.
+        Args:
+            sub_com: sub-community identifier
+            subcom_obj: SubCommunity object
+        """
         pass
 
-    def is_subscribed(self, community_id: bytes) -> bool:
-        return community_id in self.my_subcoms
-
     @abstractmethod
-    def get_subcom_notify_peers(self) -> Iterable[Peer]:
+    def notify_peer_on_new_subcoms(self) -> None:
+        """Notify other peers on updates of the sub-communities"""
         pass
 
     @abstractmethod
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+        """
+        Join to the gossip process for the sub-community
+        Args:
+            sub_com_id: sub-community identifier
+        """
         pass
+
+    @abstractmethod
+    def get_subcom_discovery_strategy(
+        self, subcom_id: bytes
+    ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
+        """
+        Discovery strategy for the sub-community
+        Args:
+            subcom_id: sub-community identifier
+
+        Returns:
+            Object or class with discover implementation
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def subcom_factory(
+        self,
+    ) -> Union[BaseSubCommunityFactory, Type[BaseSubCommunityFactory]]:
+        """Factory for creating sub-communities"""
+        pass
+
+
+class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMeta):
+    def is_subscribed(self, community_id: bytes) -> bool:
+        return community_id in self.my_subcoms
+
+    def join_subcom(self, subcom_id: bytes):
+        if not self.ipv8:
+            self.logger.error(
+                "No IPv8 service object available, cannot start SubTrustCommunity"
+            )
+        else:
+            if subcom_id not in self.my_subcoms:
+                # This sub-community is still not known
+                # Set max peers setting
+                subcom = self.subcom_factory.create_subcom()
+                # Add the sub-community knowledge
+                self.add_subcom(subcom_id, subcom)
+                # Call discovery routine for this sub-community
+                discover_strategy = self.get_subcom_discovery_strategy(subcom_id)
+                discover_strategy.discover(subcom)
+
+                # Notify others on new subscriptions
+                self.notify_peer_on_new_subcoms()
 
     def subscribe_to_subcoms(self, subcoms: Iterable[bytes]) -> None:
         """
@@ -46,14 +212,12 @@ class SubCommunityMixin(CommonRoutines):
         """
         for c_id in subcoms:
             if c_id not in self.my_subcoms:
-                self.add_subcom(c_id)
+                self.join_subcom(c_id)
                 # Join the sub-community
                 self.join_subcommunity_gossip(c_id)
 
         # Find other peers in the community
-        for p in self.get_subcom_notify_peers():
-            # Send them new subscribe collection
-            self.send_peer_subs(p.address, self.my_subcoms)
+        self.notify_peer_on_new_subcoms()
 
     def subscribe_to_subcom(self, subcom_id: bytes) -> None:
         """
@@ -62,26 +226,12 @@ class SubCommunityMixin(CommonRoutines):
 
         Args:
             subcom_id: bytes identifier of the community
-            personal: this is community is on personal chain
         """
         if subcom_id not in self.my_subcoms:
-            self.add_subcom(subcom_id)
+            self.join_subcom(subcom_id)
 
             # Join the protocol audits/ updates
             self.join_subcommunity_gossip(subcom_id)
 
             # Notify other peers that you are part of the new community
-            for peer in self.get_subcom_notify_peers():
-                # Send them new subscribe collection
-                self.send_peer_subs(peer, self.my_subcoms)
-
-    def send_peer_subs(self, peer: Peer, peer_subs: Iterable[bytes]) -> None:
-        """
-        Send to selected peer update message
-        """
-        subs_packet = self.encode_subcom(peer_subs)
-        self.send_packet(peer, SubscriptionsPayload(self.my_pub_key, subs_packet))
-
-    @abstractmethod
-    def received_peer_subs(self, peer: Peer, payload: SubscriptionsPayload) -> None:
-        pass
+            self.notify_peer_on_new_subcoms()
