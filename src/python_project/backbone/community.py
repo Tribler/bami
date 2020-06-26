@@ -9,7 +9,7 @@ from collections import defaultdict
 from collections import deque
 from functools import wraps
 from threading import RLock
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Union, Type
 
 import orjson as json
 from ipv8.community import Community
@@ -17,27 +17,25 @@ from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.messaging.payload_headers import GlobalTimeDistributionPayload
 from ipv8.peer import Peer
+from ipv8.peerdiscovery.network import Network
 from ipv8.requestcache import RequestCache
-from ipv8.util import maybe_coroutine, succeed
-from python_project.backbone.block import EMPTY_PK, PlexusBlock
-from python_project.backbone.caches import GossipFrontierSyncCache
-from python_project.backbone.community_routines import StateRoutines
+from ipv8.util import succeed
+from python_project.backbone.block import PlexusBlock
 from python_project.backbone.consts import *
 from python_project.backbone.datastore.block_store import LMDBLockStore
-from python_project.backbone.datastore.chain_store import Frontier, ChainFactory
+from python_project.backbone.datastore.chain_store import ChainFactory
 from python_project.backbone.datastore.database import DBManager, BaseDB, ChainTopic
-from python_project.backbone.datastore.frontiers import FrontierDiff
 from python_project.backbone.datastore.state_store import State
 from python_project.backbone.datastore.utils import (
-    hex_to_int,
     encode_raw,
     decode_raw,
-    StateVote,
 )
 from python_project.backbone.listener import BlockListener
 from python_project.backbone.payload import *
 from python_project.backbone.settings import PlexusSettings
-from python_project.backbone.sub_community import SubCommunityMixin, SubCommunity
+from python_project.backbone.sub_community import SubCommunityMixin, BaseSubCommunityFactory, \
+    SubCommunityDiscoveryStrategy, BaseSubCommunity
+from python_project.backbone.gossip import GossipFrontiersMixin, NextPeerSelectionStrategy
 
 
 def synchronized(f):
@@ -71,19 +69,19 @@ class IntroductionMixin:
 
     # ---- Introduction handshakes => Exchange your subscriptions ----------------
     def create_introduction_request(
-        self, socket_address: Any, extra_bytes: bytes = b""
+            self, socket_address: Any, extra_bytes: bytes = b""
     ):
         extra_bytes = self.encode_subcom(self.my_subcoms)
         return super().create_introduction_request(socket_address, extra_bytes)
 
     def create_introduction_response(
-        self,
-        lan_socket_address,
-        socket_address,
-        identifier,
-        introduction=None,
-        extra_bytes=b"",
-        prefix=None,
+            self,
+            lan_socket_address,
+            socket_address,
+            identifier,
+            introduction=None,
+            extra_bytes=b"",
+            prefix=None,
     ):
         extra_bytes = self.encode_subcom(self.my_subcoms)
         return super(PlexusCommunity, self).create_introduction_response(
@@ -110,7 +108,7 @@ class IntroductionMixin:
             self.subscribe_to_subcom(peer.public_key.key_to_bin())
 
 
-class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRoutines):
+class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, GossipFrontiersMixin):
     """
     Community for secure backbone.
     """
@@ -240,7 +238,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         return encode_raw(self.my_subcoms)
 
     def add_subcom(
-        self, subcom_id: bytes, subcom_obj: Optional[SubCommunity] = None
+            self, subcom_id: bytes, subcom_obj: Optional[SubCommunity] = None
     ) -> None:
         self.my_subscriptions[subcom_id] = subcom_obj
 
@@ -248,7 +246,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         return self.get_peers()
 
     def process_peer_subscriptions(
-        self, peer: Peer, communities: Iterable[bytes]
+            self, peer: Peer, communities: Iterable[bytes]
     ) -> None:
         for c in communities:
             if c not in self.peer_subscriptions:
@@ -290,85 +288,10 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         #    interval=sync_time,
         # )
 
-    def get_next_gossip_peers(self, subcom_id: bytes):
-        # TODO: move this selection to the strategy?
-        #  # There could be a strategy based on the predictable randomness - seed
-        peer_set = self.peer_subscriptions.get(subcom_id)
-        if not peer_set:
-            peer_set = list()
-        f = min(len(peer_set), self.settings.gossip_fanout)
-        return random.sample(peer_set, f)
+    # -------- Additional -------------
 
-    @synchronized
-    def gossip_sync_task(self, subcom_id: bytes) -> None:
-        """Start of the gossip state machine"""
-        chain = self.persistence.get_chain(subcom_id)
-        if chain:
-            frontier = chain.frontier
-            # Extended Frontier?
-            # TODO: add options for the extended frontier package
-            state = False
-            if state:
-                # Sign state/ or get latest sign
-                # Add your signature to the local storage
-                pass
-            else:
-                peers = self.get_next_gossip_peers(subcom_id)
-                self.send_frontier(subcom_id, frontier, peers)
-
-    def get_peer(self, pub_key):
-        for peer in self.get_peers():
-            if peer.public_key.key_to_bin() == pub_key:
-                return peer
-        return None
-
-    # -------- Ping Functions -------------
-    def init_mem_db_flush(self, flush_time):
-        if not self.mem_db_flush_lc:
-            self.mem_db_flush_lc = self.register_task(
-                "mem_db_flush", self.mem_db_flush, flush_time
-            )
-
-    def get_block_class(self, block_type):
-        """
-        Get the block class for a specific block type.
-        """
-        if block_type not in self.listeners_map or not self.listeners_map[block_type]:
-            return PlexusBlock
-
-        return self.listeners_map[block_type][0].BLOCK_CLASS
-
-    def _add_broadcasted_blockid(self, block_id):
-        self.relayed_broadcasts.add(block_id)
-        self.relayed_broadcasts_order.append(block_id)
-        if len(self.relayed_broadcasts) > self.settings.broadcast_history_size:
-            to_remove = self.relayed_broadcasts_order.popleft()
-            self.relayed_broadcasts.remove(to_remove)
-
-    def send_block(self, block, address=None, ttl=1):
-        """
-        Send a block to a specific address, or do a broadcast to known peers if no peer is specified.
-        """
-        if ttl < 1:
-            return
-        global_time = self.claim_global_time()
-        dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
-
-        if address:
-            self.logger.debug(
-                "Sending block to (%s:%d) (%s)", address[0], address[1], block
-            )
-            payload = BlockPayload.from_block(block).to_pack_list()
-            packet = self._ez_pack(self._prefix, BLOCK_MSG, [dist, payload], False)
-            self.outgoing_block_queue.put_nowait((address, packet))
-        else:
-            self.logger.debug(
-                "Sending block to a set of peers subscribed to a community %s", block
-            )
-            payload = BlockBroadcastPayload.from_block_gossip(block, ttl).to_pack_list()
-            packet = self._ez_pack(self._prefix, BLOCK_CAST_MSG, [dist, payload], False)
-
-            # block public key => personal chain
+    """ Choice for the block broadcast
+    # block public key => personal chain
             pers_subs = self.peer_subscriptions.get(block.public_key)
             if pers_subs:
                 f = min(len(pers_subs), self.settings.broadcast_fanout)
@@ -384,25 +307,101 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
                     com_subs = random.sample(com_subs, f)
                     for p in com_subs:
                         self.outgoing_block_queue.put_nowait((p.address, packet))
-            self._add_broadcasted_blockid(block.hash)
+    """
 
-    async def evaluate_outgoing_block_queue(self):
-        while True:
-            packet_info = await self.outgoing_block_queue.get()
-            address, packet = packet_info
-            self.endpoint.send(address, packet)
+    def get_subcom(self, sub_com: bytes) -> Optional[BaseSubCommunity]:
+        pass
 
-            await sleep(self.settings.block_queue_interval / 1000)
+    def notify_peer_on_new_subcoms(self) -> None:
+        pass
+
+    def get_subcom_discovery_strategy(self, subcom_id: bytes) -> Union[
+        SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
+        pass
+
+    @property
+    def subcom_factory(self) -> Union[BaseSubCommunityFactory, Type[BaseSubCommunityFactory]]:
+        pass
+
+    @property
+    def gossip_strategy(self) -> NextPeerSelectionStrategy:
+        pass
+
+    @property
+    def my_peer(self) -> Peer:
+        pass
+
+    @property
+    def ipv8(self) -> Optional[Any]:
+        pass
+
+    @property
+    def settings(self) -> Any:
+        pass
+
+    @property
+    def network(self) -> Network:
+        pass
+
+    @property
+    def request_cache(self) -> RequestCache:
+        pass
+
+    def get_cumulative_state_blob(self, subcom_id: bytes) -> Optional[bytes]:
+        pass
+
+    def get_state(self, subcom_id: bytes) -> Optional[State]:
+        pass
+
+    def send_block(
+            self, block: Union[PlexusBlock, bytes], peers: Iterable[Peer], ttl: int = 1
+    ) -> None:
+        """
+        Send a block to the set of peers. If ttl is higher than 1: will gossip the message further.
+        Args:
+            block: block to send
+            peers: set of peers
+            ttl: Time to live for the message. If > 1 - this is a multi-hop message
+        """
+        if ttl > 1:
+            # This is a block for gossip
+            packet = (
+                RawBlockBroadcastPayload(block, ttl)
+                if type(block) is bytes
+                else BlockBroadcastPayload(*block.block_args(), ttl)
+            )
+        else:
+            packet = (
+                RawBlockPayload(block)
+                if type(block) is bytes
+                else block.to_block_payload()
+            )
+        for p in peers:
+            self.send_packet(p, packet, sig=False)
+
+    @lazy_wrapper_unsigned(RawBlockPayload)
+    def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
+        pass
+
+    @lazy_wrapper_unsigned(RawBlockBroadcastPayload)
+    def received_raw_block_broadcast(self, peer: Peer, payload: RawBlockBroadcastPayload) -> None:
+        pass
+
+    @lazy_wrapper_unsigned(BlockPayload)
+    def received_block(self, peer: Peer, payload: BlockPayload):
+        block = PlexusBlock.from_payload(payload, self.serializer)
+        self.process_block(block, peer)
+        self.incoming_block_queue.put_nowait((peer, block))
 
     @synchronized
     def sign_block(
-        self,
-        counterparty_peer=None,
-        block_type=b"unknown",
-        transaction=None,
-        com_id=None,
-        links=None,
-        fork_seq=None,
+            self,
+            counterparty_peer=None,
+            block_type=b"unknown",
+            transaction=None,
+            com_id=None,
+            links=None,
+            fork_seq=None,
     ):
         if not transaction:
             transaction = b""
@@ -425,8 +424,8 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         if counterparty_peer == self.my_peer or not counterparty_peer:
             # We created a self-signed block / initial claim, send to the neighbours
             if (
-                block.type not in self.settings.block_types_bc_disabled
-                and not self.settings.is_hiding
+                    block.type not in self.settings.block_types_bc_disabled
+                    and not self.settings.is_hiding
             ):
                 self.send_block(block)
             return succeed(block)
@@ -438,12 +437,12 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
             return succeed(block)
 
     def self_sign_block(
-        self,
-        block_type=b"unknown",
-        transaction=None,
-        com_id=None,
-        links=None,
-        fork_seq=None,
+            self,
+            block_type=b"unknown",
+            transaction=None,
+            com_id=None,
+            links=None,
+            fork_seq=None,
     ):
         return self.sign_block(
             self.my_peer,
@@ -453,24 +452,6 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
             links=links,
             fork_seq=fork_seq,
         )
-
-    @lazy_wrapper_unsigned(RawBlockPayload)
-    def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
-        pass
-
-    @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, BlockPayload)
-    async def received_block(self, source_address, dist, payload):
-        """
-        We've received a half block, either because we sent a SIGNED message to some one or we are crawling
-        """
-        peer = Peer(payload.public_key, source_address)
-        block = self.get_block_class(payload.type).from_payload(
-            payload, self.serializer
-        )
-
-        self._logger.debug("Received block directly %s", block)
-
-        self.incoming_block_queue.put_nowait((peer, block))
 
     async def evaluate_incoming_block_queue(self):
         while True:
@@ -495,43 +476,31 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
         if block.hash not in self.relayed_broadcasts and payload.ttl > 1:
             self.send_block(block, ttl=payload.ttl)
 
-    def validate_persist_block(self, block, peer=None):
+    def validate_persist_block(self, block: Union[PlexusBlock, bytes], peer: Peer = None):
         """
         Validate a block and if it's valid, persist it. Return the validation result.
         :param block: The block to validate and persist.
         :return: [ValidationResult]
         """
-        if not self.persistence.contains(block):
-            self.persistence.add_block(block)
-        # TODO: Verify invariants
-
-    def notify_listeners(self, block):
-        """
-        Notify listeners of a specific new block.
-        """
-        # Call the listeners associated to the universal block, if there are any
-        for listener in self.listeners_map.get(self.UNIVERSAL_BLOCK_LISTENER, []):
-            listener.received_block(block)
-
-        # Avoid proceeding any further if the type of the block coincides with the UNIVERSAL_BLOCK_LISTENER
-        if (
-            block.type not in self.listeners_map
-            or self.shutting_down
-            or block.type == self.UNIVERSAL_BLOCK_LISTENER
-        ):
-            return
-
-        for listener in self.listeners_map[block.type]:
-            listener.received_block(block)
+        block_blob = block if type(block) is bytes else block.pack()
+        block = PlexusBlock.unpack(block_blob, self.serializer)
+        if not block.block_invariants_valid():
+            # React on invalid block
+            self.logger.warning("Received invalid block! %s", block)
+        else:
+            if not self.persistence.has_block(block.hash):
+                self.persistence.add_block(block_blob, block)
 
     @synchronized
     async def process_block(
-        self, blk: PlexusBlock, peer, status=None, audit_proofs=None
+            self, blk: PlexusBlock, peer, status=None, audit_proofs=None
     ):
         """
         Process a received half block.
         """
         self.validate_persist_block(blk, peer)
+
+        # Notify to validate?
         # TODO add bilateral agreements
 
     def choose_community_peers(self, com_peers, current_seed, commitee_size):
@@ -540,7 +509,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
     # ------ State-based synchronization -------------
     def request_state(
-        self, peer_address, chain_id, state_name=None, include_other_witnesses=True
+            self, peer_address, chain_id, state_name=None, include_other_witnesses=True
     ):
         global_time = self.claim_global_time()
         dist = GlobalTimeDistributionPayload(global_time).to_pack_list()
@@ -555,7 +524,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateRequestPayload)
     def received_state_request(
-        self, source_address, dist, payload: StateRequestPayload
+            self, source_address, dist, payload: StateRequestPayload
     ):
         # I'm part of the community?
         if payload.key in self.my_subscriptions:
@@ -604,7 +573,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateResponsePayload)
     def received_state_response(
-        self, source_address, dist, payload: StateResponsePayload
+            self, source_address, dist, payload: StateResponsePayload
     ):
         chain_id = payload.key
         hash_val = self.verify_state(json.loads(payload.value))
@@ -628,7 +597,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateByHashRequestPayload)
     def received_state_by_hash_request(
-        self, source_address, dist, payload: StateByHashRequestPayload
+            self, source_address, dist, payload: StateByHashRequestPayload
     ):
         chain_id = payload.key
         hash_val = payload.value
@@ -646,7 +615,7 @@ class PlexusCommunity(Community, IntroductionMixin, SubCommunityMixin, StateRout
 
     @lazy_wrapper_unsigned(GlobalTimeDistributionPayload, StateByHashResponsePayload)
     def received_state_by_hash_response(
-        self, source_address, dist, payload: StateByHashResponsePayload
+            self, source_address, dist, payload: StateByHashResponsePayload
     ):
         chain_id = payload.key
         state, seq_num = json.loads(payload.value)

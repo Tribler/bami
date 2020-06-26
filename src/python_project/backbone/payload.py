@@ -39,40 +39,47 @@ class BlockPayload(VariablePayload):
 
 
 @vp_compile
+class RawBlockBroadcastPayload(VariablePayload):
+    msg_id = 3
+    format_list = ["varlenH", "I"]
+    names = ["block_bytes", "ttl"]
+
+
+@vp_compile
 class BlockBroadcastPayload(BlockPayload):
     """
     Payload for a message that contains a half block and a TTL field for broadcasts.
     """
 
-    msg_id = 3
+    msg_id = 4
     format_list = BlockPayload.format_list + ["I"]
     names = BlockPayload.names + ["ttl"]
 
 
 @vp_compile
 class FrontierPayload(VariablePayload):
-    msg_id = 4
+    msg_id = 5
     format_list = ["varlenH", "varlenH"]
     names = ["chain_id", "frontier"]
 
 
 @vp_compile
 class ExtendedFrontierPayload(VariablePayload):
-    msg_id = 5
+    msg_id = 6
     format_list = ["varlenH", "varlenH", "74s", "64s", "varlenH"]
     names = ["chain_id", "frontier", "pub_key", "signature", "state_blob"]
 
 
 @vp_compile
 class SubscriptionsPayload(VariablePayload):
-    msg_id = 6
+    msg_id = 7
     format_list = ["74s", "varlenH"]
     names = ["public_key", "subcoms"]
 
 
 @vp_compile
 class BlocksRequestPayload(VariablePayload):
-    msg_id = 7
+    msg_id = 8
     format_list = ["74s", "varlenH"]
     names = ["subcom_id", "frontier_diff"]
 

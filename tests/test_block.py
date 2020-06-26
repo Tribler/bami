@@ -208,6 +208,12 @@ class TestChainBlock:
         blk2 = PlexusBlock.from_payload(unpacked[0])
         assert blk2 == blk
 
+    def test_pack_unpack(self):
+        blk = TestBlock()
+        blk_bytes = blk.pack()
+        blk2 = PlexusBlock.unpack(blk_bytes, blk.serializer)
+        assert blk == blk2
+
     @pytest.mark.skip
     def test_iter(self):
         """

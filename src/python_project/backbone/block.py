@@ -5,6 +5,7 @@ import time
 from binascii import hexlify
 from collections import namedtuple
 from hashlib import sha256
+from typing import List, Any
 
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.messaging.serialization import default_serializer, PackError
@@ -181,14 +182,7 @@ class PlexusBlock(object):
     def is_peer_genesis(self) -> bool:
         return self.sequence_number == GENESIS_SEQ and self.previous == GENESIS_LINK
 
-    def pack(self, signature: bool = True) -> bytes:
-        """
-        Encode this block for transport
-        Args:
-            signature: False to pack EMPTY_SIG in the signature location, true to pack the signature field
-        Returns:
-            Block bytes
-        """
+    def block_args(self, signature: bool = True) -> List[Any]:
         args = [
             self.type,
             self.transaction,
@@ -201,10 +195,30 @@ class PlexusBlock(object):
             self.signature if signature else EMPTY_SIG,
             self.timestamp,
         ]
-        return self.serializer.pack_multiple(BlockPayload(*args).to_pack_list())[0]
+        return args
+
+    def to_block_payload(self, signature: bool = True) -> BlockPayload:
+        return BlockPayload(*self.block_args(signature))
+
+    def pack(self, signature: bool = True) -> bytes:
+        """
+        Encode the block
+        Args:
+            signature: False to pack EMPTY_SIG in the signature location, true to pack the signature field
+        Returns:
+            Block bytes
+        """
+        return self.serializer.pack_multiple(
+            self.to_block_payload(signature).to_pack_list()
+        )[0]
 
     @classmethod
-    def from_payload(cls, payload, serializer=default_serializer):
+    def unpack(cls, block_blob: bytes, serializer) -> PlexusBlock:
+        payload = serializer.ez_unpack_serializables([BlockPayload], block_blob)
+        return PlexusBlock.from_payload(payload[0], serializer)
+
+    @classmethod
+    def from_payload(cls, payload: BlockPayload, serializer=default_serializer) -> PlexusBlock:
         """
         Create a block according to a given payload and serializer.
         This method can be used when receiving a block from the network.
@@ -236,14 +250,14 @@ class PlexusBlock(object):
 
     @classmethod
     def create(
-        cls,
-        block_type: bytes,
-        transaction: bytes,
-        database: BaseDB,
-        public_key: bytes,
-        com_id: bytes = None,
-        com_links: Links = None,
-        pers_links: Links = None,
+            cls,
+            block_type: bytes,
+            transaction: bytes,
+            database: BaseDB,
+            public_key: bytes,
+            com_id: bytes = None,
+            com_links: Links = None,
+            pers_links: Links = None,
     ):
         """
         Create PlexusBlock wrt local database knowledge.
@@ -331,7 +345,7 @@ class PlexusBlock(object):
             except PackError as _:
                 pck = None
             if pck is None or not self.crypto.is_valid_signature(
-                self.crypto.key_from_public_bin(self.public_key), pck, self.signature
+                    self.crypto.key_from_public_bin(self.public_key), pck, self.signature
             ):
                 return False
         return True

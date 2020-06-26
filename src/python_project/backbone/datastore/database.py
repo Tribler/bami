@@ -28,7 +28,7 @@ class BaseDB(ABC, Notifier):
         pass
 
     @abstractmethod
-    def add_block(self, block: Any, block_serializer) -> None:
+    def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
         pass
 
     @abstractmethod
@@ -47,6 +47,10 @@ class BaseDB(ABC, Notifier):
     @property
     @abstractmethod
     def block_store(self) -> BaseBlockStore:
+        pass
+
+    @abstractmethod
+    def has_block(self, block_hash: bytes) -> bool:
         pass
 
     def reconcile(self, chain_id: bytes, frontier: Frontier) -> FrontierDiff:
@@ -127,6 +131,9 @@ class DBManager(BaseDB):
             return self.block_store.get_tx_by_hash(hash_val)
         else:
             return None
+
+    def has_block(self, block_hash: bytes) -> bool:
+        return self.block_store.get_block_by_hash(block_hash) is not None
 
     def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
 
