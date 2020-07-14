@@ -9,10 +9,16 @@ from python_project.backbone.datastore.chain_store import (
     BaseChainFactory,
 )
 from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.datastore.utils import Dot, Links
+from python_project.backbone.datastore.utils import Dot, Links, ShortKey
 
 
 class MockBlockStore(BaseBlockStore):
+    def add_extra(self, block_hash: bytes, extra: bytes) -> None:
+        pass
+
+    def get_extra(self, block_hash: bytes) -> Optional[bytes]:
+        pass
+
     def close(self) -> None:
         pass
 
@@ -36,8 +42,19 @@ class MockBlockStore(BaseBlockStore):
 
 
 class MockDBManager(BaseDB):
-    def has_block(self, block_hash: bytes) -> bool:
+    def get_last_reconcile_point(self, chain_id: bytes, peer_id: bytes) -> int:
         pass
+
+    def set_last_reconcile_point(
+        self, chain_id: bytes, peer_id: bytes, last_point: int
+    ) -> None:
+        pass
+
+    def get_extra_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
+        pass
+
+    def has_block(self, block_hash: bytes) -> bool:
+        return False
 
     def get_block_blobs_by_frontier_diff(
         self, chain_id: bytes, frontier_diff: FrontierDiff
@@ -69,6 +86,9 @@ class MockDBManager(BaseDB):
 
 
 class MockChain(BaseChain):
+    def get_all_short_hash_by_seq_num(self, seq_num: int) -> Iterable[ShortKey]:
+        pass
+
     def get_dots_by_seq_num(self, seq_num: int) -> Iterable[Dot]:
         pass
 
@@ -77,7 +97,7 @@ class MockChain(BaseChain):
     ) -> Dot:
         pass
 
-    def reconcile(self, frontier: Frontier) -> FrontierDiff:
+    def reconcile(self, frontier: Frontier, lrp: int = None) -> FrontierDiff:
         pass
 
     @property

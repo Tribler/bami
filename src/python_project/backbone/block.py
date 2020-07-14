@@ -213,12 +213,16 @@ class PlexusBlock(object):
         )[0]
 
     @classmethod
-    def unpack(cls, block_blob: bytes, serializer) -> PlexusBlock:
+    def unpack(
+        cls, block_blob: bytes, serializer: Any = default_serializer
+    ) -> PlexusBlock:
         payload = serializer.ez_unpack_serializables([BlockPayload], block_blob)
         return PlexusBlock.from_payload(payload[0], serializer)
 
     @classmethod
-    def from_payload(cls, payload: BlockPayload, serializer=default_serializer) -> PlexusBlock:
+    def from_payload(
+        cls, payload: BlockPayload, serializer=default_serializer
+    ) -> PlexusBlock:
         """
         Create a block according to a given payload and serializer.
         This method can be used when receiving a block from the network.
@@ -250,14 +254,14 @@ class PlexusBlock(object):
 
     @classmethod
     def create(
-            cls,
-            block_type: bytes,
-            transaction: bytes,
-            database: BaseDB,
-            public_key: bytes,
-            com_id: bytes = None,
-            com_links: Links = None,
-            pers_links: Links = None,
+        cls,
+        block_type: bytes,
+        transaction: bytes,
+        database: BaseDB,
+        public_key: bytes,
+        com_id: bytes = None,
+        com_links: Links = None,
+        pers_links: Links = None,
     ):
         """
         Create PlexusBlock wrt local database knowledge.
@@ -331,7 +335,7 @@ class PlexusBlock(object):
     def block_invariants_valid(self) -> bool:
         """Verify that block is valid wrt block invariants"""
         # 1. Sequence number should not be prior to genesis
-        if self.sequence_number < GENESIS_SEQ or self.com_seq_num < GENESIS_SEQ:
+        if self.sequence_number < GENESIS_SEQ and self.com_seq_num < GENESIS_SEQ:
             return False
         # 2. Timestamp should be non negative
         if self.timestamp < 0:
@@ -345,7 +349,7 @@ class PlexusBlock(object):
             except PackError as _:
                 pck = None
             if pck is None or not self.crypto.is_valid_signature(
-                    self.crypto.key_from_public_bin(self.public_key), pck, self.signature
+                self.crypto.key_from_public_bin(self.public_key), pck, self.signature
             ):
                 return False
         return True

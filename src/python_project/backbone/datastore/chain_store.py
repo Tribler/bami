@@ -1,6 +1,6 @@
 import threading
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Set, Any, List, Iterable
+from typing import Tuple, Optional, Set, List, Iterable
 
 import cachetools
 from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
@@ -28,7 +28,10 @@ class BaseChain(ABC):
         pass
 
     @abstractmethod
-    def reconcile(self, frontier: Frontier) -> FrontierDiff:
+    def reconcile(
+        self, frontier: Frontier, last_reconcile_point: int = None
+    ) -> FrontierDiff:
+        """Reconcile with frontier wrt to last reconciled sequence number"""
         pass
 
     @property
@@ -53,6 +56,10 @@ class BaseChain(ABC):
     def get_dots_by_seq_num(self, seq_num: int) -> Iterable[Dot]:
         pass
 
+    @abstractmethod
+    def get_all_short_hash_by_seq_num(self, seq_num: int) -> Optional[Set[ShortKey]]:
+        pass
+
 
 class BaseChainFactory(ABC):
     @abstractmethod
@@ -61,13 +68,7 @@ class BaseChainFactory(ABC):
 
 
 class Chain(BaseChain):
-    def get_dots_by_seq_num(self, seq_num: int) -> Optional[Iterable[Dot]]:
-        if not self.versions.get(seq_num):
-            return None
-        for k in self.versions.get(seq_num):
-            yield Dot((seq_num, k))
-
-    def __init__(self, cache_num=10_000):
+    def __init__(self, cache_num=10_000, max_extra_dots=5):
         """DAG-Chain of one community based on in-memory dicts.
 
         Args:
@@ -92,10 +93,21 @@ class Chain(BaseChain):
         self.const_terminal = self.terminal
 
         self.max_known_seq_num = 0
+        self.max_extra_dots = max_extra_dots
+
         # Cache to speed up bfs on links
         self.term_cache = cachetools.LRUCache(cache_num)
 
         self.lock = threading.Lock()
+
+    def get_all_short_hash_by_seq_num(self, seq_num: int) -> Optional[Set[ShortKey]]:
+        return self.versions.get(seq_num)
+
+    def get_dots_by_seq_num(self, seq_num: int) -> Optional[Iterable[Dot]]:
+        if not self.versions.get(seq_num):
+            return None
+        for k in self.versions.get(seq_num):
+            yield Dot((seq_num, k))
 
     @property
     def consistent_terminal(self) -> Links:
@@ -316,23 +328,17 @@ class Chain(BaseChain):
             return []
 
     @property
-    def terminal_bits(self):
-        term_bits = []
-        for dot in self.terminal:
-            term_bits.append(dot in self.const_terminal)
-        return tuple(term_bits)
-
-    @property
     def frontier(self) -> Frontier:
         with self.lock:
             return Frontier(
                 self.terminal,
                 ranges(self.holes),
                 Links(tuple(sorted(self.inconsistencies))),
-                self.terminal_bits,
             )
 
-    def reconcile(self, frontier: Frontier) -> FrontierDiff:
+    def reconcile(
+        self, frontier: Frontier, last_reconcile_point: int = None
+    ) -> FrontierDiff:
 
         f_holes = expand_ranges(frontier.holes)
         max_term_seq = max(frontier.terminal)[0]
@@ -353,6 +359,7 @@ class Chain(BaseChain):
             if s in self.versions and h not in self.versions[s]
         }
 
+        # Check if peer has block that cover your inconsistencies
         for i in self.inconsistencies:
             for t in self.__calc_terminal(Links((i,))):
                 if (
@@ -362,9 +369,21 @@ class Chain(BaseChain):
                 ):
                     conflicts.add(i)
 
-        conflicts = Links(tuple(conflicts))
-
-        return FrontierDiff(missing, conflicts)
+        # from last reconcile point to
+        if not last_reconcile_point:
+            last_reconcile_point = 0
+        extra_dots = {}
+        for c in conflicts:
+            # TODO: revisit this. How to choose the 'from' sequence number
+            last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
+            est_diff = c[0] - last_point
+            mod_blk = est_diff // self.max_extra_dots
+            mod_blk = mod_blk + 1 if not mod_blk else mod_blk
+            extra_dots[c] = {
+                k: tuple(self.versions.get(k))
+                for k in range(last_point + mod_blk, c[0], mod_blk)
+            }
+        return FrontierDiff(missing, extra_dots)
 
 
 class ChainFactory(BaseChainFactory):

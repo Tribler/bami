@@ -214,35 +214,6 @@ class TestChainBlock:
         blk2 = PlexusBlock.unpack(blk_bytes, blk.serializer)
         assert blk == blk2
 
-    @pytest.mark.skip
-    def test_iter(self):
-        """
-        Check that the iterator of a Block has all of the required keys without duplicates.
-        """
-        block = TestBlock()
-        block_keys = []
-        for field in iter(block):
-            block_keys.append(field[0])
-        expected_keys = {
-            "public_key",
-            "transaction",
-            "hash",
-            "timestamp",
-            "link_sequence_number",
-            "insert_time",
-            "previous_hash",
-            "sequence_number",
-            "signature",
-            "link_public_key",
-            "type",
-            "transaction_validation_result",
-        }
-        # Check if we have the required keys
-        self.assertSetEqual(set(block_keys) - {"link_key"}, expected_keys)
-        # Check for duplicates
-        self.assertEqual(len(block_keys) - 1, len(expected_keys))
-        self.assertEqual(dict(block)["transaction"]["id"], 42)
-
     def test_hash_function(self):
         """
         Check if the hash() function returns the Block hash.

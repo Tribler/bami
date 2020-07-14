@@ -3,7 +3,7 @@ from asyncio import ensure_future, sleep
 from ipv8.test.base import TestBase
 from python_project.noodle.block import NoodleBlock
 from python_project.noodle.community import NoodleCommunity
-from python_project.noodle.exceptions import (
+from python_project.payment.exceptions import (
     InsufficientBalanceException,
     NoPathFoundException,
 )

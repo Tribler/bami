@@ -1,0 +1,6 @@
+SPEND_TYPE = b"spend"
+MINT_TYPE = b"mint"
+
+
+MINT_VALUE_RANGE = (0, 100)
+MINT_MAX_VALUE = 10 ** 7

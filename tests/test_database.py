@@ -79,9 +79,9 @@ class TestDBManager:
             else None,
         )
 
-        def chain_dots_tester(chain_id, chain_dots):
+        def chain_dots_tester(chain_id, dots):
             assert chain_id in (self.test_block.public_key, self.test_block.com_id)
-            assert chain_dots == ["dot1", "dot2"]
+            assert dots == ["dot1", "dot2"]
 
         self.dbms.add_observer(ChainTopic.ALL, chain_dots_tester)
         self.dbms.add_block(self.block_blob, self.test_block)
@@ -100,10 +100,44 @@ class TestDBManager:
         # init chain
         chain_id = self.chain_id
         self.dbms.chains[chain_id] = MockChain()
-        frontier_diff = FrontierDiff(Ranges(((1, 2),)), Links(((1, ShortKey("efef")),)))
+        frontier_diff = FrontierDiff(Ranges(((1, 2),)), {(1, ShortKey("efef")): {}})
 
         blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
         assert len(list(blobs)) == 5
+
+    def test_blocks_frontier_with_extra_request(self, monkeypatch, std_vals):
+        monkeypatch.setattr(
+            MockBlockStore, "get_hash_by_dot", lambda _, dot_bytes: self.test_hash
+        )
+        monkeypatch.setattr(
+            MockBlockStore, "get_block_by_hash", lambda _, blob_hash: self.block_blob
+        )
+        monkeypatch.setattr(
+            MockChain, "get_dots_by_seq_num", lambda _, seq_num: ("dot1", "dot2")
+        )
+
+        local_vers = {2: {"ef1"}, 7: {"ef1"}}
+
+        monkeypatch.setattr(
+            MockChain,
+            "get_all_short_hash_by_seq_num",
+            lambda _, seq_num: local_vers.get(seq_num),
+        )
+        monkeypatch.setattr(
+            MockChain,
+            "get_next_links",
+            lambda _, dot: ((dot[0] + 1, ShortKey("efef")),),
+        )
+
+        # init chain
+        chain_id = self.chain_id
+        self.dbms.chains[chain_id] = MockChain()
+        frontier_diff = FrontierDiff(
+            (), {(10, ShortKey("efef")): {2: ("ef1",), 7: ("ef2",)}}
+        )
+
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
+        assert len(list(blobs)) == 4
 
     def test_blocks_by_frontier_diff_no_seq_num(self, monkeypatch, std_vals):
         monkeypatch.setattr(
@@ -117,7 +151,7 @@ class TestDBManager:
         # init chain
         chain_id = self.chain_id
         self.dbms.chains[chain_id] = MockChain()
-        frontier_diff = FrontierDiff(Ranges(((1, 2),)), Links(()))
+        frontier_diff = FrontierDiff(Ranges(((1, 2),)), {})
 
         blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
         assert len(list(blobs)) == 0
@@ -136,7 +170,7 @@ class TestDBManager:
         # init chain
         chain_id = self.chain_id
         # self.dbms.chains[chain_id] = MockChain()
-        frontier_diff = FrontierDiff(Ranges(((1, 1),)), Links(()))
+        frontier_diff = FrontierDiff(Ranges(((1, 1),)), {})
 
         blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
         assert len(list(blobs)) == 0

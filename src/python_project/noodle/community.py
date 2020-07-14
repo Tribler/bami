@@ -13,7 +13,7 @@ from threading import RLock
 import networkx as nx
 
 import orjson as json
-from orjson import JSONDecodeError, JSONEncodeError
+from orjson import JSONDecodeError
 
 from python_project.noodle.block import (
     ANY_COUNTERPARTY_PK,
@@ -34,11 +34,10 @@ from python_project.noodle.caches import (
     AuditRequestCache,
 )
 from python_project.noodle.database import NoodleDB
-from python_project.noodle.exceptions import (
+from python_project.payment.exceptions import (
     InsufficientBalanceException,
     NoPathFoundException,
 )
-from python_project.noodle.listener import BlockListener
 from python_project.noodle.memory_database import NoodleMemoryDatabase
 from python_project.noodle.payload import (
     HalfBlockPairPayload,
@@ -199,135 +198,6 @@ class NoodleCommunity(Community):
             if self.persistence.get_balance(my_id) <= 0:
                 self.mint(self.settings.initial_mint_value)
 
-    def transfer(
-        self, dest_peer, spend_value, double_spend_peer=None, double_spend_value=None
-    ):
-        if self.get_my_balance() < spend_value and not self.settings.is_hiding:
-            return fail(InsufficientBalanceException("Insufficient balance."))
-
-        future = Future()
-        self.transfer_queue.put_nowait(
-            (future, dest_peer, spend_value, double_spend_peer, double_spend_value)
-        )
-        return future
-
-    async def process_transfer_queue_item(
-        self, future, dest_peer, spend_value, double_spend_peer, double_spend_value
-    ):
-        self._logger.debug(
-            "Making spend to peer %s (value: %f)", dest_peer, spend_value
-        )
-        if dest_peer == self.my_peer:
-            # We are transferring something to ourselves
-            my_pk = self.my_peer.public_key.key_to_bin()
-            my_id = self.persistence.key_to_id(my_pk)
-            peer_id = self.persistence.key_to_id(self.my_peer.public_key.key_to_bin())
-            pw_total = self.persistence.get_total_pairwise_spends(my_id, peer_id)
-            tx = {"value": spend_value, "total_spend": pw_total + spend_value}
-
-            block_tup = await self.sign_block(
-                self.my_peer,
-                self.my_peer.public_key.key_to_bin(),
-                block_type=b"spend",
-                transaction=tx,
-            )
-            block_tup = await self.sign_block(
-                self.my_peer,
-                self.my_peer.public_key.key_to_bin(),
-                block_type=b"claim",
-                linked=block_tup[0],
-            )
-            future.set_result(block_tup)
-        else:
-            try:
-                next_hop_peer, tx = self.prepare_spend_transaction(
-                    dest_peer.public_key.key_to_bin(), spend_value
-                )
-                if next_hop_peer != dest_peer:
-                    # Multi-hop payment, add condition + nonce
-                    nonce = self.persistence.get_new_peer_nonce(
-                        dest_peer.public_key.key_to_bin()
-                    )
-                    condition = hexlify(dest_peer.public_key.key_to_bin()).decode()
-                    tx.update({"nonce": nonce, "condition": condition})
-
-                block_future = ensure_future(
-                    self.sign_block(
-                        next_hop_peer,
-                        next_hop_peer.public_key.key_to_bin(),
-                        block_type=b"spend",
-                        transaction=tx,
-                    )
-                )
-
-                if double_spend_peer:
-                    # Also make a double spend with another peer
-                    my_pk = self.my_peer.public_key.key_to_bin()
-                    my_id = self.persistence.key_to_id(my_pk)
-                    peer_id = self.persistence.key_to_id(
-                        double_spend_peer.public_key.key_to_bin()
-                    )
-                    pw_total = self.persistence.get_total_pairwise_spends(
-                        my_id, peer_id
-                    )
-                    if not double_spend_value:
-                        double_spend_value = spend_value
-                    tx = {
-                        "value": double_spend_value,
-                        "total_spend": pw_total + spend_value,
-                    }
-                    blk = self.persistence.get_latest(my_pk)
-                    self.logger.info(
-                        "Making double spend of %f with peer %s!",
-                        double_spend_value,
-                        double_spend_peer,
-                    )
-
-                    ensure_future(
-                        self.sign_block(
-                            double_spend_peer,
-                            double_spend_peer.public_key.key_to_bin(),
-                            block_type=b"spend",
-                            transaction=tx,
-                            double_spend_seq=blk.sequence_number,
-                        )
-                    )
-
-                result = await block_future
-                future.set_result(result)
-            except Exception as exc:
-                self.logger.error(
-                    "Exception occurred when processing transfer item: %s", exc
-                )
-                future.set_exception(exc)
-
-    async def evaluate_transfer_queue(self):
-        while True:
-            block_info = await self.transfer_queue.get()
-            (
-                future,
-                dest_peer,
-                spend_value,
-                double_spend_seq,
-                double_spend_value,
-            ) = block_info
-            _ = ensure_future(
-                self.process_transfer_queue_item(
-                    future, dest_peer, spend_value, double_spend_seq, double_spend_value
-                )
-            )
-            await sleep(self.settings.transfer_queue_interval / 1000)
-
-    def start_making_random_transfers(self):
-        """
-        Start to make random transfers to other peers.
-        """
-        self.transfer_lc = self.register_task(
-            "transfer_lc",
-            self.make_random_transfer,
-            interval=self.settings.transfer_interval,
-        )
-
     def get_peer(self, pub_key):
         for peer in self.get_peers():
             if peer.public_key.key_to_bin() == pub_key:
@@ -362,19 +232,6 @@ class NoodleCommunity(Community):
 
         if requests_sent == 0:
             self._logger.info("No minters available!")
-
-    def get_my_balance(self):
-        my_pk = self.my_peer.public_key.key_to_bin()
-        my_id = self.persistence.key_to_id(my_pk)
-        return self.persistence.get_balance(my_id)
-
-    def get_eligible_payment_peers(self):
-        peers = self.get_peers()
-        return [
-            peer
-            for peer in peers
-            if hexlify(peer.public_key.key_to_bin()) not in self.settings.crawlers
-        ]
 
     async def ping(self, peer):
         self.logger.debug("Pinging peer %s", peer)
@@ -418,26 +275,6 @@ class NoodleCommunity(Community):
         self.logger.debug("Got ping-response from %s", peer.address)
         cache = self.request_cache.pop("ping", payload.identifier)
         cache.future.set_result(None)
-
-    async def make_random_transfer(self):
-        """
-        Transfer funds to a random peer.
-        """
-        if self.get_my_balance() <= 0:
-            self.mint()
-            return
-
-        if not self.get_eligible_payment_peers():
-            self._logger.info("No peers to make a payment to.")
-            return
-
-        rand_peer = random.choice(self.get_peers())
-
-        try:
-            await self.ping(rand_peer)
-            await self.transfer(rand_peer, 1)
-        except RuntimeError as exc:
-            self._logger.info("Failed to make payment to peer: %s", str(exc))
 
     def init_mem_db_flush(self, flush_time):
         if not self.mem_db_flush_lc:
@@ -510,38 +347,6 @@ class NoodleCommunity(Community):
                         )
                         self.known_graph.remove_edge(source, random_path[1])
             return p
-
-    def mint(self, value=None):
-        self._logger.info("Minting initial value...")
-        if not value:
-            value = self.settings.initial_mint_value
-        mint = self.prepare_mint_transaction(value)
-        return self.self_sign_block(block_type=b"claim", transaction=mint)
-
-    def prepare_spend_transaction(self, pub_key, spend_value, **kwargs):
-        """
-        Prepare a spend transaction.
-        First check your own balance. Next, find a path to the target peer.
-        """
-        my_pk = self.my_peer.public_key.key_to_bin()
-        my_id = self.persistence.key_to_id(my_pk)
-
-        peer = self.get_hop_to_peer(pub_key)
-        if not peer:
-            raise NoPathFoundException("No path to target peer found.")
-        peer_id = self.persistence.key_to_id(peer.public_key.key_to_bin())
-        pw_total = self.persistence.get_total_pairwise_spends(my_id, peer_id)
-        added = {"value": spend_value, "total_spend": pw_total + spend_value}
-        added.update(**kwargs)
-        return peer, added
-
-    def prepare_mint_transaction(self, value):
-        minter = self.persistence.key_to_id(EMPTY_PK)
-        pk = self.my_peer.public_key.key_to_bin()
-        my_id = self.persistence.key_to_id(pk)
-        total = self.persistence.get_total_pairwise_spends(minter, my_id)
-        transaction = {"value": value, "mint_proof": True, "total_spend": total + value}
-        return transaction
 
     def do_db_cleanup(self):
         """

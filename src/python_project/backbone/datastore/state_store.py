@@ -72,12 +72,6 @@ class DeltaBasedState(ABC):
         pass
 
 
-class BaseStateStore(ABC):
-    @abstractmethod
-    def add_block(self, block: PlexusBlock) -> bool:
-        pass
-
-
 class StateStore(ABC):
     @abstractmethod
     def get_last_dot(self):
@@ -102,6 +96,10 @@ class ApplyMode(Enum):
     LINEAR_ORDER = 3
 
 
+class BaseStateStore(ABC):
+    pass
+
+
 class State:
     def can_be_applied(self, dot: Dot) -> bool:
         """Can the transaction be applied (consistency rules)"""
@@ -112,13 +110,8 @@ class State:
         tx_blob = self.back_db.get_tx_blob_by_dot(chain_id, dot)
         return decode_raw(tx_blob) if tx_blob else None
 
-    def apply_tx(self, chain_id: bytes, prev_links: Links, dot: Dot, tx: Any) -> bool:
-        """Return false if the transaction is not applied, rejected because of validity rules violation"""
-        # Add your logic here
-        return True
-
     def __init__(self, db_manager: BaseDB) -> None:
-        self.back_db = db_manager
+        self.back_db: BaseDB = db_manager
 
     def get_last_state_blob(self) -> Optional[bytes]:
         """
@@ -130,7 +123,13 @@ class State:
     def add_state_vote(self, links: Links, state_vote: StateVote) -> None:
         pass
 
-    def receive_chain_dots(self, chain_id: bytes, chain_dots: List) -> None:
+    def receive_chain_dots(
+        self,
+        chain_id: bytes,
+        chain_dots: List,
+        creator: bytes,
+        is_community_chain: bool,
+    ) -> None:
         if not chain_dots or not chain_id:
             return
 

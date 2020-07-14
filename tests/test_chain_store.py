@@ -73,9 +73,6 @@ class TestFrontiers:
         assert len(frontier.terminal) == 1
         assert frontier.terminal == GENESIS_LINK
 
-        assert len(frontier.terminal_bits) == 1
-        assert frontier.terminal_bits == (True,)
-
     def test_insert_no_conflict(self, create_batches, insert_function):
         chain = Chain()
         batches = create_batches(1, 10)
@@ -87,9 +84,6 @@ class TestFrontiers:
 
         assert len(frontier.terminal) == 1
         assert all(10 in term for term in frontier.terminal)
-
-        assert len(frontier.terminal_bits) == 1
-        assert frontier.terminal_bits == (True,)
 
     def test_insert_with_one_hole(self, create_batches, insert_function):
         chain = Chain()
@@ -109,9 +103,6 @@ class TestFrontiers:
 
         assert front.terminal[0][0] == 4 and front.terminal[1][0] == 10
 
-        assert len(front.terminal_bits) == len(front.terminal)
-        assert front.terminal_bits == (True, False)
-
     def test_insert_seq_holes(self, create_batches, insert_function):
         chain = Chain()
         batches = create_batches(1, 100)
@@ -130,9 +121,6 @@ class TestFrontiers:
 
         assert len(front.terminal) == 2
         assert front.terminal[0][0] == 10 and front.terminal[1][0] == 100
-
-        assert len(front.terminal_bits) == len(front.terminal)
-        assert front.terminal_bits == (True, False)
 
     def test_insert_multi_holes(self, create_batches, insert_function):
         chain = Chain()
@@ -158,9 +146,6 @@ class TestFrontiers:
             and front.terminal[1][0] == 50
             and front.terminal[2][0] == 100
         )
-
-        assert len(front.terminal_bits) == len(front.terminal)
-        assert front.terminal_bits == (True, False, False)
 
     def test_insert_conflicts_no_holes(self, create_batches, insert_function):
         chain = Chain()
@@ -274,6 +259,28 @@ class TestFrontierReconciliation:
         assert len(front_diff.conflicts) == 2
         assert all(k[0] == 100 for k in front_diff.conflicts)
         assert not front_diff.missing
+
+    def test_past_conflict(self, create_batches, insert_function):
+        chain = Chain(max_extra_dots=2)
+        chain2 = Chain()
+        batches = create_batches(2, 50)
+
+        wrap_return(insert_function(chain, batches[0]))
+        wrap_return(insert_function(chain2, batches[0]))
+        front_diff = chain.reconcile(chain2.frontier)
+        assert not front_diff.missing
+        assert not front_diff.conflicts
+
+        # last reconcile point becomes 50
+
+        wrap_return(insert_function(chain2, batches[1][:10]))
+        front_diff = chain.reconcile(chain2.frontier, 50)
+
+        assert not front_diff.missing
+        # One conflict found
+        assert len(front_diff.conflicts) == 1
+        conf_dot = list(front_diff.conflicts)[0]
+        assert len(front_diff.conflicts[conf_dot]) <= chain.max_extra_dots
 
 
 class TestNextLinkIterator:
@@ -419,6 +426,7 @@ class TestNewConsistentDots:
         assert min(vals)[0] == 7 and max(vals)[0] == 20
 
         for i in range(1, 21):
+            print(chain.get_all_short_hash_by_seq_num(i))
             assert len(list(chain.get_dots_by_seq_num(i))) == 2
 
     def test_insert_with_merge_block(self, create_batches, insert_function):

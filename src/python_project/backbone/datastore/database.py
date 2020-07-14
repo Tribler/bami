@@ -2,6 +2,7 @@
 This file contains everything related to persistence for TrustChain.
 """
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from enum import Enum
 from typing import Optional, Any, Iterable
 
@@ -39,6 +40,10 @@ class BaseDB(ABC, Notifier):
     def get_tx_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
         pass
 
+    @abstractmethod
+    def get_extra_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
+        pass
+
     @property
     @abstractmethod
     def chain_factory(self) -> BaseChainFactory:
@@ -53,14 +58,30 @@ class BaseDB(ABC, Notifier):
     def has_block(self, block_hash: bytes) -> bool:
         pass
 
-    def reconcile(self, chain_id: bytes, frontier: Frontier) -> FrontierDiff:
-        """Reconcile the frontier. If chain does not exist - will create chain and reconcile."""
+    @abstractmethod
+    def get_last_reconcile_point(self, chain_id: bytes, peer_id: bytes) -> int:
+        pass
+
+    @abstractmethod
+    def set_last_reconcile_point(
+        self, chain_id: bytes, peer_id: bytes, last_point: int
+    ) -> None:
+        pass
+
+    def reconcile(
+        self, chain_id: bytes, frontier: Frontier, peer_id: bytes
+    ) -> FrontierDiff:
+        """Reconcile the frontier from peer. If chain does not exist - will create chain and reconcile."""
         chain = self.get_chain(chain_id)
-        if chain:
-            return chain.reconcile(frontier)
-        else:
+        if not chain:
             chain = self.chain_factory.create_chain()
-            return chain.reconcile(frontier)
+        res = chain.reconcile(
+            frontier, self.get_last_reconcile_point(chain_id, peer_id)
+        )
+        if res.is_empty():
+            # The frontiers are same => update reconciliation point
+            self.set_last_reconcile_point(chain_id, peer_id, max(frontier.terminal)[0])
+        return res
 
     @abstractmethod
     def close(self) -> None:
@@ -75,22 +96,61 @@ class BaseDB(ABC, Notifier):
 
 class ChainTopic(Enum):
     ALL = 1
+    PERSONAL = 2
+    GROUP = 3
 
 
 class DBManager(BaseDB):
+    def __init__(self, chain_factory: BaseChainFactory, block_store: BaseBlockStore):
+        super().__init__()
+        self._chain_factory = chain_factory
+        self._block_store = block_store
+
+        self.chains = dict()
+        self.last_reconcile_seq_num = defaultdict(lambda: defaultdict(int))
+
+    def get_last_reconcile_point(self, chain_id: bytes, peer_id: bytes) -> Links:
+        return self.last_reconcile_seq_num[chain_id][peer_id]
+
+    def set_last_reconcile_point(
+        self, chain_id: bytes, peer_id: bytes, last_point: int
+    ) -> None:
+        self.last_reconcile_seq_num[chain_id][peer_id] = last_point
+
     def get_block_blobs_by_frontier_diff(
         self, chain_id: bytes, frontier_diff: FrontierDiff
     ) -> Iterable[bytes]:
 
         chain = self.get_chain(chain_id)
         if chain:
-            print(chain)
             for b_i in expand_ranges(frontier_diff.missing):
                 # Return all with a sequence number
                 for dot in chain.get_dots_by_seq_num(b_i):
                     yield self.get_block_blob_by_dot(chain_id, dot)
-            for dot in frontier_diff.conflicts:
-                yield self.get_block_blob_by_dot(chain_id, dot)
+            for conf_dot, conf_dict in frontier_diff.conflicts.items():
+                current_point = []
+                for sn, hash_vals in conf_dict.items():
+                    local_val = chain.get_all_short_hash_by_seq_num(sn)
+                    if not local_val:
+                        # TODO: add reaction if local value is empty
+                        continue
+                    diff_val = local_val - set(hash_vals)
+                    if diff_val:
+                        # First inconsistency point met
+                        current_point = [Dot((sn, k)) for k in diff_val]
+                        break
+                else:
+                    # TODO: Add reaction if no inconsistency exists
+                    yield self.get_block_blob_by_dot(chain_id, conf_dot)
+                    continue
+                while (
+                    conf_dot not in current_point
+                    and max(current_point)[0] < conf_dot[0]
+                ):
+                    for d in current_point:
+                        yield self.get_block_blob_by_dot(chain_id, d)
+                        current_point = chain.get_next_links(d)
+                yield self.get_block_blob_by_dot(chain_id, conf_dot)
         else:
             return None
 
@@ -104,14 +164,6 @@ class DBManager(BaseDB):
     @property
     def block_store(self) -> BaseBlockStore:
         return self._block_store
-
-    def __init__(self, chain_factory: BaseChainFactory, block_store: BaseBlockStore):
-        super().__init__()
-        self._chain_factory = chain_factory
-        self._block_store = block_store
-
-        self.chains = dict()
-        self.last_dots = dict()
 
     def get_chain(self, chain_id: bytes) -> Optional[BaseChain]:
         return self.chains.get(chain_id)
@@ -132,6 +184,14 @@ class DBManager(BaseDB):
         else:
             return None
 
+    def get_extra_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:
+        dot_id = chain_id + encode_raw(block_dot)
+        hash_val = self.block_store.get_hash_by_dot(dot_id)
+        if hash_val:
+            return self.block_store.get_extra(hash_val)
+        else:
+            return None
+
     def has_block(self, block_hash: bytes) -> bool:
         return self.block_store.get_block_by_hash(block_hash) is not None
 
@@ -143,6 +203,7 @@ class DBManager(BaseDB):
         # 1. Add block blob and transaction blob to the block storage
         self.block_store.add_block(block_hash, block_blob)
         self.block_store.add_tx(block_hash, block_tx)
+        self.block_store.add_extra(block_hash, encode_raw({"type": block.type}))
 
         # 2. There are two chains: personal and community chain
         pers = block.public_key
@@ -162,7 +223,11 @@ class DBManager(BaseDB):
         # TODO: add more chain topic
 
         # Notify subs of the personal chain
-        self.notify(ChainTopic.ALL, pers, pers_dots_list)
+        self.notify(ChainTopic.ALL, chain_id=pers, dots=pers_dots_list)
+        self.notify(ChainTopic.PERSONAL, chain_id=pers, dots=pers_dots_list)
+
+        if pers != com:
+            self.notify(pers, chain_id=pers, dots=pers_dots_list)
 
         # 2.2: add block to the community chain
 
@@ -177,4 +242,6 @@ class DBManager(BaseDB):
             full_dot_id = com + encode_raw(com_block_dot)
             self.block_store.add_dot(full_dot_id, block_hash)
 
-            self.notify(ChainTopic.ALL, com, com_dots_list)
+            self.notify(ChainTopic.ALL, chain_id=com, dots=com_dots_list)
+            self.notify(ChainTopic.GROUP, chain_id=com, dots=com_dots_list)
+            self.notify(com, chain_id=com, dots=com_dots_list)

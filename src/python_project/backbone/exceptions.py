@@ -1,6 +1,14 @@
-class InsufficientBalanceException(Exception):
+class DatabaseDesynchronizedException(Exception):
     pass
 
 
-class NoPathFoundException(Exception):
+class InvalidTransactionFormatException(Exception):
+    pass
+
+
+class UnavailableIPv8Exception(Exception):
+    pass
+
+
+class InvalidBlockException(Exception):
     pass

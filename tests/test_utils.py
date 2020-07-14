@@ -65,3 +65,20 @@ def test_encode_decode_links(keys_fixture):
     links = Links(((1, shorten(keys_fixture)),))
     raw_bytes = encode_links(links)
     assert decode_links(raw_bytes) == links
+
+
+from decimal import Decimal, Context, getcontext
+
+
+def test_decimal():
+
+    new_con = getcontext()
+    new_con.prec = 4
+    t = Decimal(2.191, new_con)
+    t2 = Decimal(2.11, new_con)
+    print(t + t2)
+    print(float(t - t2))
+
+    l = encode_raw({"value": float(t2)})
+    p = decode_raw(l)
+    print(p)

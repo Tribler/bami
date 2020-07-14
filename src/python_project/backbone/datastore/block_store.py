@@ -24,6 +24,14 @@ class BaseBlockStore(ABC):
         pass
 
     @abstractmethod
+    def add_extra(self, block_hash: bytes, extra: bytes) -> None:
+        pass
+
+    @abstractmethod
+    def get_extra(self, block_hash: bytes) -> Optional[bytes]:
+        pass
+
+    @abstractmethod
     def get_hash_by_dot(self, dot: bytes) -> Optional[bytes]:
         pass
 
@@ -45,6 +53,7 @@ class LMDBLockStore(BaseBlockStore):
         self.blocks = self.env.open_db(key=b"blocks")
         self.txs = self.env.open_db(key=b"txs")
         self.dots = self.env.open_db(key=b"dots")
+        self.extra = self.env.open_db(key=b"extra")
         # add sub dbs if required
 
     def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
@@ -72,6 +81,15 @@ class LMDBLockStore(BaseBlockStore):
     def get_hash_by_dot(self, dot: bytes) -> Optional[bytes]:
         with self.env.begin() as txn:
             val = txn.get(dot, db=self.dots)
+        return val
+
+    def add_extra(self, block_hash: bytes, extra: bytes) -> None:
+        with self.env.begin(write=True) as txn:
+            txn.put(block_hash, extra, db=self.extra)
+
+    def get_extra(self, block_hash: bytes) -> Optional[bytes]:
+        with self.env.begin() as txn:
+            val = txn.get(block_hash, db=self.extra)
         return val
 
     def close(self) -> None:

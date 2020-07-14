@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod, ABCMeta
 from random import random
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Optional
 
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
@@ -18,7 +18,6 @@ from python_project.backbone.payload import (
     BlocksRequestPayload,
     RawBlockPayload,
 )
-from python_project.backbone.state import StateRoutines
 from python_project.backbone.sub_community import SubCommunityRoutines
 
 
@@ -61,16 +60,6 @@ class GossipRoutines(ABC):
         pass
 
 
-# TODO: add extended frontier exchange? - Vote exchange?
-"""
-            if state_blob:
-                # Sign state/ or get latest sign
-                state_vote = self.sign_state(state_blob)
-                # Add your signature to the local storage - state_store - store vote
-                packet = ExtendedFrontierPayload(subcom_id, frontier.to_bytes(), *state_vote)
-"""
-
-
 class GossipFrontierSyncCache(NumberCache):
     """
     This cache works as queue that tracks outstanding sync requests with other peers in a community
@@ -95,12 +84,13 @@ class GossipFrontierSyncCache(NumberCache):
         # TODO: add verification for the frontier. Hiding transactions?
         self.working_front[peer.mid] = frontier
 
-    def process_working_front(self) -> List[Tuple[Peer, FrontierDiff]]:
+    def process_working_front(self) -> List[Optional[Tuple[Peer, FrontierDiff]]]:
         candidate = None
         cand_max = 0
 
         for peer, front in self.working_front.items():
-            frontier_diff = self.community.persistence.reconcile(self.chain_id, front)
+            frontier_diff = self.community.persistence.reconcile(self.chain_id,
+                                                                 front, peer.public_key.key_to_bin())
 
             num = len(expand_ranges(frontier_diff.missing)) + len(
                 frontier_diff.conflicts
@@ -119,6 +109,7 @@ class GossipFrontierSyncCache(NumberCache):
                     GossipFrontierSyncCache(self.community, self.chain_id)
                 )
             except RuntimeError:
+                # TODO add logger reaction here
                 pass
 
         # Process received frontiers
@@ -126,26 +117,14 @@ class GossipFrontierSyncCache(NumberCache):
         # Send requests to candidates
         for cand in candidates:
             # Send request to candidate peer
-            self.community.send_packet(
-                cand[0], BlocksRequestPayload(self.chain_id, cand[1].to_bytes())
-            )
-            self.community.request_cache.register_anonymous_task(
-                "add-later", add_later, delay=0.0
-            )
-            if self.community.request_cache.get(
-                self.community.COMMUNITY_CACHE, hex_to_int(self.chain_id)
-            ):
-                self.community.request_cache.pop(
-                    self.community.COMMUNITY_CACHE, hex_to_int(self.chain_id)
+            if cand:
+                self.community.send_packet(
+                    cand[0], BlocksRequestPayload(self.chain_id, cand[1].to_bytes())
                 )
 
 
 class GossipFrontiersMixin(
-    GossipRoutines,
-    MessageStateMachine,
-    CommunityRoutines,
-    StateRoutines,
-    metaclass=ABCMeta,
+    GossipRoutines, MessageStateMachine, CommunityRoutines, metaclass=ABCMeta,
 ):
     COMMUNITY_CACHE = u"gossip_cache"
 
@@ -171,7 +150,7 @@ class GossipFrontiersMixin(
             cache.receive_frontier(peer, frontier)
         else:
             # Create new cache
-            diff = self.persistence.reconcile(chain_id, frontier)
+            diff = self.persistence.reconcile(chain_id, frontier, peer.public_key.key_to_bin())
             if not diff.is_empty():
                 # Request blocks from the peer
                 self.send_packet(peer, BlocksRequestPayload(chain_id, diff.to_bytes()))
@@ -179,7 +158,7 @@ class GossipFrontiersMixin(
 
     @lazy_wrapper(BlocksRequestPayload)
     def received_blocks_request(
-        self, peer: Peer, payload: BlocksRequestPayload
+            self, peer: Peer, payload: BlocksRequestPayload
     ) -> None:
         f_diff = FrontierDiff.from_bytes(payload.frontier_diff)
         chain_id = payload.subcom_id
@@ -190,3 +169,11 @@ class GossipFrontiersMixin(
     def setup_messages(self) -> None:
         self.add_message_handler(FrontierPayload, self.received_frontier)
         self.add_message_handler(BlocksRequestPayload, self.received_blocks_request)
+
+
+class SubComGossipMixin(
+    GossipFrontiersMixin, RandomPeerSelectionStrategy, metaclass=ABCMeta
+):
+    @property
+    def gossip_strategy(self) -> NextPeerSelectionStrategy:
+        return self
