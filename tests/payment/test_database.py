@@ -1,14 +1,14 @@
-from dataclasses import dataclass
 from decimal import Decimal, getcontext
 
 import cachetools
 import pytest
 from python_project.backbone.datastore.utils import (
-    GENESIS_LINK,
-    Dot,
-    Links,
-    encode_raw,
     decode_raw,
+    Dot,
+    encode_raw,
+    GENESIS_LINK,
+    Links,
+    shorten,
 )
 from python_project.payment.database import PaymentState
 
@@ -192,14 +192,14 @@ class TestPaymentState:
         assert v is not None
         assert v[0] == 1
         assert len(v[1]) == 1
-        assert v[1].get(self.spender) == (True, True)
+        assert v[1].get(shorten(self.spender)) == (True, True)
 
         v = self.state.get_closest_peers_status(chain_id, 2)
         assert v is not None
         assert (
             (v[0] == 2)
             and (len(v[1]) == 1)
-            and (v[1].get(self.spender) == (True, True))
+            and (v[1].get(shorten(self.spender)) == (True, True))
         )
 
         v = self.state.get_closest_peers_status(chain_id, 3)
@@ -207,8 +207,8 @@ class TestPaymentState:
         assert (
             v[0] == 3
             and len(v[1]) == 2
-            and (v[1].get(self.spender) == (True, True))
-            and (v[1].get(self.receiver) == (True, True))
+            and (v[1].get(shorten(self.spender)) == (True, True))
+            and (v[1].get(shorten(self.receiver)) == (True, True))
         )
 
         assert v[1] == self.state.get_last_peer_status(chain_id)

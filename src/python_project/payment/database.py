@@ -1,25 +1,27 @@
 from collections import defaultdict
 from decimal import Decimal, getcontext
-from typing import Dict, Optional, Tuple, NewType, Iterable, Set
+from typing import Dict, Iterable, NewType, Optional, Set, Tuple
 
 import cachetools
+
 from python_project.backbone.datastore.utils import (
-    Links,
     Dot,
     GENESIS_DOT,
+    Links,
+    shorten,
     take_hash,
 )
 from python_project.payment.exceptions import (
-    InvalidClaimException,
     InconsistentClaimException,
     InconsistentStateHashException,
+    InvalidClaimException,
 )
 
 ChainState = NewType("ChainState", Dict[bytes, Tuple[bool, bool]])
 
 
 class PaymentState(object):
-    def __init__(self, precision: int = 2) -> None:
+    def __init__(self, precision: int) -> None:
 
         self.precision = precision
         new_con = getcontext()
@@ -62,11 +64,21 @@ class PaymentState(object):
         self.peer_statuses = defaultdict(lambda: cachetools.LRUCache(100))
         self.witness_votes = defaultdict(lambda: cachetools.LRUCache(100))
 
-    def known_chain_minters(self, chain_id: bytes) -> Iterable[bytes]:
+        self.applied_dots = set()
+        self.balance_invariants = defaultdict(lambda: True)
+
+    def get_last_pairwise_links(self, spender: bytes, claimer: bytes) -> Links:
+        return tuple(self.last_spend_values[spender][claimer].keys())
+
+    def known_chain_minters(self, chain_id: bytes) -> Optional[Iterable[bytes]]:
         return self.known_minters.get(chain_id)
 
     def add_known_minters(self, chain_id: bytes, minters: Set[bytes]) -> None:
         self.known_minters[chain_id].update(minters)
+
+    def _check_invariants(self, peer_id: bytes):
+        if self.get_balance(peer_id) < 0:
+            self.balance_invariants[peer_id] = False
 
     def _check_forking(self, peer_id: bytes, personal_links: Links, dot: Dot):
         # Check if is peer forking the chain
@@ -98,6 +110,7 @@ class PaymentState(object):
         self._check_forking(peer_id, prev_links, tx_dot)
         if store_update:
             self._store_status_update(tx_dot, chain_id)
+        self._check_invariants(peer_id)
 
     def apply_spend(
         self,
@@ -112,6 +125,7 @@ class PaymentState(object):
     ) -> None:
         """Apply spend transaction to the state"""
         # apply spend to the personal chain
+        print("Processing spend")
 
         # Iterate through last spend values and sum them up
         full_val = 0
@@ -244,6 +258,9 @@ class PaymentState(object):
             - self.get_total_spend(peer_id)
         )
 
+    def was_balance_negative(self, peer_id: bytes) -> bool:
+        return not self.balance_invariants[peer_id]
+
     def is_chain_forked(self, peer_id: bytes) -> bool:
         return len(self.peer_frontiers[peer_id]) > 1
 
@@ -255,13 +272,13 @@ class PaymentState(object):
         """Get last balance of peers in the community"""
         v = dict()
         for p in self.chain_peers[chain_id]:
-            v[p] = (self.get_balance(p) >= 0, not self.is_chain_forked(p))
-        return v
+            v[shorten(p)] = (self.get_balance(p) >= 0, not self.is_chain_forked(p))
+        return ChainState(v)
 
     def add_witness_vote(
         self, chain_id: bytes, seq_num: int, state_hash: bytes, witness_id: bytes
     ) -> None:
-        prev_values = self.witness_votes[chain_id][seq_num]
+        prev_values = self.witness_votes[chain_id].get(seq_num)
         if not prev_values:
             self.witness_votes[chain_id][seq_num] = defaultdict(lambda: set())
         self.witness_votes[chain_id][seq_num][state_hash].add(witness_id)
@@ -279,7 +296,7 @@ class PaymentState(object):
             raise InconsistentStateHashException(
                 "State hash not equal", state_hash, calc_hash
             )
-        if not self.peer_statuses[chain_id][seq_num]:
+        if not self.peer_statuses[chain_id].get(seq_num):
             self.peer_statuses[chain_id][seq_num] = dict()
         self.peer_statuses[chain_id][seq_num][state_hash] = state
 

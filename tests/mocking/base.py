@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from asyncio import all_tasks, get_event_loop, sleep
-from random import random
+from random import choice
 
 from ipv8.peer import Peer
 from ipv8.test.mocking.endpoint import internet
@@ -22,7 +22,11 @@ class TestBase(object):
 
     def initialize(self, overlay_class, node_count, *args, **kwargs):
         self.overlay_class = overlay_class
-        self.nodes = [self.create_node(*args, **kwargs) for _ in range(node_count)]
+        self._tempdirs = []
+        self.nodes = [
+            self.create_node(*args, work_dir=self.temporary_directory(), **kwargs)
+            for _ in range(node_count)
+        ]
 
         # Add nodes to each other
         for node in self.nodes:
@@ -32,14 +36,16 @@ class TestBase(object):
                 private_peer = other.my_peer
                 public_peer = Peer(private_peer.public_key, private_peer.address)
                 node.network.add_verified_peer(public_peer)
-                node.network.discover_services(public_peer, [overlay_class.master_peer.mid])
+                node.network.discover_services(
+                    public_peer, [overlay_class.master_peer.mid]
+                )
 
     def setUp(self):
         # super(TestBase, self).setUp()
         TestBase.__lockup_timestamp__ = time.time()
 
     async def tearDown(self):
-        print('TEARING down')
+        print("TEARING down")
         try:
             for node in self.nodes:
                 await node.unload()
@@ -61,12 +67,16 @@ class TestBase(object):
             # If we made it here, there is a serious issue which we cannot recover from.
             # Most likely the threadpool got into a deadlock while shutting down.
             import traceback
-            print("The test-suite locked up! Force quitting! Thread dump:", file=sys.stderr)
+
+            print(
+                "The test-suite locked up! Force quitting! Thread dump:",
+                file=sys.stderr,
+            )
             for tid, stack in sys._current_frames().items():
                 if tid != threading.currentThread().ident:
                     print("THREAD#%d" % tid, file=sys.stderr)
                     for line in traceback.format_list(traceback.extract_stack(stack)):
-                        print("|", line[:-1].replace('\n', '\n|   '), file=sys.stderr)
+                        print("|", line[:-1].replace("\n", "\n|   "), file=sys.stderr)
 
             tasks = all_tasks(get_event_loop())
             if tasks:
@@ -77,10 +87,13 @@ class TestBase(object):
             # Our test suite catches the SIGINT signal, this allows it to print debug information before force exiting.
             # If we were to hard exit here (through os._exit) we would lose this additional information.
             import signal
+
             os.kill(os.getpid(), signal.SIGINT)
             # But sometimes it just flat out refuses to die (sys.exit will also not work in this case).
             # So we double kill ourselves:
-            time.sleep(5.0)  # Just in case anyone is listening to our signal and wishes to log some stats quickly.
+            time.sleep(
+                5.0
+            )  # Just in case anyone is listening to our signal and wishes to log some stats quickly.
             os._exit(1)  # pylint: disable=W0212
 
         t = threading.Thread(target=check_loop)
@@ -92,7 +105,9 @@ class TestBase(object):
         cls.__testing__ = False
 
     def create_node(self, *args, **kwargs):
-        return FakeIPv8(u"low", self.overlay_class, *args, **kwargs)
+        ipv8 = FakeIPv8("curve25519", self.overlay_class, *args, **kwargs)
+        ipv8.overlay.ipv8 = ipv8
+        return ipv8
 
     def add_node_to_experiment(self, node):
         """
@@ -108,10 +123,14 @@ class TestBase(object):
     @staticmethod
     def is_background_task(task):
         # Only in Python 3.8+ will we have a get_name function
-        name = task.get_name() if hasattr(task, 'get_name') else getattr(task, 'name', f'Task-{id(task)}')
-        return name.endswith('_check_tasks')
+        name = (
+            task.get_name()
+            if hasattr(task, "get_name")
+            else getattr(task, "name", f"Task-{id(task)}")
+        )
+        return name.endswith("_check_tasks")
 
-    async def deliver_messages(self, timeout=.1):
+    async def deliver_messages(self, timeout=0.1):
         """
         Allow peers to communicate.
 
@@ -126,9 +145,12 @@ class TestBase(object):
         probable_exit = False
 
         while rtime < timeout:
-            await sleep(.01)
-            rtime += .01
-            if len([task for task in all_tasks() if not self.is_background_task(task)]) < 2:
+            await sleep(0.01)
+            rtime += 0.01
+            if (
+                len([task for task in all_tasks() if not self.is_background_task(task)])
+                < 2
+            ):
                 if probable_exit:
                     break
                 probable_exit = True
@@ -143,7 +165,9 @@ class TestBase(object):
         await self.deliver_messages()
 
     def temporary_directory(self):
-        rndstr = '_temp_' + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+        rndstr = "_temp_" + "".join(
+            choice(string.ascii_uppercase + string.digits) for _ in range(10)
+        )
         d = os.path.abspath(self.__class__.__name__ + rndstr)
         self._tempdirs.append(d)
         os.makedirs(d)

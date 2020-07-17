@@ -1,22 +1,22 @@
-import pytest
 from ipv8.keyvault.crypto import default_eccrypto
-from python_project.backbone.block import PlexusBlock, EMPTY_PK, UNKNOWN_SEQ
+from python_project.backbone.block import (
+    EMPTY_PK,
+    EMPTY_SIG,
+    GENESIS_SEQ,
+    PlexusBlock,
+    UNKNOWN_SEQ,
+)
 from python_project.backbone.datastore.utils import (
-    shorten,
     encode_raw,
-    Links,
     GENESIS_DOT,
+    Links,
+    shorten,
     ShortKey,
 )
 from python_project.backbone.payload import BlockPayload
-from python_project.noodle.block import (
-    EMPTY_SIG,
-    GENESIS_SEQ,
-    ValidationResult,
-)
 
-from tests.conftest import TestBlock
-from tests.mocking.mock_db import MockDBManager, MockChain
+from tests.conftest import FakeBlock
+from tests.mocking.mock_db import MockChain, MockDBManager
 
 
 class TestChainBlock:
@@ -29,13 +29,13 @@ class TestChainBlock:
         Test signing a block and whether the signature is valid
         """
         crypto = default_eccrypto
-        block = TestBlock()
+        block = FakeBlock()
         assert crypto.is_valid_signature(
             block.key, block.pack(signature=False), block.signature
         )
 
     def test_short_hash(self):
-        block = TestBlock()
+        block = FakeBlock()
         assert shorten(block.hash) == block.short_hash
 
     def test_create_genesis(self):
@@ -62,7 +62,7 @@ class TestChainBlock:
         Test creating a block that points towards a previous block
         """
         db = MockDBManager()
-        prev = TestBlock()
+        prev = FakeBlock()
 
         monkeypatch.setattr(
             MockDBManager, "get_chain", lambda _, chain_id: MockChain(),
@@ -88,7 +88,7 @@ class TestChainBlock:
         """
         key = default_eccrypto.generate_key(u"curve25519")
         db = MockDBManager()
-        link = TestBlock()
+        link = FakeBlock()
 
         monkeypatch.setattr(
             MockDBManager,
@@ -127,7 +127,7 @@ class TestChainBlock:
         com_key = default_eccrypto.generate_key(u"curve25519").pub().key_to_bin()
         db = MockDBManager()
         com_link = Links(((1, ShortKey("30303030")),))
-        link = TestBlock(com_id=com_key, links=com_link)
+        link = FakeBlock(com_id=com_key, links=com_link)
 
         monkeypatch.setattr(
             MockDBManager,
@@ -158,7 +158,7 @@ class TestChainBlock:
         """
         Test if negative sequence number blocks are not valid.
         """
-        block = TestBlock()
+        block = FakeBlock()
         block.timestamp = -1.0
         assert not block.block_invariants_valid()
 
@@ -166,8 +166,7 @@ class TestChainBlock:
         """
         Test if illegal key blocks are not valid.
         """
-        result = ValidationResult()
-        block = TestBlock()
+        block = FakeBlock()
         block.public_key = b"definitelynotakey"
         assert not block.block_invariants_valid()
 
@@ -175,8 +174,7 @@ class TestChainBlock:
         """
         Test if illegal key blocks are not valid.
         """
-        result = ValidationResult()
-        block = TestBlock()
+        block = FakeBlock()
         block.sequence_number = -1
         assert not block.block_invariants_valid()
 
@@ -184,32 +182,31 @@ class TestChainBlock:
         """
         Test if illegal key blocks are not valid.
         """
-        result = ValidationResult()
-        block = TestBlock()
+        block = FakeBlock()
         block.com_seq_num = -1
         assert not block.block_invariants_valid()
 
     def test_invalid_sign(self):
         key = default_eccrypto.generate_key(u"curve25519")
 
-        blk = TestBlock()
+        blk = FakeBlock()
         blk.sign(key)
 
         assert not blk.block_invariants_valid()
 
     def test_block_valid(self):
-        blk = TestBlock()
+        blk = FakeBlock()
         assert blk.block_invariants_valid()
 
     def test_block_payload(self):
-        blk = TestBlock()
+        blk = FakeBlock()
         blk_bytes = blk.pack()
         unpacked = blk.serializer.ez_unpack_serializables([BlockPayload], blk_bytes)
         blk2 = PlexusBlock.from_payload(unpacked[0])
         assert blk2 == blk
 
     def test_pack_unpack(self):
-        blk = TestBlock()
+        blk = FakeBlock()
         blk_bytes = blk.pack()
         blk2 = PlexusBlock.unpack(blk_bytes, blk.serializer)
         assert blk == blk2
@@ -218,6 +215,6 @@ class TestChainBlock:
         """
         Check if the hash() function returns the Block hash.
         """
-        block = TestBlock()
+        block = FakeBlock()
 
         assert block.__hash__(), block.hash_number

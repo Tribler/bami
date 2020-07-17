@@ -2,17 +2,19 @@ from unittest.mock import Mock
 
 import pytest
 from python_project.backbone.datastore.utils import (
-    ranges,
-    expand_ranges,
-    shorten,
-    KEY_LEN,
-    Links,
     decode_links,
+    decode_raw,
+    EMPTY_PK,
+    EMPTY_SIG,
     encode_links,
     encode_raw,
-    decode_raw,
+    expand_ranges,
+    GENESIS_HASH,
+    KEY_LEN,
+    Links,
+    ranges,
+    shorten,
 )
-from python_project.noodle.block import GENESIS_HASH, EMPTY_SIG, EMPTY_PK
 
 
 @pytest.fixture(
@@ -67,7 +69,7 @@ def test_encode_decode_links(keys_fixture):
     assert decode_links(raw_bytes) == links
 
 
-from decimal import Decimal, Context, getcontext
+from decimal import Decimal, getcontext
 
 
 def test_decimal():
@@ -76,9 +78,7 @@ def test_decimal():
     new_con.prec = 4
     t = Decimal(2.191, new_con)
     t2 = Decimal(2.11, new_con)
-    print(t + t2)
-    print(float(t - t2))
 
     l = encode_raw({"value": float(t2)})
     p = decode_raw(l)
-    print(p)
+    assert p.get("value") == float(t2)

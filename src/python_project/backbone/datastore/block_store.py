@@ -49,7 +49,7 @@ class LMDBLockStore(BaseBlockStore):
 
     def __init__(self, block_dir: str) -> None:
         # Change the directory
-        self.env = lmdb.open(block_dir, subdir=True, max_dbs=5)
+        self.env = lmdb.open(block_dir, subdir=True, max_dbs=5, map_async=True)
         self.blocks = self.env.open_db(key=b"blocks")
         self.txs = self.env.open_db(key=b"txs")
         self.dots = self.env.open_db(key=b"dots")

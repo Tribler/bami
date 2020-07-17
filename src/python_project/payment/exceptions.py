@@ -26,6 +26,9 @@ class InconsistentStateHashException(Exception):
     pass
 
 
+# Mint exceptions:
+
+
 class InvalidMintException(Exception):
     pass
 
@@ -39,6 +42,11 @@ class InvalidMintRangeException(InvalidMintException):
 
 
 class UnboundedMintException(InvalidMintException):
+    pass
+
+
+# Spend exceptions:
+class InvalidSpendRangeException(Exception):
     pass
 
 

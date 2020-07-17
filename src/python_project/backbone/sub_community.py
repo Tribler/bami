@@ -1,9 +1,10 @@
-from abc import ABC, abstractmethod, ABCMeta
-from typing import Iterable, Union, Type, Optional, Set
+from abc import ABC, ABCMeta, abstractmethod
+from typing import Iterable, Optional, Type, Union
 
 from ipv8.community import Community
 from ipv8.peer import Peer
-from ipv8.peerdiscovery.discovery import RandomWalk, EdgeWalk
+from ipv8.peerdiscovery.discovery import EdgeWalk, RandomWalk
+
 from python_project.backbone.community_routines import CommunityRoutines
 from python_project.backbone.exceptions import UnavailableIPv8Exception
 
@@ -22,6 +23,10 @@ class BaseSubCommunity(ABC):
         """
         pass
 
+    @abstractmethod
+    def add_peer(self, peer: Peer):
+        pass
+
 
 class IPv8SubCommunity(BaseSubCommunity, Community):
     def get_known_peers(self) -> Iterable[Peer]:
@@ -37,11 +42,15 @@ class IPv8SubCommunity(BaseSubCommunity, Community):
         self._prefix = b"\x00" + self.version + self.master_peer.mid
         super().__init__(*args, **kwargs)
 
+    def add_peer(self, peer: Peer):
+        self.network.add_verified_peer(peer)
+        self.network.discover_services(peer, [self.master_peer.mid])
+
 
 class LightSubCommunity(BaseSubCommunity):
-    def __init__(self, subcom_id=None):
+    def __init__(self, subcom_id: bytes = None):
         self._subcom_id = subcom_id
-        self.peers = []
+        self.peers = set()
 
     @property
     def subcom_id(self) -> bytes:
@@ -49,6 +58,9 @@ class LightSubCommunity(BaseSubCommunity):
 
     def get_known_peers(self) -> Iterable[Peer]:
         return self.peers
+
+    def add_peer(self, peer: Peer):
+        self.peers.add(peer)
 
 
 class SubCommunityDiscoveryStrategy(ABC):
@@ -65,9 +77,7 @@ class SubCommunityDiscoveryStrategy(ABC):
         pass
 
 
-class RandomWalkDiscoveryStrategy(
-    SubCommunityDiscoveryStrategy, CommunityRoutines, metaclass=ABCMeta
-):
+class RandomWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy, metaclass=ABCMeta):
     def discover(
         self, subcom: IPv8SubCommunity, target_peers: int = -1, **kwargs
     ) -> None:
@@ -101,9 +111,7 @@ class BaseSubCommunityFactory(ABC):
         pass
 
 
-class IPv8SubCommunityFactory(
-    BaseSubCommunityFactory, CommunityRoutines, metaclass=ABCMeta
-):
+class IPv8SubCommunityFactory(BaseSubCommunityFactory, metaclass=ABCMeta):
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         """
         Args:
@@ -137,11 +145,15 @@ class LightSubCommunityFactory(BaseSubCommunityFactory):
 class SubCommunityRoutines(ABC):
     @property
     @abstractmethod
-    def my_subcoms(self) -> Set[bytes]:
+    def my_subcoms(self) -> Iterable[bytes]:
         """
         All sub-communities that my peer is part of
         Returns: list with sub-community ids
         """
+        pass
+
+    @abstractmethod
+    def discovered_peers_by_subcom(self, subcom_id) -> Iterable[Peer]:
         pass
 
     @abstractmethod
@@ -203,10 +215,12 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
         if subcom_id not in self.my_subcoms:
             # This sub-community is still not known
             # Set max peers setting
-            subcom = self.subcom_factory.create_subcom()
+            subcom = self.subcom_factory.create_subcom(subcom_id=subcom_id)
             # Add the sub-community to the main overlay
             self.add_subcom(subcom_id, subcom)
             # Call discovery routine for this sub-community
+            for p in self.discovered_peers_by_subcom(subcom_id):
+                subcom.add_peer(p)
             strategy = self.get_subcom_discovery_strategy(subcom_id)
             strategy.discover(subcom)
 

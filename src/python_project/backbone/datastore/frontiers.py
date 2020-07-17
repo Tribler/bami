@@ -1,14 +1,13 @@
 from dataclasses import dataclass
-from typing import Tuple, List, Dict
+from typing import Dict, Tuple
 
 from python_project.backbone.datastore.utils import (
+    decode_raw,
+    Dot,
+    encode_raw,
     Links,
     Ranges,
-    encode_raw,
-    decode_raw,
-    expand_ranges,
     ShortKey,
-    Dot,
 )
 
 
@@ -51,4 +50,4 @@ class FrontierDiff:
         return cls(val_dict.get("m"), val_dict.get("c"))
 
     def is_empty(self):
-        return len(self.missing) > 0 and len(self.conflicts) > 0
+        return len(self.missing) == 0 and len(self.conflicts) == 0

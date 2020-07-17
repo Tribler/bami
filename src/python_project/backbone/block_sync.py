@@ -50,7 +50,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
                 if type(block) is bytes
                 else block.to_block_payload()
             )
-        print('Sending to peers', peers)
         for p in peers:
             self.send_packet(p, packet, sig=False)
 
@@ -58,14 +57,14 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
         block = PlexusBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_out_of_order(block, peer)
+        self.process_block_unordered(block, peer)
 
     @lazy_wrapper_unsigned(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
-        print('Received block', peer, payload)
+        print("Received block from ", peer)
         block = PlexusBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_out_of_order(block, peer)
+        self.process_block_unordered(block, peer)
 
     @lazy_wrapper_unsigned(RawBlockBroadcastPayload)
     def received_raw_block_broadcast(
@@ -73,14 +72,14 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     ) -> None:
         block = PlexusBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_out_of_order(block, peer)
+        self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
     @lazy_wrapper_unsigned(BlockBroadcastPayload)
     def received_block_broadcast(self, peer: Peer, payload: BlockBroadcastPayload):
         block = PlexusBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_out_of_order(block, peer)
+        self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
     def process_broadcast_block(self, block: PlexusBlock, ttl: int):
@@ -90,7 +89,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             pass
 
     @abstractmethod
-    def process_block_out_of_order(self, blk: PlexusBlock, peer: Peer) -> None:
+    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
         """
         Process a received half block immediately when received. Does not guarantee order on the block.
         """
@@ -113,7 +112,24 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             # React on invalid block
             raise InvalidBlockException("Block invalid", str(block), peer)
         else:
+            print("Processing block")
             if not self.persistence.has_block(block.hash):
+                if (
+                    self.persistence.get_chain(block.com_id)
+                    and self.persistence.get_chain(block.com_id).versions.get(
+                        block.com_seq_num
+                    )
+                    and block.short_hash
+                    in self.persistence.get_chain(block.com_id).versions[
+                        block.com_seq_num
+                    ]
+                ):
+                    raise Exception(
+                        "Inconsisistency between block store and chain store",
+                        self.persistence.get_chain(block.com_id).versions,
+                        block.com_dot,
+                    )
+                print("Putting block to db")
                 self.persistence.add_block(block_blob, block)
 
     def create_signed_block(

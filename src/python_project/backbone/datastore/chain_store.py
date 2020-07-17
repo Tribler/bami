@@ -1,18 +1,19 @@
-import threading
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Set, List, Iterable
+import threading
+from typing import Iterable, List, Optional, Set, Tuple
 
 import cachetools
+
 from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
 from python_project.backbone.datastore.utils import (
-    shorten,
-    ranges,
-    expand_ranges,
-    Links,
-    Ranges,
-    ShortKey,
     Dot,
+    expand_ranges,
     GENESIS_DOT,
+    Links,
+    ranges,
+    Ranges,
+    shorten,
+    ShortKey,
 )
 
 
@@ -373,16 +374,23 @@ class Chain(BaseChain):
         if not last_reconcile_point:
             last_reconcile_point = 0
         extra_dots = {}
+        print("Conflicts ", conflicts)
         for c in conflicts:
             # TODO: revisit this. How to choose the 'from' sequence number
             last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
+            print("Last point", last_point)
             est_diff = c[0] - last_point
-            mod_blk = est_diff // self.max_extra_dots
+            print("Est diff", est_diff)
+            print("Max extra dots", self.max_extra_dots)
+            mod_blk = round(est_diff / self.max_extra_dots)
+            print("Mod blk", mod_blk)
             mod_blk = mod_blk + 1 if not mod_blk else mod_blk
-            extra_dots[c] = {
-                k: tuple(self.versions.get(k))
-                for k in range(last_point + mod_blk, c[0], mod_blk)
-            }
+
+            extra_val = {}
+            for k in range(last_point + mod_blk, c[0] + 1, mod_blk):
+                if self.versions.get(k):
+                    extra_val[k] = tuple(self.versions.get(k))
+            extra_dots[c] = extra_val
         return FrontierDiff(missing, extra_dots)
 
 

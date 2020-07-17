@@ -4,7 +4,7 @@ This file contains everything related to persistence for TrustChain.
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from typing import Optional, Any, Iterable
+from typing import Dict, Iterable, Optional, Set, Tuple
 
 from python_project.backbone.datastore.block_store import BaseBlockStore
 from python_project.backbone.datastore.chain_store import (
@@ -15,11 +15,12 @@ from python_project.backbone.datastore.chain_store import (
 )
 from python_project.backbone.datastore.utils import (
     Dot,
-    encode_raw,
-    Notifier,
     EMPTY_PK,
+    encode_raw,
     expand_ranges,
     Links,
+    Notifier,
+    ShortKey,
 )
 
 
@@ -89,7 +90,7 @@ class BaseDB(ABC, Notifier):
 
     @abstractmethod
     def get_block_blobs_by_frontier_diff(
-        self, chain_id: bytes, frontier_diff: FrontierDiff
+        self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
     ) -> Iterable[bytes]:
         pass
 
@@ -117,42 +118,104 @@ class DBManager(BaseDB):
     ) -> None:
         self.last_reconcile_seq_num[chain_id][peer_id] = last_point
 
-    def get_block_blobs_by_frontier_diff(
-        self, chain_id: bytes, frontier_diff: FrontierDiff
+    def _process_missing_seq_num(
+        self, chain: BaseChain, chain_id: bytes, missing_ranges: Set[int]
     ) -> Iterable[bytes]:
+        for b_i in missing_ranges:
+            # Return all blocks with a sequence number
+            for dot in chain.get_dots_by_seq_num(b_i):
+                print("b_i", b_i, "dot", dot)
+                val = self.get_block_blob_by_dot(chain_id, dot)
+                if not val:
+                    raise Exception("No block", chain_id, dot)
+                yield val
 
+    def _find_first_conflicting_point(
+        self, conf_dict: Dict, chain: BaseChain
+    ) -> Set[Dot]:
+        to_request = set()
+        print("Conf dict", conf_dict)
+        for sn, hash_vals in conf_dict.items():
+            local_val = chain.get_all_short_hash_by_seq_num(sn)
+            if not local_val:
+                # Don't know this value => request from peer
+                to_request.update(Dot((sn, k) for k in hash_vals))
+                continue
+            diff_val = local_val - set(hash_vals)
+            sim_diff = set(hash_vals) - local_val
+            if sim_diff:
+                to_request.update(Dot((sn, k)) for k in sim_diff)
+            # If there is a hash that is known
+            if diff_val:
+                # First inconsistency point met
+                return {Dot((sn, k)) for k in diff_val}, to_request
+        return set(), to_request
+
+    def _process_conflicting(
+        self,
+        chain: BaseChain,
+        chain_id: bytes,
+        conflict_dict: Dict[Dot, Dict[int, Tuple[ShortKey]]],
+        val_to_request: Set,
+    ):
+        print("Conflict dict", conflict_dict)
+        for conf_dot, conf_dict in conflict_dict.items():
+            if not conf_dict:
+                val = self.get_block_blob_by_dot(chain_id, conf_dot)
+                if not val:
+                    raise Exception("No block", chain_id, conf_dot)
+                yield val
+                continue
+            current_point, to_request = self._find_first_conflicting_point(
+                conf_dict, chain
+            )
+            print("Current point request", current_point, to_request)
+            val_to_request.update(to_request)
+            while (
+                current_point
+                and max(current_point)[0] < conf_dot[0]
+                and conf_dot not in current_point
+            ):
+                new_point = set()
+                for d in current_point:
+                    val = self.get_block_blob_by_dot(chain_id, d)
+                    if not val:
+                        raise ("Exeption no val", val, chain_id, d)
+                    yield val
+                    l = chain.get_next_links(d)
+                    if not l:
+                        print("No known next link", d)
+                    else:
+                        new_point.update(set(l))
+                current_point = new_point
+            val = self.get_block_blob_by_dot(chain_id, conf_dot)
+            if not val:
+                raise Exception("Exception not val", chain_id, conf_dot)
+            yield val
+
+    def get_block_blobs_by_frontier_diff(
+        self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
+    ) -> Iterable[bytes]:
         chain = self.get_chain(chain_id)
+        print("Get chain by request ", chain_id)
         if chain:
-            for b_i in expand_ranges(frontier_diff.missing):
-                # Return all with a sequence number
-                for dot in chain.get_dots_by_seq_num(b_i):
-                    yield self.get_block_blob_by_dot(chain_id, dot)
-            for conf_dot, conf_dict in frontier_diff.conflicts.items():
-                current_point = []
-                for sn, hash_vals in conf_dict.items():
-                    local_val = chain.get_all_short_hash_by_seq_num(sn)
-                    if not local_val:
-                        # TODO: add reaction if local value is empty
-                        continue
-                    diff_val = local_val - set(hash_vals)
-                    if diff_val:
-                        # First inconsistency point met
-                        current_point = [Dot((sn, k)) for k in diff_val]
-                        break
-                else:
-                    # TODO: Add reaction if no inconsistency exists
-                    yield self.get_block_blob_by_dot(chain_id, conf_dot)
-                    continue
-                while (
-                    conf_dot not in current_point
-                    and max(current_point)[0] < conf_dot[0]
-                ):
-                    for d in current_point:
-                        yield self.get_block_blob_by_dot(chain_id, d)
-                        current_point = chain.get_next_links(d)
-                yield self.get_block_blob_by_dot(chain_id, conf_dot)
-        else:
-            return None
+            print("Processing ranges ", chain_id)
+
+            # Processing missing holes
+            blks = set(
+                self._process_missing_seq_num(
+                    chain, chain_id, expand_ranges(frontier_diff.missing)
+                )
+            )
+            blks.update(
+                set(
+                    self._process_conflicting(
+                        chain, chain_id, frontier_diff.conflicts, vals_to_request
+                    )
+                )
+            )
+            return blks
+        return []
 
     def close(self) -> None:
         self.block_store.close()
@@ -219,29 +282,38 @@ class DBManager(BaseDB):
         )
         full_dot_id = pers + encode_raw(pers_block_dot)
         self.block_store.add_dot(full_dot_id, block_hash)
-
+        print(
+            "Block added personal ", pers_block_dot, "Dot in the list", pers_dots_list
+        )
         # TODO: add more chain topic
 
         # Notify subs of the personal chain
         self.notify(ChainTopic.ALL, chain_id=pers, dots=pers_dots_list)
         self.notify(ChainTopic.PERSONAL, chain_id=pers, dots=pers_dots_list)
-
-        if pers != com:
-            self.notify(pers, chain_id=pers, dots=pers_dots_list)
+        self.notify(pers, chain_id=pers, dots=pers_dots_list)
 
         # 2.2: add block to the community chain
 
         if com != EMPTY_PK:
-            if com not in self.chains:
-                self.chains[com] = self.chain_factory.create_chain()
+            if com == pers:
+                # Chain was processed already, notify rest
+                self.notify(ChainTopic.GROUP, chain_id=com, dots=pers_dots_list)
+            else:
+                if com not in self.chains:
+                    self.chains[com] = self.chain_factory.create_chain()
+                com_block_dot = Dot((block.com_seq_num, block.short_hash))
+                com_dots_list = self.chains[com].add_block(
+                    block.links, block.com_seq_num, block_hash
+                )
+                print(
+                    "Block added in community ",
+                    com_block_dot,
+                    "Dot in the list",
+                    com_dots_list,
+                )
+                full_dot_id = com + encode_raw(com_block_dot)
+                self.block_store.add_dot(full_dot_id, block_hash)
 
-            com_block_dot = Dot((block.com_seq_num, block.short_hash))
-            com_dots_list = self.chains[com].add_block(
-                block.links, block.com_seq_num, block_hash
-            )
-            full_dot_id = com + encode_raw(com_block_dot)
-            self.block_store.add_dot(full_dot_id, block_hash)
-
-            self.notify(ChainTopic.ALL, chain_id=com, dots=com_dots_list)
-            self.notify(ChainTopic.GROUP, chain_id=com, dots=com_dots_list)
-            self.notify(com, chain_id=com, dots=com_dots_list)
+                self.notify(ChainTopic.ALL, chain_id=com, dots=com_dots_list)
+                self.notify(ChainTopic.GROUP, chain_id=com, dots=com_dots_list)
+                self.notify(com, chain_id=com, dots=com_dots_list)

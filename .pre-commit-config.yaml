@@ -12,9 +12,9 @@ repos:
         name: black
         entry: poetry run black
         language: system
-        types: [python]
-    -   id: flake8
-        name: flake8
-        entry: poetry run flake8
+        types: [python3]
+    -   id: tests
+        name: tests
+        entry: poetry run tests
         language: system
-        types: [python]
+        types: [python3]

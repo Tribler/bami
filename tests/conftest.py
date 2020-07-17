@@ -2,19 +2,19 @@
 from typing import Any, List, Union
 from unittest.mock import Mock
 
-import pytest
 from _pytest.config import Config
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
+import pytest
 from pytest_mock import MockFixture
-from python_project.backbone.block import PlexusBlock, EMPTY_SIG
+from python_project.backbone.block import EMPTY_SIG, PlexusBlock
 from python_project.backbone.datastore.chain_store import BaseChain
-from python_project.backbone.datastore.state_store import BaseStateStore
+from python_project.backbone.datastore.database import BaseDB
 from python_project.backbone.datastore.utils import (
-    Links,
     encode_links,
     encode_raw,
     GENESIS_LINK,
+    Links,
 )
 
 
@@ -33,7 +33,7 @@ def mock_requests_get(mocker: MockFixture) -> Mock:
 
 
 # Fixtures
-class TestBlock(PlexusBlock):
+class FakeBlock(PlexusBlock):
     """
     Test Block that simulates a block used in TrustChain.
     Also used in other test files for TrustChain.
@@ -94,7 +94,7 @@ def create_block_batch(com_id, num_blocks=100, txs=None):
     last_block_point = GENESIS_LINK
     for k in range(num_blocks):
         tx = txs[k] if txs else None
-        blk = TestBlock(com_id=com_id, links=last_block_point, transaction=tx)
+        blk = FakeBlock(com_id=com_id, links=last_block_point, transaction=tx)
         blocks.append(blk)
         last_block_point = Links(((blk.com_seq_num, blk.short_hash),))
     return blocks
@@ -122,18 +122,16 @@ def insert_to_chain(
 
 
 def insert_to_chain_or_blk_store(
-    chain_obj: Union[BaseChain, BaseStateStore],
-    blk: PlexusBlock,
-    personal_chain: bool = True,
+    chain_obj: Union[BaseChain, BaseDB], blk: PlexusBlock, personal_chain: bool = True,
 ):
     if isinstance(chain_obj, BaseChain):
         yield from insert_to_chain(chain_obj, blk, personal_chain)
     else:
-        yield chain_obj.add_block(blk)
+        yield chain_obj.add_block(blk.pack(), blk)
 
 
 def insert_batch_seq(
-    chain_obj: Union[BaseChain, BaseStateStore],
+    chain_obj: Union[BaseChain, BaseDB],
     batch: List[PlexusBlock],
     personal_chain: bool = False,
 ) -> None:
@@ -142,7 +140,7 @@ def insert_batch_seq(
 
 
 def insert_batch_reversed(
-    chain_obj: Union[BaseChain, BaseStateStore],
+    chain_obj: Union[BaseChain, BaseDB],
     batch: List[PlexusBlock],
     personal_chain: bool = False,
 ) -> None:
@@ -151,7 +149,7 @@ def insert_batch_reversed(
 
 
 def insert_batch_random(
-    chain_obj: Union[BaseChain, BaseStateStore],
+    chain_obj: Union[BaseChain, BaseDB],
     batch: List[PlexusBlock],
     personal_chain: bool = False,
 ) -> None:

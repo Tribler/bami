@@ -1,28 +1,29 @@
 from __future__ import annotations
 
-import logging
-import time
 from binascii import hexlify
 from collections import namedtuple
 from hashlib import sha256
-from typing import List, Any
+import logging
+import time
+from typing import Any, List
 
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.messaging.serialization import default_serializer, PackError
+
 from python_project.backbone.datastore.database import BaseDB
 from python_project.backbone.datastore.utils import (
-    decode_links,
-    encode_links,
-    shorten,
-    Links,
     BytesLinks,
-    GENESIS_DOT,
+    decode_links,
     Dot,
     EMPTY_PK,
-    GENESIS_SEQ,
-    GENESIS_LINK,
-    UNKNOWN_SEQ,
     EMPTY_SIG,
+    encode_links,
+    GENESIS_DOT,
+    GENESIS_LINK,
+    GENESIS_SEQ,
+    Links,
+    shorten,
+    UNKNOWN_SEQ,
 )
 from python_project.backbone.payload import BlockPayload
 
@@ -58,7 +59,7 @@ class PlexusBlock(object):
         ],
     )
 
-    def __init__(self, data=None, serializer=default_serializer):
+    def __init__(self, data: List = None, serializer=default_serializer) -> None:
         """
         Create a new PlexusBlock or load from an existing database entry.
 
@@ -173,7 +174,7 @@ class PlexusBlock(object):
     def calculate_hash(self) -> bytes:
         return sha256(self.pack()).digest()
 
-    def __eq__(self, other: PlexusBlock) -> bool:
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, PlexusBlock):
             return False
         return self.pack() == other.pack()
@@ -336,20 +337,24 @@ class PlexusBlock(object):
         """Verify that block is valid wrt block invariants"""
         # 1. Sequence number should not be prior to genesis
         if self.sequence_number < GENESIS_SEQ and self.com_seq_num < GENESIS_SEQ:
+            self._logger.error("Sequence number wrong", self.sequence_number)
             return False
         # 2. Timestamp should be non negative
         if self.timestamp < 0:
+            self._logger.error("Timestamp negative")
             return False
         # 3. Public key and signature should be valid
         if not self.crypto.is_valid_public_bin(self.public_key):
+            self._logger.error("Public key is not valid")
             return False
         else:
             try:
                 pck = self.pack(signature=False)
-            except PackError as _:
+            except PackError:
                 pck = None
             if pck is None or not self.crypto.is_valid_signature(
                 self.crypto.key_from_public_bin(self.public_key), pck, self.signature
             ):
+                self._logger.error("Cannot pack the block, or signature is not valid")
                 return False
         return True

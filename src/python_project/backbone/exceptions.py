@@ -12,3 +12,7 @@ class UnavailableIPv8Exception(Exception):
 
 class InvalidBlockException(Exception):
     pass
+
+
+class SubCommunityEmptyException(Exception):
+    pass

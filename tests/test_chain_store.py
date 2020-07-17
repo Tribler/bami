@@ -1,17 +1,18 @@
+from itertools import chain
+
 import pytest
 from python_project.backbone.datastore.chain_store import Chain
 from python_project.backbone.datastore.utils import (
+    expand_ranges,
     GENESIS_DOT,
+    GENESIS_LINK,
     Links,
     ranges,
-    expand_ranges,
     Ranges,
     wrap_return,
-    Dot,
-    GENESIS_LINK,
 )
 
-from tests.conftest import TestBlock
+from tests.conftest import FakeBlock
 
 
 class TestBatchInsert:
@@ -395,6 +396,8 @@ class TestNewConsistentDots:
         chain_obj = Chain()
 
         vals = wrap_return(insert_function(chain_obj, batchs[0][:10]))
+        print(vals)
+        print(chain(*vals))
         assert len(vals) == 10
         assert min(vals)[0] == 1 and max(vals)[0] == 10
 
@@ -443,7 +446,7 @@ class TestNewConsistentDots:
         assert len(vals) == 10
         assert vals[0][0] == 1 and vals[-1][0] == 10
 
-        merge_block = TestBlock(links=Links((dot1, dot2)))
+        merge_block = FakeBlock(links=Links((dot1, dot2)))
         chain.add_block(merge_block.links, merge_block.com_seq_num, merge_block.hash)
 
         vals = wrap_return(insert_function(chain, batches[1]))

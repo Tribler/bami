@@ -1,16 +1,18 @@
 import pytest
-from python_project.backbone.datastore.database import DBManager, ChainTopic
+from python_project.backbone.datastore.block_store import LMDBLockStore
+from python_project.backbone.datastore.chain_store import ChainFactory
+from python_project.backbone.datastore.database import ChainTopic, DBManager
 from python_project.backbone.datastore.frontiers import FrontierDiff
 from python_project.backbone.datastore.utils import (
     Dot,
-    ShortKey,
     encode_raw,
     Ranges,
-    Links,
+    ShortKey,
+    wrap_iterate,
 )
 
-from tests.conftest import TestBlock
-from tests.mocking.mock_db import MockBlockStore, MockChainFactory, MockChain
+from tests.conftest import FakeBlock
+from tests.mocking.mock_db import MockBlockStore, MockChain, MockChainFactory
 
 
 class TestDBManager:
@@ -31,7 +33,7 @@ class TestDBManager:
         self.tx_blob = b"tx_blob"
         self.block_blob = b"block_blob"
 
-        self.test_block = TestBlock()
+        self.test_block = FakeBlock()
         self.pers = self.test_block.public_key
         self.com_id = self.test_block.com_id
 
@@ -88,10 +90,10 @@ class TestDBManager:
 
     def test_blocks_by_frontier_diff(self, monkeypatch, std_vals):
         monkeypatch.setattr(
-            MockBlockStore, "get_hash_by_dot", lambda _, dot_bytes: self.test_hash
+            MockBlockStore, "get_hash_by_dot", lambda _, dot_bytes: bytes(dot_bytes)
         )
         monkeypatch.setattr(
-            MockBlockStore, "get_block_by_hash", lambda _, blob_hash: self.block_blob
+            MockBlockStore, "get_block_by_hash", lambda _, blob_hash: bytes(blob_hash)
         )
         monkeypatch.setattr(
             MockChain, "get_dots_by_seq_num", lambda _, seq_num: ("dot1", "dot2")
@@ -101,9 +103,13 @@ class TestDBManager:
         chain_id = self.chain_id
         self.dbms.chains[chain_id] = MockChain()
         frontier_diff = FrontierDiff(Ranges(((1, 2),)), {(1, ShortKey("efef")): {}})
+        vals_to_request = set()
 
-        blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
-        assert len(list(blobs)) == 5
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            chain_id, frontier_diff, vals_to_request
+        )
+        assert len(vals_to_request) == 0
+        assert len(blobs) == 3
 
     def test_blocks_frontier_with_extra_request(self, monkeypatch, std_vals):
         monkeypatch.setattr(
@@ -136,8 +142,12 @@ class TestDBManager:
             (), {(10, ShortKey("efef")): {2: ("ef1",), 7: ("ef2",)}}
         )
 
-        blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
-        assert len(list(blobs)) == 4
+        set_to_request = set()
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            chain_id, frontier_diff, set_to_request
+        )
+        assert len(set_to_request) == 1
+        assert len(blobs) == 1
 
     def test_blocks_by_frontier_diff_no_seq_num(self, monkeypatch, std_vals):
         monkeypatch.setattr(
@@ -153,7 +163,11 @@ class TestDBManager:
         self.dbms.chains[chain_id] = MockChain()
         frontier_diff = FrontierDiff(Ranges(((1, 2),)), {})
 
-        blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
+        set_to_request = set()
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            chain_id, frontier_diff, set_to_request
+        )
+        assert len(set_to_request) == 0
         assert len(list(blobs)) == 0
 
     def test_blocks_by_frontier_diff_no_chain(self, monkeypatch, std_vals):
@@ -172,5 +186,155 @@ class TestDBManager:
         # self.dbms.chains[chain_id] = MockChain()
         frontier_diff = FrontierDiff(Ranges(((1, 1),)), {})
 
-        blobs = self.dbms.get_block_blobs_by_frontier_diff(chain_id, frontier_diff)
+        set_to_request = set()
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            chain_id, frontier_diff, set_to_request
+        )
+        assert len(set_to_request) == 0
         assert len(list(blobs)) == 0
+
+
+class TestIntegrationDBManager:
+    @pytest.fixture(autouse=True)
+    def setUp(self, tmpdir) -> None:
+        tmp_val = tmpdir
+        self.block_store = LMDBLockStore(str(tmp_val))
+        self.chain_factory = ChainFactory()
+        self.dbms = DBManager(self.chain_factory, self.block_store)
+        yield
+        self.dbms.close()
+
+    @pytest.fixture(autouse=True)
+    def setUp2(self, tmpdir) -> None:
+        tmp_val = tmpdir
+        self.block_store2 = LMDBLockStore(str(tmp_val))
+        self.chain_factory2 = ChainFactory()
+        self.dbms2 = DBManager(self.chain_factory2, self.block_store2)
+        yield
+        try:
+            self.dbms2.close()
+            tmp_val.remove()
+        except FileNotFoundError:
+            pass
+
+    def test_get_tx_blob(self):
+        self.test_block = FakeBlock()
+        packed_block = self.test_block.pack()
+        self.dbms.add_block(packed_block, self.test_block)
+        self.tx_blob = self.test_block.transaction
+
+        assert (
+            self.dbms.get_tx_blob_by_dot(
+                self.test_block.com_id, self.test_block.com_dot
+            )
+            == self.tx_blob
+        )
+        assert (
+            self.dbms.get_block_blob_by_dot(
+                self.test_block.com_id, self.test_block.com_dot
+            )
+            == packed_block
+        )
+
+    def test_add_notify_block_one_chain(self, create_batches, insert_function):
+        self.val_dots = []
+
+        def chain_dots_tester(chain_id, dots):
+            print(dots)
+            for dot in dots:
+                assert (len(self.val_dots) == 0 and dot[0] == 1) or dot[
+                    0
+                ] == self.val_dots[-1][0] + 1
+                self.val_dots.append(dot)
+
+        blks = create_batches(num_batches=1, num_blocks=100)
+        com_id = blks[0][0].com_id
+        self.dbms.add_observer(com_id, chain_dots_tester)
+
+        wrap_iterate(insert_function(self.dbms, blks[0]))
+        assert len(self.val_dots) == 100
+
+    def test_add_notify_block_with_conflicts(self, create_batches, insert_function):
+        self.val_dots = []
+
+        def chain_dots_tester(chain_id, dots):
+            for dot in dots:
+                self.val_dots.append(dot)
+
+        blks = create_batches(num_batches=2, num_blocks=100)
+        com_id = blks[0][0].com_id
+        self.dbms.add_observer(com_id, chain_dots_tester)
+
+        wrap_iterate(insert_function(self.dbms, blks[0][:20]))
+        wrap_iterate(insert_function(self.dbms, blks[1][:40]))
+        wrap_iterate(insert_function(self.dbms, blks[0][20:60]))
+        wrap_iterate(insert_function(self.dbms, blks[1][40:]))
+        wrap_iterate(insert_function(self.dbms, blks[0][60:]))
+
+        assert len(self.val_dots) == 200
+
+    def test_blocks_by_frontier_diff(self, create_batches, insert_function):
+        # init chain
+        blks = create_batches(num_batches=2, num_blocks=100)
+        com_id = blks[0][0].com_id
+
+        wrap_iterate(insert_function(self.dbms, blks[0][:50]))
+        wrap_iterate(insert_function(self.dbms2, blks[1][:50]))
+
+        front = self.dbms.get_chain(com_id).frontier
+        front_diff = self.dbms2.get_chain(com_id).reconcile(front)
+        print(front_diff)
+        vals_request = set()
+
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            com_id, front_diff, vals_request
+        )
+        assert len(blobs) == 41
+
+    def reconcile_round(self, com_id):
+        front = self.dbms.get_chain(com_id).frontier
+        front_diff = self.dbms2.get_chain(com_id).reconcile(front)
+        print("Frontier diff", front_diff)
+        vals_request = set()
+        blobs = self.dbms.get_block_blobs_by_frontier_diff(
+            com_id, front_diff, vals_request
+        )
+        return blobs
+
+    def test_blocks_by_fdiff_with_holes(self, create_batches, insert_function):
+        # init chain
+        blks = create_batches(num_batches=2, num_blocks=100)
+        com_id = blks[0][0].com_id
+        self.val_dots = []
+
+        def chain_dots_tester(chain_id, dots):
+            for dot in dots:
+                self.val_dots.append(dot)
+
+        self.dbms2.add_observer(com_id, chain_dots_tester)
+
+        wrap_iterate(insert_function(self.dbms, blks[0][:50]))
+        wrap_iterate(insert_function(self.dbms2, blks[1][:20]))
+        wrap_iterate(insert_function(self.dbms2, blks[1][40:60]))
+
+        assert len(self.val_dots) == 20
+        blobs = self.reconcile_round(com_id)
+        assert len(blobs) == 41
+
+        for b in blobs:
+            self.dbms2.add_block(b, FakeBlock.unpack(b, blks[0][0].serializer))
+
+        assert len(self.val_dots) == 20
+        print("VAl dots", self.val_dots)
+        blobs2 = self.reconcile_round(com_id)
+        assert len(blobs2) == 8
+        for b in blobs2:
+            self.dbms2.add_block(b, FakeBlock.unpack(b, blks[0][0].serializer))
+
+        assert len(self.val_dots) == 20
+        blobs2 = self.reconcile_round(com_id)
+        assert len(blobs2) == 1
+        for b in blobs2:
+            self.dbms2.add_block(b, FakeBlock.unpack(b, blks[0][0].serializer))
+        assert len(self.val_dots) == 70
+        print(self.val_dots)

@@ -1,14 +1,13 @@
 """
 The Plexus backbone
 """
-import logging
-import random
 from abc import ABCMeta, abstractmethod
 from binascii import hexlify, unhexlify
 from enum import Enum
-from functools import wraps
+import logging
+import random
 from threading import RLock
-from typing import Any, Iterable, Optional, Type, Set, Callable, Union, Dict
+from typing import Any, Dict, Iterable, List, Optional, Type, Union
 
 from ipv8.community import Community, DEFAULT_MAX_PEERS
 from ipv8.keyvault.keys import Key
@@ -17,84 +16,27 @@ from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
 from ipv8.requestcache import RequestCache
 from ipv8_service import IPv8
+
 from python_project.backbone.block import PlexusBlock
 from python_project.backbone.block_sync import BlockSyncMixin
 from python_project.backbone.community_routines import MessageStateMachine
 from python_project.backbone.datastore.block_store import LMDBLockStore
 from python_project.backbone.datastore.chain_store import ChainFactory
-from python_project.backbone.datastore.database import DBManager, BaseDB
-from python_project.backbone.datastore.utils import decode_raw, EMPTY_PK
-from python_project.backbone.exceptions import InvalidTransactionFormatException
-from python_project.backbone.gossip import (
-    NextPeerSelectionStrategy,
-    RandomPeerSelectionStrategy,
-    SubComGossipMixin,
+from python_project.backbone.datastore.database import BaseDB, DBManager
+from python_project.backbone.datastore.utils import decode_raw, EMPTY_PK, encode_raw
+from python_project.backbone.exceptions import (
+    InvalidTransactionFormatException,
+    SubCommunityEmptyException,
 )
-from python_project.backbone.payload import *
+from python_project.backbone.gossip import SubComGossipMixin
+from python_project.backbone.payload import SubscriptionsPayload
 from python_project.backbone.settings import PlexusSettings
 from python_project.backbone.sub_community import (
-    SubCommunityMixin,
     BaseSubCommunity,
-    SubCommunityDiscoveryStrategy,
     BaseSubCommunityFactory,
+    SubCommunityDiscoveryStrategy,
+    SubCommunityMixin,
 )
-
-
-def synchronized(f):
-    """
-    Due to database inconsistencies, we can't allow multiple threads to handle a received_block at the same time.
-    """
-
-    @wraps(f)
-    def wrapper(self, *args, **kwargs):
-        with self.receive_block_lock:
-            return f(self, *args, **kwargs)
-
-    return wrapper
-
-
-class IntroductionMixin:
-
-    # ---- Introduction handshakes => Exchange your subscriptions ----------------
-    def create_introduction_request(
-        self, socket_address: Any, extra_bytes: bytes = b""
-    ):
-        extra_bytes = self.encode_subcom(self.my_subcoms)
-        return super().create_introduction_request(socket_address, extra_bytes)
-
-    def create_introduction_response(
-        self,
-        lan_socket_address,
-        socket_address,
-        identifier,
-        introduction=None,
-        extra_bytes=b"",
-        prefix=None,
-    ):
-        extra_bytes = self.encode_subcom(self.my_subcoms)
-        return super(PlexusCommunity, self).create_introduction_response(
-            lan_socket_address,
-            socket_address,
-            identifier,
-            introduction,
-            extra_bytes,
-            prefix,
-        )
-
-    def introduction_response_callback(self, peer, dist, payload):
-        subcoms = decode_raw(payload.extra_bytes)
-        self.process_peer_subscriptions(peer, subcoms)
-        # TODO: add subscription strategy
-        if self.settings.track_neighbours_chains:
-            self.subscribe_to_subcom(peer.public_key.key_to_bin())
-
-    def introduction_request_callback(self, peer, dist, payload):
-        communities = decode_raw(payload.extra_bytes)
-        self.process_peer_subscriptions(peer, communities)
-        # TODO: add subscription strategy
-        if self.settings.track_neighbours_chains:
-            self.subscribe_to_subcom(peer.public_key.key_to_bin())
-
 
 WITNESS_TYPE = b"witness"
 CONFIRM_TYPE = b"confirm"
@@ -110,7 +52,6 @@ class BlockResponse(Enum):
 class PlexusCommunity(
     Community,
     BlockSyncMixin,
-    IntroductionMixin,
     SubComGossipMixin,
     SubCommunityMixin,
     BaseSubCommunityFactory,
@@ -138,7 +79,7 @@ class PlexusCommunity(
         max_peers: int = DEFAULT_MAX_PEERS,
         anonymize: bool = False,
         db: BaseDB = None,
-        work_dir: str = ".",
+        work_dir: str = None,
         settings: PlexusSettings = None,
         **kwargs
     ):
@@ -156,6 +97,9 @@ class PlexusCommunity(
             self._settings = PlexusSettings()
         else:
             self._settings = settings
+
+        if not work_dir:
+            work_dir = self.settings.work_directory
         if not db:
             self._persistence = DBManager(ChainFactory(), LMDBLockStore(work_dir))
         else:
@@ -181,7 +125,6 @@ class PlexusCommunity(
         self.periodic_sync_lc = {}
 
         # Sub-Communities logic
-        self.interest = dict()
         self.my_subscriptions = dict()
 
         self.peer_subscriptions = (
@@ -193,6 +136,48 @@ class PlexusCommunity(
         for base in PlexusCommunity.__bases__:
             if issubclass(base, MessageStateMachine):
                 base.setup_messages(self)
+
+        self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
+
+    # ---- Introduction handshakes => Exchange your subscriptions ----------------
+    def create_introduction_request(
+        self, socket_address: Any, extra_bytes: bytes = b""
+    ):
+        extra_bytes = encode_raw(self.my_subcoms)
+        return super().create_introduction_request(socket_address, extra_bytes)
+
+    def create_introduction_response(
+        self,
+        lan_socket_address,
+        socket_address,
+        identifier,
+        introduction=None,
+        extra_bytes=b"",
+        prefix=None,
+    ):
+        extra_bytes = encode_raw(self.my_subcoms)
+        return super().create_introduction_response(
+            lan_socket_address,
+            socket_address,
+            identifier,
+            introduction,
+            extra_bytes,
+            prefix,
+        )
+
+    def introduction_response_callback(self, peer, dist, payload):
+        subcoms = decode_raw(payload.extra_bytes)
+        self.process_peer_subscriptions(peer, subcoms)
+        # TODO: add subscription strategy
+        if self.settings.track_neighbours_chains:
+            self.subscribe_to_subcom(peer.public_key.key_to_bin())
+
+    def introduction_request_callback(self, peer, dist, payload):
+        subcoms = decode_raw(payload.extra_bytes)
+        self.process_peer_subscriptions(peer, subcoms)
+        # TODO: add subscription strategy
+        if self.settings.track_neighbours_chains:
+            self.subscribe_to_subcom(peer.public_key.key_to_bin())
 
     # ----- Community routines ------
 
@@ -232,7 +217,6 @@ class PlexusCommunity(
         return self.my_peer.key
 
     # ----- SubCommunity routines ------
-
     def get_subcom_discovery_strategy(
         self, subcom_id: bytes
     ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
@@ -245,19 +229,26 @@ class PlexusCommunity(
         return self
 
     @property
-    def my_subcoms(self) -> Set[bytes]:
-        return set(self.my_subscriptions.keys())
+    def my_subcoms(self) -> Iterable[bytes]:
+        return list(self.my_subscriptions.keys())
 
     def get_subcom(self, subcom_id: bytes) -> Optional[BaseSubCommunity]:
         return self.my_subscriptions.get(subcom_id)
 
     def add_subcom(self, sub_com: bytes, subcom_obj: BaseSubCommunity) -> None:
+        if not subcom_obj:
+            raise SubCommunityEmptyException("Sub-Community object is none", sub_com)
         self.my_subscriptions[sub_com] = subcom_obj
 
-    def process_peer_subscriptions(
-        self, peer: Peer, communities: Iterable[bytes]
-    ) -> None:
-        for c in communities:
+    def discovered_peers_by_subcom(self, subcom_id: bytes) -> Iterable[Peer]:
+        return self.peer_subscriptions.get(subcom_id, [])
+
+    def process_peer_subscriptions(self, peer: Peer, subcoms: List[bytes]) -> None:
+        for c in subcoms:
+            # For each sub-community that is also known to me - introduce peer.
+            if c in self.my_subscriptions:
+                self.my_subscriptions[c].add_peer(peer)
+            # Keep all sub-communities and peer in a map
             if c not in self.peer_subscriptions:
                 self.peer_subscriptions[c] = set()
             self.peer_subscriptions[c].add(peer)
@@ -266,6 +257,13 @@ class PlexusCommunity(
     def received_peer_subs(self, peer: Peer, payload: SubscriptionsPayload) -> None:
         subcoms = decode_raw(payload.subcoms)
         self.process_peer_subscriptions(peer, subcoms)
+
+    def notify_peers_on_new_subcoms(self) -> None:
+        for peer in self.get_peers():
+            self.send_packet(
+                peer,
+                SubscriptionsPayload(self.my_pub_key_bin, encode_raw(self.my_subcoms)),
+            )
 
     # -------- Community block sharing  -------------
 
@@ -368,6 +366,7 @@ class PlexusCommunity(
         chain_id = block.com_id
         self.verify_witness_transaction(chain_id, witness_tx)
         # Apply to db
+        self.apply_witness_tx(block, witness_tx)
 
     def unpack_witness_blob(self, witness_blob: bytes) -> Any:
         """
@@ -378,15 +377,16 @@ class PlexusCommunity(
 
     # ------ Confirm and reject functions --------------
     def confirm(self, block: PlexusBlock, extra_data: Dict = None) -> None:
-        # change it to confirm
-        # create claim block and share in the community
+        """Create confirm block linked to block. Link will be in the transaction with block dot.
+           Add extra data to the transaction with a 'extra_data' dictionary.
+        """
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
         dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
         confirm_tx = {"initiator": block.public_key, "dot": dot}
         if extra_data:
             confirm_tx.update(extra_data)
         block = self.create_signed_block(
-            block_type=CONFIRM_TYPE, transaction=confirm_tx, com_id=chain_id
+            block_type=CONFIRM_TYPE, transaction=encode_raw(confirm_tx), com_id=chain_id
         )
         self.share_in_community(block, chain_id)
 
@@ -415,7 +415,7 @@ class PlexusCommunity(
         if extra_data:
             reject_tx.update(extra_data)
         block = self.create_signed_block(
-            block_type=REJECT_TYPE, transaction=reject_tx, com_id=chain_id
+            block_type=REJECT_TYPE, transaction=encode_raw(reject_tx), com_id=chain_id
         )
         self.share_in_community(block, chain_id)
 

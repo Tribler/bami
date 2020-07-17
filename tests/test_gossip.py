@@ -1,30 +1,27 @@
-from typing import Iterable, Any
+from typing import Iterable
 
-import pytest
-from ipv8.community import Community
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.peer import Peer
-from ipv8.requestcache import RequestCache
 from ipv8.test.mocking.endpoint import internet
-from python_project.backbone.community_routines import MessageStateMachine
-from python_project.backbone.datastore.database import BaseDB
+import pytest
 from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.gossip import GossipFrontiersMixin, NextPeerSelectionStrategy
-from python_project.backbone.payload import FrontierPayload, RawBlockPayload, BlocksRequestPayload
+from python_project.backbone.gossip import (
+    GossipFrontiersMixin,
+    NextPeerSelectionStrategy,
+)
+from python_project.backbone.payload import BlocksRequestPayload, FrontierPayload
 
 from tests.mocking.base import TestBase
 from tests.mocking.community import MockedCommunity, MockSettings
-from tests.mocking.mock_db import MockDBManager, MockChain
+from tests.mocking.mock_db import MockChain, MockDBManager
 
 
 class MockNextPeerSelection(NextPeerSelectionStrategy):
-
     def get_next_gossip_peers(self, subcom_id: bytes) -> Iterable[Peer]:
         pass
 
 
 class FakeGossipCommunity(MockedCommunity, GossipFrontiersMixin):
-
     @property
     def gossip_strategy(self) -> NextPeerSelectionStrategy:
         return MockNextPeerSelection()
@@ -51,25 +48,38 @@ class TestGossipBase(TestBase):
         #    node.overlay.subscribe_to_subcom(self.community_id)
         yield
 
-    def test_init_correctly(self):
+    @pytest.mark.asyncio
+    async def test_init_correctly(self):
         assert chr(FrontierPayload.msg_id) in self.nodes[0].overlay.decode_map
         assert chr(BlocksRequestPayload.msg_id) in self.nodes[0].overlay.decode_map
+        await self.tearDown()
 
     @pytest.mark.asyncio
     async def test_one_gossip_round(self, monkeypatch, mocker):
-        monkeypatch.setattr(MockDBManager, 'get_chain', lambda _, __: MockChain())
-        monkeypatch.setattr(MockChain, 'frontier', Frontier(((1, 'val1'),), (), ()))
-        monkeypatch.setattr(MockNextPeerSelection, 'get_next_gossip_peers',
-                            lambda _, __: [p.overlay.my_peer for p in self.nodes[1:]])
-        monkeypatch.setattr(MockDBManager, 'reconcile',
-                            lambda _, c_id, frontier, pub_key: FrontierDiff(((1, 1),), {}))
-        monkeypatch.setattr(MockSettings, 'sync_timeout', 0.1)
-        monkeypatch.setattr(MockDBManager, 'get_block_blobs_by_frontier_diff',
-                            lambda _, c_id, f_diff: [b'blob1'])
+        monkeypatch.setattr(MockDBManager, "get_chain", lambda _, __: MockChain())
+        front = Frontier(((1, "val1"),), (), ())
+        monkeypatch.setattr(MockChain, "frontier", front)
+        monkeypatch.setattr(
+            MockNextPeerSelection,
+            "get_next_gossip_peers",
+            lambda _, __, ___: [p.overlay.my_peer for p in self.nodes],
+        )
+        monkeypatch.setattr(
+            MockDBManager,
+            "reconcile",
+            lambda _, c_id, frontier, pub_key: FrontierDiff(((1, 1),), {}),
+        )
+        monkeypatch.setattr(MockSettings, "gossip_collect_time", 0.1)
+        monkeypatch.setattr(MockSettings, "gossip_fanout", 5)
+        monkeypatch.setattr(
+            MockDBManager,
+            "get_block_blobs_by_frontier_diff",
+            lambda _, c_id, f_diff, __: [b"blob1"],
+        )
 
         self.nodes[0].overlay.gossip_sync_task(self.community_id)
-        spy = mocker.spy(self.nodes[0].overlay, 'send_packet')
+        spy = mocker.spy(self.nodes[0].overlay, "send_packet")
 
-        await self.deliver_messages()
-        spy.assert_called_with(self.nodes[1].overlay.my_peer, RawBlockPayload(b'blob1'), sig=False)
+        await self.deliver_messages(0.5)
+        spy.assert_called()
         await self.tearDown()

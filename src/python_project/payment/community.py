@@ -1,63 +1,56 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from asyncio import Queue, ensure_future
+from asyncio import ensure_future, PriorityQueue, Queue, sleep
 from collections import defaultdict
 from decimal import Decimal
 from random import Random, random
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import cachetools
 from ipv8.peer import Peer
+
 from python_project.backbone.block import PlexusBlock
 from python_project.backbone.caches import WitnessBlockCache
 from python_project.backbone.community import (
-    PlexusCommunity,
     BlockResponse,
     CONFIRM_TYPE,
+    PlexusCommunity,
     REJECT_TYPE,
     WITNESS_TYPE,
 )
 from python_project.backbone.datastore.utils import (
-    Dot,
     decode_raw,
-    shorten,
+    Dot,
     encode_raw,
-    take_hash,
     hex_to_int,
+    shorten,
+    take_hash,
 )
 from python_project.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
 )
-from python_project.backbone.sub_community import (
-    IPv8SubCommunityFactory,
-    RandomWalkDiscoveryStrategy,
-)
-from python_project.payment.caches import PaymentSignCache
-from python_project.payment.database import PaymentState, ChainState
+from python_project.payment.database import ChainState, PaymentState
 from python_project.payment.exceptions import (
     InsufficientBalanceException,
-    UnknownMinterException,
     InvalidMintRangeException,
-    UnboundedMintException,
+    InvalidSpendRangeException,
     InvalidWitnessTransactionException,
+    UnboundedMintException,
+    UnknownMinterException,
 )
-from python_project.payment.utils import (
-    SPEND_TYPE,
-    MINT_TYPE,
-    MINT_VALUE_RANGE,
-    MINT_MAX_VALUE,
-)
+from python_project.payment.settings import PaymentSettings
+from python_project.payment.utils import MINT_TYPE, SPEND_TYPE
 
 """
 Exchange of the value within one community, where value lives only in one community.
- - The community has the identity with the key of the master peer. 
+ - The community has the identity with the key of the master peer.
  - Master peers is the only peer that can create value
  - Other peers verify transactions created and linked to the main log.
- - Every transaction created by the master peer must be relayed to each other, creating a linear log. 
- - Claim transactions 
- - Witnessing transactions are linked to other frontier transactions and are collected further. 
+ - Every transaction created by the master peer must be relayed to each other, creating a linear log.
+ - Claim transactions
+ - Witnessing transactions are linked to other frontier transactions and are collected further.
 """
 
 
@@ -69,16 +62,30 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         # self.transfer_queue_task = ensure_future(self.evaluate_transfer_queue())
 
         # Add state db
-        self.state_db = PaymentState(self.persistence)
+        if not kwargs.get("settings"):
+            self._settings = PaymentSettings()
+        self.state_db = PaymentState(self._settings.asset_precision)
+
+        self.context = self.state_db.context
 
         self.reachability_cache = defaultdict(lambda: cachetools.LRUCache(100))
         self.tracked_blocks = defaultdict(lambda: set())
         self.peer_conf = defaultdict(lambda: defaultdict(int))
         self.should_witness_subcom = {}
 
-    def process_block_out_of_order(self, blk: PlexusBlock, peer: Peer) -> None:
+        self.counter_signing_block_queue = PriorityQueue()
+        self.block_sign_queue_task = ensure_future(
+            self.evaluate_counter_signing_blocks()
+        )
+
+        self.witness_delta = kwargs.get("witness_delta")
+        if not self.witness_delta:
+            self.witness_delta = self.settings.witness_block_delta
+
+    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
-        pass
+        if self.persistence.get_chain(blk.com_id):
+            print("Chain versions ", self.persistence.get_chain(blk.com_id).versions)
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         # Add master peer to the known minter group
@@ -88,16 +95,24 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             "gossip_sync_" + str(sub_com_id),
             self.gossip_sync_task,
             sub_com_id,
-            delay=random.random(),
+            delay=random() * self._settings.gossip_sync_max_delay,
             interval=self.settings.gossip_sync_time,
         )
         # receive updates on the chain respecting order
-        self.persistence.add_observer(sub_com_id, self.receive_dots_in_order)
+        self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
         # Join the community as a witness
         # By default will witness all sub-communities i'm part of
         self.should_witness_subcom[sub_com_id] = True
 
-    def receive_dots_in_order(self, chain_id: bytes, dots: List[Dot]) -> None:
+    def receive_dots_ordered(self, chain_id: bytes, dots: List[Dot]) -> None:
+        print(
+            "Received dots: Peer ",
+            self.my_peer.mid,
+            "dots",
+            dots,
+            " applied dots ",
+            self.state_db.applied_dots,
+        )
         for dot in dots:
             blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
             if not blk_blob:
@@ -107,15 +122,29 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                     )
                 )
             block = PlexusBlock.unpack(blk_blob, self.serializer)
+            if block.com_dot in self.state_db.applied_dots:
+                raise Exception(
+                    "Already applied?",
+                    block.com_dot,
+                    self.state_db.vals_cache,
+                    self.state_db.peer_mints,
+                    self.state_db.applied_dots,
+                )
+            self.state_db.applied_dots.add(block.com_dot)
+
             # Check reachability for target block -> update risk
             for blk_dot in self.tracked_blocks[chain_id]:
+                print("Block dot in tracked block", blk_dot)
                 if self.dot_reachable(chain_id, blk_dot, dot):
-                    self.update_risk(chain_id, block.public_key, blk_dot)
+                    print("Dot is reachable ", blk_dot, dot)
+                    self.update_risk(chain_id, block.public_key, blk_dot[0])
 
             # Process blocks according to their type
+            self.logger.debug("Processing block", block.type, chain_id, block.hash)
             if block.type == MINT_TYPE:
                 self.process_mint(block)
             elif block.type == SPEND_TYPE:
+                print("Spend type triggered")
                 self.process_spend(block)
             elif block.type == CONFIRM_TYPE:
                 self.process_confirm(block)
@@ -123,6 +152,23 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                 self.process_reject(block)
             elif block.type == WITNESS_TYPE:
                 self.process_witness(block)
+
+            if self.state_db.get_balance(block.com_id) < 0:
+                raise Exception(
+                    "Got balance negative",
+                    block.com_dot,
+                    self.state_db.applied_dots,
+                    self.state_db.peer_mints,
+                    self.persistence.get_chain(block.com_id).versions,
+                )
+            else:
+                print(
+                    "Got balance postive",
+                    block.com_dot,
+                    self.state_db.applied_dots,
+                    self.state_db.peer_mints,
+                    self.persistence.get_chain(block.com_id).versions,
+                )
 
             # Witness block react on new block:
             if self.should_witness_subcom.get(
@@ -151,8 +197,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         # Every peer should witness every K blocks?
         # TODO: that should depend on the number of peers in the community - change that
         # + account for the fault tolerance
-        K = 3
-        if ran.random() < 1 / K:
+        if ran.random() < 1 / self.witness_delta:
             return True
         return False
 
@@ -175,9 +220,11 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             InvalidMintException if not valid mint
         """
         # 1. Is minter known and acceptable?
-        if minter in self.state_db.known_chain_minters(chain_id):
+        if not self.state_db.known_chain_minters(
+            chain_id
+        ) or minter not in self.state_db.known_chain_minters(chain_id):
             raise UnknownMinterException(
-                "Got minting from unknown peer ", chain_id, minter
+                "Got minting from unacceptable peer ", chain_id, minter
             )
         # 2. Mint if properly formatted
         if not mint_transaction.get("value"):
@@ -185,14 +232,19 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                 "Mint transaction badly formatted ", chain_id, minter
             )
         # 3. Minting value within the range
-        if MINT_VALUE_RANGE[0] < mint_transaction.get("value") < MINT_VALUE_RANGE[1]:
+        if not (
+            Decimal(self.settings.mint_value_range[0], self.context)
+            < mint_transaction["value"]
+            < Decimal(self.settings.mint_value_range[1], self.context)
+        ):
             raise InvalidMintRangeException(
                 chain_id, minter, mint_transaction.get("value")
             )
         # 4. Total value is bounded
-        if (
-            self.state_db.peer_mints[minter] + mint_transaction.get("value")
-            < MINT_MAX_VALUE
+        if not (
+            self.state_db.peer_mints[minter]
+            + Decimal(mint_transaction.get("value"), self.context)
+            < Decimal(self.settings.mint_max_value, self.context)
         ):
             raise UnboundedMintException(
                 chain_id,
@@ -205,18 +257,18 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         """
         Create mint for own reputation: Reputation & Liveness  at Stake
         """
-
         if not value:
             value = self.settings.initial_mint_value
         if not chain_id:
+            # Community id is the same as the peer id
             chain_id = self.my_pub_key_bin
         # Mint transaction: value
         mint_tx = {"value": float(value)}
-        # Community id is the same as the
-        block = self.create_signed_block(
-            block_type=MINT_TYPE, transaction=mint_tx, com_id=chain_id
-        )
         self.verify_mint(chain_id, self.my_pub_key_bin, mint_tx)
+        block = self.create_signed_block(
+            block_type=MINT_TYPE, transaction=encode_raw(mint_tx), com_id=chain_id
+        )
+        print("Creating mint block", block.com_dot, block.pers_dot)
         self.share_in_community(block, chain_id)
 
     def process_mint(self, mint_blk: PlexusBlock) -> None:
@@ -234,7 +286,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             mint_dot,
             prev_links,
             minter,
-            mint_tx.get("value"),
+            Decimal(mint_tx.get("value"), self.context),
             self.should_store_store_update(chain_id, seq_num),
         )
 
@@ -256,11 +308,18 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         """
         bal = self.state_db.get_balance(self.my_pub_key_bin)
         if ignore_validation or bal - value >= 0:
-            spend_tx = {"value": float(value), "to_peer": counter_party}
+            spend_tx = {
+                "value": float(value),
+                "to_peer": counter_party,
+                "prev_pairwise_link": self.state_db.get_last_pairwise_links(
+                    self.my_pub_key_bin, counter_party
+                ),
+            }
             self.verify_spend(self.my_pub_key_bin, spend_tx)
             block = self.create_signed_block(
-                block_type=SPEND_TYPE, transaction=spend_tx
+                block_type=SPEND_TYPE, transaction=encode_raw(spend_tx), com_id=chain_id
             )
+            self.logger.info("Created spend block", block.com_dot)
             self.share_in_community(block, chain_id)
         else:
             raise InsufficientBalanceException("Not enough balance for spend")
@@ -275,10 +334,19 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         if (
             not spend_transaction.get("value")
             or not spend_transaction.get("to_peer")
-            or not spend_transaction.get("link")
+            or not spend_transaction.get("prev_pairwise_link")
         ):
             raise InvalidTransactionFormatException(
-                "Mint transaction badly formatted ", spender, spend_transaction
+                "Spend transaction badly formatted ", spender, spend_transaction
+            )
+        # 2. Verify the spend value in range
+        if not (
+            self.settings.spend_value_range[0]
+            < spend_transaction.get("value")
+            < self.settings.spend_value_range[1]
+        ):
+            raise InvalidSpendRangeException(
+                "Spend value out of range", spender, spend_transaction.get("value")
             )
 
     def process_spend(self, spend_block: PlexusBlock) -> None:
@@ -291,8 +359,8 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         spend_dot = spend_block.com_dot
         pers_links = spend_block.links
 
-        prev_spend_links = spend_tx.get("link")
-        value = spend_tx.get("value")
+        prev_spend_links = spend_tx.get("prev_pairwise_link")
+        value = Decimal(spend_tx.get("value"), self.context)
         to_peer = spend_tx.get("to_peer")
         seq_num = spend_dot[0]
 
@@ -308,22 +376,58 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         )
 
         # Is this block related to my peer?
-        to_peer = spend_tx.get("to_peer")
         if to_peer == self.my_pub_key_bin:
+            print("Added block for response, to_peer", to_peer, self.my_pub_key_bin)
             self.add_block_to_response_processing(spend_block)
 
     # ------------ Block Response processing ---------
 
     def add_block_to_response_processing(self, block: PlexusBlock) -> None:
         self.tracked_blocks[block.com_id].add(block.com_dot)
-        cache_id = hex_to_int(block.public_key)
-        cache: PaymentSignCache = self.request_cache.get(
-            PaymentSignCache.CACHE_PREFIX, cache_id
-        )
-        if cache:
-            cache.add_block(block)
-        else:
-            self.request_cache.add(PaymentSignCache(self, cache_id))
+
+        self.counter_signing_block_queue.put_nowait((block.com_seq_num, (0, block)))
+
+    def process_counter_signing_block(
+        self,
+        block: PlexusBlock,
+        time_passed: float = None,
+        num_block_passed: int = None,
+    ) -> bool:
+        """
+        Process block that should be counter-signed and return True if the block should be delayed more.
+        Args:
+            block: Processed block
+            time_passed: time passed since first added
+            num_block_passed: number of blocks passed since first added
+        Returns:
+            Should add to queue again.
+        """
+        res = self.block_response(block, time_passed, num_block_passed)
+        print("Response is ", res)
+        if res == BlockResponse.CONFIRM:
+            self.confirm(
+                block, extra_data={"value": decode_raw(block.transaction).get("value")}
+            )
+            return False
+        elif res == BlockResponse.REJECT:
+            self.reject(block)
+            return False
+        return True
+
+    async def evaluate_counter_signing_blocks(self, delta: float = None):
+        while True:
+            _delta = delta if delta else self.settings.block_sign_delta
+            priority, block_info = await self.counter_signing_block_queue.get()
+            process_time, block = block_info
+            should_delay = self.process_counter_signing_block(block, process_time)
+            if should_delay:
+                self.counter_signing_block_queue.put_nowait(
+                    (priority, (process_time + _delta, block))
+                )
+                await sleep(_delta)
+            else:
+                self.tracked_blocks[block.com_id].remove(block.com_dot)
+                await sleep(0.001)
 
     def block_response(
         self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
@@ -331,15 +435,17 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         # Analyze the risk of accepting this block
         stat = self.state_db.get_closest_peers_status(block.com_id, block.com_seq_num)
         # If there is no information or chain is forked or
-        if not stat or not stat[1].get(block.public_key):
+        print("Closest peer status", stat)
+        peer_id = shorten(block.public_key)
+
+        if not stat or not stat[1].get(peer_id):
             # Check that it is not infinite
-            if (
-                wait_time > self.settings.max_wait_time
-                or wait_blocks > self.settings.max_wait_block
+            if (wait_time and wait_time > self.settings.max_wait_time) or (
+                wait_blocks and wait_blocks > self.settings.max_wait_block
             ):
                 return BlockResponse.REJECT
             return BlockResponse.DELAY
-        if not stat[1][block.public_key][1] or not stat[1][block.public_key][0]:
+        if not stat[1][peer_id][1] or not stat[1][peer_id][0]:
             # If chain is forked or negative balance => reject
             return BlockResponse.REJECT
 
@@ -348,8 +454,12 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
         # TODO: revisit that
         # 1. Diversity on the block building
-        f = 2
-        if len(self.peer_conf[(block.com_id, block.com_seq_num)]) > f + 1:
+        f = 3
+        print(
+            "Peer confirmations ",
+            len(self.peer_conf[(block.com_id, block.com_seq_num)]),
+        )
+        if len(self.peer_conf[(block.com_id, block.com_seq_num)]) > f:
             return BlockResponse.CONFIRM
         else:
             return BlockResponse.DELAY
@@ -373,8 +483,8 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             self.reachability_cache[(chain_id, target_dot)][block_dot] = False
             return False
 
-    def update_risk(self, chain_id: bytes, conf_peer_id: bytes, target_dot: Dot):
-        self.peer_conf[(chain_id, target_dot)][conf_peer_id] += 1
+    def update_risk(self, chain_id: bytes, conf_peer_id: bytes, target_seq_num: int):
+        self.peer_conf[(chain_id, target_seq_num)][conf_peer_id] += 1
 
     # ----------- Witness transactions --------------
 
@@ -390,7 +500,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             # New block at the same sequence number arrived - reschedule it
             cache.reschedule()
         else:
-            self.request_cache.add(WitnessBlockCache(self, cache_id, seq_num, delay))
+            self.request_cache.add(WitnessBlockCache(self, chain_id, seq_num, delay))
 
     def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
         return len(witness_tx) == 2 and witness_tx[0] > 0 and len(witness_tx[1]) > 0
@@ -399,13 +509,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         chain_state = self.state_db.get_closest_peers_status(chain_id, seq_num)
         if not chain_state:
             return None
-        seq_num = chain_state[0]
-        peers_state = chain_state[1]
-        pre_packed_state = dict()
-        for p, bal_val in peers_state.items():
-            short_peer_id = shorten(p)
-            pre_packed_state[short_peer_id] = bal_val
-        return encode_raw((seq_num, pre_packed_state))
+        return encode_raw(chain_state)
 
     def apply_witness_tx(
         self, block: PlexusBlock, witness_tx: Tuple[int, ChainState]
@@ -413,6 +517,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         state = witness_tx[1]
         state_hash = take_hash(state)
         seq_num = witness_tx[0]
+        print("Applying witness transaction")
 
         if not self.should_witness_chain_point(block.com_id, block.public_key, seq_num):
             # This is invalid witnessing - react
@@ -425,6 +530,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         self.state_db.add_witness_vote(
             block.com_id, seq_num, state_hash, block.public_key
         )
+        print("Adding chain state ")
         self.state_db.add_chain_state(block.com_id, seq_num, state_hash, state)
 
     # ------ Confirm and reject transactions -------
@@ -440,25 +546,30 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             claimer,
             com_links,
             claim_dot,
-            confirm_tx.get("spender"),
-            confirm_tx.get("dot"),
-            confirm_tx.get("value"),
+            confirm_tx["initiator"],
+            confirm_tx["dot"],
+            Decimal(confirm_tx["value"], self.context),
             self.should_store_store_update(chain_id, seq_num),
         )
 
     def apply_reject_tx(self, block: PlexusBlock, reject_tx: Dict) -> None:
         self.state_db.apply_reject(
             block.com_id,
-            reject_tx.get("dot"),
+            reject_tx["dot"],
             block.public_key,
-            reject_tx.get("spender"),
+            reject_tx["initiator"],
             block.links,
             block.com_dot,
             self.should_store_store_update(block.com_id, block.com_seq_num),
         )
 
+    async def unload(self):
+        if not self.block_sign_queue_task.done():
+            self.block_sign_queue_task.cancel()
+        await super().unload()
 
-class PaymentIPv8Community(
-    PaymentCommunity, IPv8SubCommunityFactory, RandomWalkDiscoveryStrategy
-):
-    pass
+
+# class PaymentIPv8Community(
+#    IPv8SubCommunityFactory, RandomWalkDiscoveryStrategy, PaymentCommunity
+# ):
+#    pass

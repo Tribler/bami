@@ -1,9 +1,9 @@
 from binascii import hexlify
 from hashlib import sha256
 from itertools import chain
-from typing import Set, Tuple, Any, NewType
+from typing import Any, NewType, Set, Tuple
 
-from msgpack import loads, dumps
+from msgpack import dumps, loads
 
 KEY_LEN = 8
 ShortKey = NewType("ShortKey", str)
@@ -47,6 +47,11 @@ def int_to_short_key(int_val: int) -> ShortKey:
 
 def wrap_return(gener_val):
     return list(chain(*(k for k in gener_val)))
+
+
+def wrap_iterate(gener_val):
+    for _ in gener_val:
+        pass
 
 
 def take_hash(value: Any) -> bytes:

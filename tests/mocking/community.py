@@ -9,13 +9,18 @@ from ipv8.peerdiscovery.network import Network
 from ipv8.requestcache import RequestCache
 from python_project.backbone.block import PlexusBlock
 from python_project.backbone.community import PlexusCommunity, BlockResponse
-from python_project.backbone.community_routines import CommunityRoutines, MessageStateMachine
+from python_project.backbone.community_routines import (
+    CommunityRoutines,
+    MessageStateMachine,
+)
 from python_project.backbone.datastore.database import BaseDB
 from python_project.backbone.sub_community import (
     SubCommunityRoutines,
     BaseSubCommunityFactory,
     SubCommunityDiscoveryStrategy,
     BaseSubCommunity,
+    IPv8SubCommunityFactory,
+    LightSubCommunityFactory,
 )
 
 from tests.mocking.mock_db import MockDBManager
@@ -55,6 +60,9 @@ class FakeRoutines(CommunityRoutines):
 
 
 class MockSubCommuntiy(BaseSubCommunity):
+    def add_peer(self, peer: Peer):
+        pass
+
     @property
     def subcom_id(self) -> bytes:
         pass
@@ -74,6 +82,9 @@ class MockSubCommunityFactory(BaseSubCommunityFactory):
 
 
 class MockSubCommunityRoutines(SubCommunityRoutines):
+    def discovered_peers_by_subcom(self, subcom_id) -> Iterable[Peer]:
+        pass
+
     def get_subcom(self, sub_com: bytes) -> Optional[BaseSubCommunity]:
         pass
 
@@ -91,28 +102,33 @@ class MockSubCommunityRoutines(SubCommunityRoutines):
         pass
 
     def get_subcom_discovery_strategy(
-            self, subcom_id: bytes
+        self, subcom_id: bytes
     ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
         return MockSubCommunityDiscoveryStrategy()
 
     @property
     def subcom_factory(
-            self,
+        self,
     ) -> Union[BaseSubCommunityFactory, Type[BaseSubCommunityFactory]]:
         return MockSubCommunityFactory()
 
 
 class MockSettings(object):
+    @property
+    def gossip_collect_time(self):
+        return 0.2
 
     @property
-    def sync_timeout(self):
-        return 0.1
+    def gossip_fanout(self):
+        return 5
 
 
 class MockedCommunity(Community, CommunityRoutines):
     master_peer = Peer(default_eccrypto.generate_key(u"very-low"))
 
     def __init__(self, *args, **kwargs):
+        if kwargs.get("work_dir"):
+            self.work_dir = kwargs.pop("work_dir")
         super().__init__(*args, **kwargs)
         self._req = RequestCache()
 
@@ -157,23 +173,25 @@ class FakeBackCommunity(PlexusCommunity):
         pass
 
     def block_response(
-            self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
+        self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
     ) -> BlockResponse:
         pass
 
-    def process_block_out_of_order(self, blk: PlexusBlock, peer: Peer) -> None:
-        pass
-
-    def notify_peers_on_new_subcoms(self) -> None:
+    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
         pass
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         pass
 
-    def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
-        pass
-
     def discover(
-            self, subcom: BaseSubCommunity, target_peers: int = -1, **kwargs
+        self, subcom: BaseSubCommunity, target_peers: int = -1, **kwargs
     ) -> None:
         pass
+
+
+class FakeIPv8BackCommunity(IPv8SubCommunityFactory, FakeBackCommunity):
+    pass
+
+
+class FakeLightBackCommunity(LightSubCommunityFactory, FakeBackCommunity):
+    pass

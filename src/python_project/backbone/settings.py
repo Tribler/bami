@@ -28,18 +28,32 @@ class PlexusSettings(object):
     """
 
     def __init__(self):
-        # Time to verify received frontiers
-        self.sync_timeout = 0.6
+        # Push gossip properties: fanout and ttl (number of hops)
+        self.push_gossip_fanout = 5
+        self.push_gossip_ttl = 1
 
-        # Sync round time in seconds
-        self.sync_time = 0.5
+        # Witness each delta block
+        self.witness_block_delta = 1
+        self.witness_delta_time = 0.4
 
-        # Track personal chains of all neighbors
-        # (e.g., join the community around a peer when receiving an introduction response from it)
+        # Track chains of every overlay neighbour
         self.track_neighbours_chains = False
 
+        # Time for one frontier gossip round
+        self.gossip_sync_max_delay = 0.1
+        self.gossip_sync_time = 0.3
+        self.gossip_collect_time = 0.4
+        self.block_sign_delta = 0.3
+        # Maximum wait time 100
+        # Maximum wait block 100
+        self.max_wait_time = 100
+        self.max_wait_block = 100
+
+        # working directory for the database
+        self.work_directory = ".block_db"
         # Gossip fanout for frontiers exchange
-        self.gossip_fanout = 15
+        self.gossip_fanout = 6
+        self.sync_delta = 0.3
 
         # The set with block types that should not be broadcast
         self.block_types_bc_disabled = set()
