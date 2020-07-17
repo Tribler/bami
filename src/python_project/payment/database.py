@@ -125,7 +125,6 @@ class PaymentState(object):
     ) -> None:
         """Apply spend transaction to the state"""
         # apply spend to the personal chain
-        print("Processing spend")
 
         # Iterate through last spend values and sum them up
         full_val = 0
@@ -202,6 +201,8 @@ class PaymentState(object):
         # Counter-parties agreed => Fix any inconsistencies introduced
         if type(val) == tuple and val[0] == value:
             self.vals_cache[spender][claimer][spend_dot] = value
+            if spend_dot in self.last_spend_values[spender][claimer]:
+                self.last_spend_values[spender][claimer][spend_dot] = value
         # Link this claim to the spend value
         self.claim_dict[claimer][spender] = spend_dot
         self.claim_vals[claimer][spender] = value
@@ -213,12 +214,12 @@ class PaymentState(object):
     def apply_reject(
         self,
         chain_id: bytes,
-        spend_dot: Dot,
         claimer: bytes,
-        spender: bytes,
         prev_links: Links,
         reject_dot: Dot,
-        store_update: bool,
+        spender: bytes,
+        spend_dot: Dot,
+        store_update: bool = False,
     ):
         """Apply reject transaction to the state. Will raise exception if reject is too old"""
         self._verify_reaction(spend_dot, claimer, spender)

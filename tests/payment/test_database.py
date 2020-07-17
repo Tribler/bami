@@ -35,7 +35,7 @@ class TestPaymentState:
 
     def test_mint_and_spend(self):
         chain_id = self.minter
-        value = Decimal(12.00, self.con)
+        value = Decimal(15.00, self.con)
         dot = Dot((1, "123123"))
 
         self.state.apply_mint(chain_id, dot, GENESIS_LINK, self.minter, value)
@@ -53,8 +53,110 @@ class TestPaymentState:
             self.receiver,
             spend_value,
         )
-        assert float(self.state.get_balance(self.spender)) == 0
+        assert float(self.state.get_balance(self.spender)) == 3
         assert not self.state.is_chain_forked(self.spender)
+        return chain_id, spend_value, spend_dot
+
+    def test_valid_spend_with_confirm(self):
+        chain_id, value, spend_dot = self.test_mint_and_spend()
+
+        confirm_dot = Dot((3, "33333"))
+        # Add confirmation from the counter-party
+        self.state.apply_confirm(
+            chain_id,
+            self.receiver,
+            Links((spend_dot,)),
+            confirm_dot,
+            self.spender,
+            spend_dot,
+            value,
+        )
+        # As the transaction is confirmed, inconsistency is resolved
+        assert float(self.state.get_balance(self.spender)) == 3
+        assert float(self.state.get_balance(self.receiver)) == value
+
+    def test_valid_spend_with_reject(self):
+        chain_id, value, spend_dot = self.test_mint_and_spend()
+
+        reject_dot = Dot((3, "33333"))
+        # Add confirmation from the counter-party
+        self.state.apply_reject(
+            chain_id,
+            self.receiver,
+            Links((spend_dot,)),
+            reject_dot,
+            self.spender,
+            spend_dot,
+        )
+        # As the transaction is confirmed, inconsistency is resolved
+        assert float(self.state.get_balance(self.spender)) == 3 + value
+        assert float(self.state.get_balance(self.receiver)) == 0
+
+    def test_risky_spend(self):
+        self.chain_id = self.minter
+        spend_value = Decimal(10.00, self.con)
+        spend_dot = Dot((1, "11111"))
+        self.state.apply_spend(
+            self.chain_id,
+            GENESIS_LINK,
+            GENESIS_LINK,
+            spend_dot,
+            self.spender,
+            self.receiver,
+            spend_value,
+        )
+        assert float(self.state.get_balance(self.spender)) == -10
+        # Next spend - tries to pretend as if hasn't happen
+        self.new_spend_value = Decimal(6.00, self.con)
+        self.new_spend_dot = Dot((2, "22222"))
+        self.state.apply_spend(
+            self.chain_id,
+            Links((spend_dot,)),
+            Links((spend_dot,)),
+            self.new_spend_dot,
+            self.spender,
+            self.receiver,
+            self.new_spend_value,
+        )
+        # As the value is less -> the balance will not change until confirmed, or rejected
+        assert float(self.state.get_balance(self.spender)) == -10
+
+    def test_risky_spend_with_confirm(self):
+        self.test_risky_spend()
+
+        confirm_dot = Dot((3, "33333"))
+        # Add confirmation from the counter-party
+        self.state.apply_confirm(
+            self.chain_id,
+            self.receiver,
+            Links((self.new_spend_dot,)),
+            confirm_dot,
+            self.spender,
+            self.new_spend_dot,
+            self.new_spend_value,
+        )
+        # As the transaction is confirmed, inconsistency is resolved
+        assert float(self.state.get_balance(self.spender)) == -6
+        assert float(self.state.get_balance(self.receiver)) == 6
+        assert self.state.was_balance_negative(self.spender)
+
+    def test_risky_spend_with_reject(self):
+        self.test_risky_spend()
+
+        reject_dot = Dot((3, "33333"))
+        # Add confirmation from the counter-party
+        self.state.apply_reject(
+            self.chain_id,
+            self.receiver,
+            Links((self.new_spend_dot,)),
+            reject_dot,
+            self.spender,
+            self.new_spend_dot,
+        )
+        # As the transaction is rejected - the effect of it is reverted to the previous stable state - zero.
+        assert float(self.state.get_balance(self.spender)) == 0
+        assert float(self.state.get_balance(self.receiver)) == 0
+        assert self.state.was_balance_negative(self.spender)
 
     def test_mint_and_spend_fork(self):
         chain_id = self.minter

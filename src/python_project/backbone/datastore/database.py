@@ -124,7 +124,6 @@ class DBManager(BaseDB):
         for b_i in missing_ranges:
             # Return all blocks with a sequence number
             for dot in chain.get_dots_by_seq_num(b_i):
-                print("b_i", b_i, "dot", dot)
                 val = self.get_block_blob_by_dot(chain_id, dot)
                 if not val:
                     raise Exception("No block", chain_id, dot)
@@ -134,7 +133,6 @@ class DBManager(BaseDB):
         self, conf_dict: Dict, chain: BaseChain
     ) -> Set[Dot]:
         to_request = set()
-        print("Conf dict", conf_dict)
         for sn, hash_vals in conf_dict.items():
             local_val = chain.get_all_short_hash_by_seq_num(sn)
             if not local_val:
@@ -158,7 +156,6 @@ class DBManager(BaseDB):
         conflict_dict: Dict[Dot, Dict[int, Tuple[ShortKey]]],
         val_to_request: Set,
     ):
-        print("Conflict dict", conflict_dict)
         for conf_dot, conf_dict in conflict_dict.items():
             if not conf_dict:
                 val = self.get_block_blob_by_dot(chain_id, conf_dot)
@@ -169,7 +166,6 @@ class DBManager(BaseDB):
             current_point, to_request = self._find_first_conflicting_point(
                 conf_dict, chain
             )
-            print("Current point request", current_point, to_request)
             val_to_request.update(to_request)
             while (
                 current_point
@@ -183,9 +179,7 @@ class DBManager(BaseDB):
                         raise ("Exeption no val", val, chain_id, d)
                     yield val
                     l = chain.get_next_links(d)
-                    if not l:
-                        print("No known next link", d)
-                    else:
+                    if l:
                         new_point.update(set(l))
                 current_point = new_point
             val = self.get_block_blob_by_dot(chain_id, conf_dot)
@@ -197,10 +191,7 @@ class DBManager(BaseDB):
         self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
     ) -> Iterable[bytes]:
         chain = self.get_chain(chain_id)
-        print("Get chain by request ", chain_id)
         if chain:
-            print("Processing ranges ", chain_id)
-
             # Processing missing holes
             blks = set(
                 self._process_missing_seq_num(
@@ -282,9 +273,6 @@ class DBManager(BaseDB):
         )
         full_dot_id = pers + encode_raw(pers_block_dot)
         self.block_store.add_dot(full_dot_id, block_hash)
-        print(
-            "Block added personal ", pers_block_dot, "Dot in the list", pers_dots_list
-        )
         # TODO: add more chain topic
 
         # Notify subs of the personal chain
@@ -304,12 +292,6 @@ class DBManager(BaseDB):
                 com_block_dot = Dot((block.com_seq_num, block.short_hash))
                 com_dots_list = self.chains[com].add_block(
                     block.links, block.com_seq_num, block_hash
-                )
-                print(
-                    "Block added in community ",
-                    com_block_dot,
-                    "Dot in the list",
-                    com_dots_list,
                 )
                 full_dot_id = com + encode_raw(com_block_dot)
                 self.block_store.add_dot(full_dot_id, block_hash)

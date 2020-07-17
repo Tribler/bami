@@ -84,8 +84,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
     def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
-        if self.persistence.get_chain(blk.com_id):
-            print("Chain versions ", self.persistence.get_chain(blk.com_id).versions)
+        pass
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         # Add master peer to the known minter group
@@ -105,14 +104,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         self.should_witness_subcom[sub_com_id] = True
 
     def receive_dots_ordered(self, chain_id: bytes, dots: List[Dot]) -> None:
-        print(
-            "Received dots: Peer ",
-            self.my_peer.mid,
-            "dots",
-            dots,
-            " applied dots ",
-            self.state_db.applied_dots,
-        )
         for dot in dots:
             blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
             if not blk_blob:
@@ -134,9 +125,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
             # Check reachability for target block -> update risk
             for blk_dot in self.tracked_blocks[chain_id]:
-                print("Block dot in tracked block", blk_dot)
                 if self.dot_reachable(chain_id, blk_dot, dot):
-                    print("Dot is reachable ", blk_dot, dot)
                     self.update_risk(chain_id, block.public_key, blk_dot[0])
 
             # Process blocks according to their type
@@ -144,7 +133,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             if block.type == MINT_TYPE:
                 self.process_mint(block)
             elif block.type == SPEND_TYPE:
-                print("Spend type triggered")
                 self.process_spend(block)
             elif block.type == CONFIRM_TYPE:
                 self.process_confirm(block)
@@ -152,24 +140,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                 self.process_reject(block)
             elif block.type == WITNESS_TYPE:
                 self.process_witness(block)
-
-            if self.state_db.get_balance(block.com_id) < 0:
-                raise Exception(
-                    "Got balance negative",
-                    block.com_dot,
-                    self.state_db.applied_dots,
-                    self.state_db.peer_mints,
-                    self.persistence.get_chain(block.com_id).versions,
-                )
-            else:
-                print(
-                    "Got balance postive",
-                    block.com_dot,
-                    self.state_db.applied_dots,
-                    self.state_db.peer_mints,
-                    self.persistence.get_chain(block.com_id).versions,
-                )
-
             # Witness block react on new block:
             if self.should_witness_subcom.get(
                 chain_id
@@ -268,7 +238,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         block = self.create_signed_block(
             block_type=MINT_TYPE, transaction=encode_raw(mint_tx), com_id=chain_id
         )
-        print("Creating mint block", block.com_dot, block.pers_dot)
         self.share_in_community(block, chain_id)
 
     def process_mint(self, mint_blk: PlexusBlock) -> None:
@@ -377,7 +346,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
         # Is this block related to my peer?
         if to_peer == self.my_pub_key_bin:
-            print("Added block for response, to_peer", to_peer, self.my_pub_key_bin)
             self.add_block_to_response_processing(spend_block)
 
     # ------------ Block Response processing ---------
@@ -403,7 +371,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             Should add to queue again.
         """
         res = self.block_response(block, time_passed, num_block_passed)
-        print("Response is ", res)
         if res == BlockResponse.CONFIRM:
             self.confirm(
                 block, extra_data={"value": decode_raw(block.transaction).get("value")}
@@ -435,7 +402,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         # Analyze the risk of accepting this block
         stat = self.state_db.get_closest_peers_status(block.com_id, block.com_seq_num)
         # If there is no information or chain is forked or
-        print("Closest peer status", stat)
         peer_id = shorten(block.public_key)
 
         if not stat or not stat[1].get(peer_id):
@@ -455,10 +421,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         # TODO: revisit that
         # 1. Diversity on the block building
         f = 3
-        print(
-            "Peer confirmations ",
-            len(self.peer_conf[(block.com_id, block.com_seq_num)]),
-        )
+
         if len(self.peer_conf[(block.com_id, block.com_seq_num)]) > f:
             return BlockResponse.CONFIRM
         else:
@@ -517,7 +480,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         state = witness_tx[1]
         state_hash = take_hash(state)
         seq_num = witness_tx[0]
-        print("Applying witness transaction")
 
         if not self.should_witness_chain_point(block.com_id, block.public_key, seq_num):
             # This is invalid witnessing - react
@@ -530,7 +492,6 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         self.state_db.add_witness_vote(
             block.com_id, seq_num, state_hash, block.public_key
         )
-        print("Adding chain state ")
         self.state_db.add_chain_state(block.com_id, seq_num, state_hash, state)
 
     # ------ Confirm and reject transactions -------
@@ -555,11 +516,11 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
     def apply_reject_tx(self, block: PlexusBlock, reject_tx: Dict) -> None:
         self.state_db.apply_reject(
             block.com_id,
-            reject_tx["dot"],
             block.public_key,
-            reject_tx["initiator"],
             block.links,
             block.com_dot,
+            reject_tx["initiator"],
+            reject_tx["dot"],
             self.should_store_store_update(block.com_id, block.com_seq_num),
         )
 

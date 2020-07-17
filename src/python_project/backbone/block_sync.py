@@ -61,7 +61,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
 
     @lazy_wrapper_unsigned(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
-        print("Received block from ", peer)
         block = PlexusBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
@@ -112,7 +111,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             # React on invalid block
             raise InvalidBlockException("Block invalid", str(block), peer)
         else:
-            print("Processing block")
             if not self.persistence.has_block(block.hash):
                 if (
                     self.persistence.get_chain(block.com_id)
@@ -129,7 +127,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
                         self.persistence.get_chain(block.com_id).versions,
                         block.com_dot,
                     )
-                print("Putting block to db")
                 self.persistence.add_block(block_blob, block)
 
     def create_signed_block(

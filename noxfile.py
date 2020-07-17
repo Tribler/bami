@@ -8,7 +8,7 @@ import nox
 from nox.sessions import Session
 
 locations = "src", "tests", "noxfile.py", "docs/conf.py"
-nox.options.sessions = "tests",
+nox.options.sessions = ("tests",)
 # Additional options "safety", "lint", "lint", "mypy", "pytype"
 package = "python_project"
 

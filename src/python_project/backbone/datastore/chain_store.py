@@ -374,16 +374,11 @@ class Chain(BaseChain):
         if not last_reconcile_point:
             last_reconcile_point = 0
         extra_dots = {}
-        print("Conflicts ", conflicts)
         for c in conflicts:
             # TODO: revisit this. How to choose the 'from' sequence number
             last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
-            print("Last point", last_point)
             est_diff = c[0] - last_point
-            print("Est diff", est_diff)
-            print("Max extra dots", self.max_extra_dots)
             mod_blk = round(est_diff / self.max_extra_dots)
-            print("Mod blk", mod_blk)
             mod_blk = mod_blk + 1 if not mod_blk else mod_blk
 
             extra_val = {}

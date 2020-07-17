@@ -27,8 +27,6 @@ class WitnessBlockCache(NumberCache):
         self.community = community
         self.chain_id = chain_id
         self.seq_num = seq_num
-        print("Chain id", chain_id)
-        print(bytes(seq_num))
         self.cache_id = hex_to_int(chain_id + bytes(seq_num))
         self.proceed = True
 

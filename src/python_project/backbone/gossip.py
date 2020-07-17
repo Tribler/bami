@@ -89,7 +89,6 @@ class GossipFrontierSyncCache(NumberCache):
         self.working_front[peer.public_key.key_to_bin()] = (peer, frontier)
 
     def process_working_front(self) -> List[Optional[Tuple[Peer, FrontierDiff]]]:
-        print("Processing work front")
         candidate = None
         cand_max = 0
 
@@ -97,7 +96,6 @@ class GossipFrontierSyncCache(NumberCache):
             frontier_diff = self.community.persistence.reconcile(
                 self.chain_id, peer_front[1], peer_key
             )
-            print("Frontier diff: ", frontier_diff)
 
             num = len(expand_ranges(frontier_diff.missing)) + len(
                 frontier_diff.conflicts
@@ -137,19 +135,14 @@ class GossipFrontiersMixin(
 
     def gossip_sync_task(self, subcom_id: bytes) -> None:
         """Start of the gossip state machine"""
-        print("Getting chain for gossip", subcom_id)
         chain = self.persistence.get_chain(subcom_id)
         if chain:
-            print("Chain is ", subcom_id)
             frontier = chain.frontier
-            print("Chain processing with gossip ", frontier)
             # Select next peers for the gossip round
             next_peers = self.gossip_strategy.get_next_gossip_peers(
                 subcom_id, self.settings.gossip_fanout
             )
-            print("Next peers", next_peers)
             for peer in next_peers:
-                print("Send packet to ", peer)
                 self.send_packet(peer, FrontierPayload(subcom_id, frontier.to_bytes()))
 
     @lazy_wrapper(FrontierPayload)
@@ -161,17 +154,14 @@ class GossipFrontiersMixin(
             GossipFrontiersMixin.COMMUNITY_CACHE, hex_to_int(chain_id)
         )
         if cache:
-            print("Cache frontier received ", frontier, peer)
             cache.receive_frontier(peer, frontier)
         else:
             # Create new cache
             diff = self.persistence.reconcile(
                 chain_id, frontier, peer.public_key.key_to_bin()
             )
-            print("Diff after gossip", diff)
             if not diff.is_empty():
                 # Request blocks from the peer
-                print("Creating cache for chain", chain_id)
                 self.send_packet(peer, BlocksRequestPayload(chain_id, diff.to_bytes()))
                 self.request_cache.add(GossipFrontierSyncCache(self, chain_id))
 
@@ -179,16 +169,13 @@ class GossipFrontiersMixin(
     def received_blocks_request(
         self, peer: Peer, payload: BlocksRequestPayload
     ) -> None:
-        print("Block request received from", peer)
         f_diff = FrontierDiff.from_bytes(payload.frontier_diff)
         chain_id = payload.subcom_id
         vals_to_request = set()
         blocks = self.persistence.get_block_blobs_by_frontier_diff(
             chain_id, f_diff, vals_to_request
         )
-        print("Block in ", chain_id, " f_diff", f_diff, " blocks: ", blocks)
         for block in blocks:
-            print("Sending blocks", block)
             self.send_packet(peer, RawBlockPayload(block), sig=False)
 
     def setup_messages(self) -> None:
