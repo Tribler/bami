@@ -16,6 +16,9 @@ def test_is_sub(monkeypatch):
     assert f.is_subscribed(b"test1")
 
 
+# Test sub to multiple comms
+
+
 class TestSub:
     @pytest.fixture(autouse=True)
     def setup(self):

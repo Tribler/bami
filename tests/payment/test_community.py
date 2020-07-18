@@ -33,6 +33,10 @@ class SetupValues:
         self.num_nodes = len(self.nodes)
 
 
+# Add tests for all exceptions
+# Add tests on validity of transactions
+
+
 class TestBackBoneCommunity(TestBase):
     def setup_nodes(self, num_nodes: int):
         self.nodes = []

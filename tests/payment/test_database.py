@@ -8,9 +8,11 @@ from python_project.backbone.datastore.utils import (
     encode_raw,
     GENESIS_LINK,
     Links,
-    shorten,
+    shorten, take_hash,
 )
-from python_project.payment.database import PaymentState
+from python_project.payment.database import ChainState, PaymentState
+from python_project.payment.exceptions import InconsistentClaimException, InconsistentStateHashException, \
+    InvalidClaimException
 
 
 class TestPaymentState:
@@ -40,7 +42,7 @@ class TestPaymentState:
 
         self.state.apply_mint(chain_id, dot, GENESIS_LINK, self.minter, value)
         assert self.state.get_balance(self.minter) == value
-        assert not self.state.is_chain_forked(self.minter)
+        assert not self.state.is_chain_forked(chain_id, self.minter)
 
         spend_value = Decimal(12.00, self.con)
         spend_dot = Dot((2, "23123"))
@@ -54,7 +56,8 @@ class TestPaymentState:
             spend_value,
         )
         assert float(self.state.get_balance(self.spender)) == 3
-        assert not self.state.is_chain_forked(self.spender)
+        assert not self.state.is_chain_forked(chain_id, self.spender)
+        assert not self.state.was_chain_forked(chain_id, self.spender)
         return chain_id, spend_value, spend_dot
 
     def test_valid_spend_with_confirm(self):
@@ -178,7 +181,7 @@ class TestPaymentState:
             spend_value,
         )
         assert float(self.state.get_balance(self.spender)) == 0
-        assert self.state.is_chain_forked(self.spender)
+        assert self.state.is_chain_forked(chain_id, self.spender)
 
     def test_add_claim(self):
         value = Decimal(12.11, self.con)
@@ -200,10 +203,110 @@ class TestPaymentState:
         claim_dot = Dot((1, "2323"))
 
         self.state.apply_confirm(
-            chain_id, self.receiver, GENESIS_LINK, claim_dot, self.spender, dot, value
+            chain_id, self.receiver, Links((dot,)), claim_dot, self.spender, dot, value
         )
         assert self.state.last_spend_values[self.spender][self.receiver][dot] == value
         assert float(self.state.get_balance(self.receiver)) == 12.11
+
+    def test_add_invalid_claim(self):
+        value = Decimal(1, self.con)
+        dot = Dot((1, "123123"))
+        chain_id = self.spender
+
+        self.state.apply_spend(
+            chain_id,
+            GENESIS_LINK,
+            GENESIS_LINK,
+            dot,
+            self.spender,
+            self.receiver,
+            value,
+        )
+        assert self.state.last_spend_values[self.spender][self.receiver][dot] == value
+        assert float(self.state.get_balance(self.spender)) == -1
+
+        new_dot = Dot((1, "223123"))
+        self.state.apply_spend(
+            chain_id,
+            GENESIS_LINK,
+            GENESIS_LINK,
+            new_dot,
+            self.spender,
+            self.receiver,
+            value,
+        )
+        assert self.state.last_spend_values[self.spender][self.receiver][dot] == value
+        assert float(self.state.get_balance(self.spender)) == -2
+        assert self.state.was_chain_forked(chain_id, self.spender)
+
+        claim_dot = Dot((2, "33323"))
+        with pytest.raises(InvalidClaimException):
+            # Should raise exception as the claim links are not correct
+            self.state.apply_confirm(
+                chain_id, self.receiver, GENESIS_LINK, claim_dot, self.spender, dot, value
+            )
+        self.state.apply_confirm(
+            chain_id, self.receiver, Links((dot,)), claim_dot, self.spender, dot, value
+        )
+
+        assert self.state.last_spend_values[self.spender][self.receiver][dot] == value
+        assert float(self.state.get_balance(self.receiver)) == 1
+        with pytest.raises(InvalidClaimException):
+            # Double claim - should raise exception
+            self.state.apply_confirm(
+                chain_id,
+                self.receiver,
+                Links((claim_dot,)),
+                claim_dot,
+                self.spender,
+                dot,
+                value,
+            )
+        assert float(self.state.get_balance(self.receiver)) == 1
+        assert not self.state.was_chain_forked(chain_id, self.receiver)
+
+        # Add inconsistent claim
+        inconsistent_value = Decimal(100, self.con)
+        with pytest.raises(InconsistentClaimException):
+            self.state.apply_confirm(
+                chain_id,
+                self.receiver,
+                Links((claim_dot,)),
+                claim_dot,
+                self.spender,
+                new_dot,
+                inconsistent_value,
+            )
+        assert float(self.state.get_balance(self.receiver)) == 1
+        assert not self.state.was_chain_forked(chain_id, self.receiver)
+
+    def test_add_chain_state(self):
+        chain_id = self.spender
+        seq_num = 1
+        state = ChainState({b't1': (True, True)})
+        state_hash = take_hash(state)
+        self.state.add_chain_state(chain_id, seq_num, state_hash, state)
+        self.state.prefered_statuses[chain_id][seq_num] = state_hash
+        assert self.state.peer_statuses[chain_id][seq_num][state_hash] == state
+        assert self.state.get_closest_peers_status(chain_id, 1) == (1, state)
+        assert not self.state.get_closest_peers_status(chain_id, 2)
+
+    def test_invalid_chain_state(self):
+        # Add chain state with inconsistent hash
+        chain_id = self.spender
+        seq_num = 1
+        state = ChainState({b't1': (True, True)})
+        state_hash = b'fake_hash'
+        real_hash = take_hash(state)
+        with pytest.raises(InconsistentStateHashException):
+            self.state.add_chain_state(chain_id, seq_num, state_hash, state)
+        self.state.add_chain_state(chain_id, seq_num, real_hash, state)
+        assert not self.state.get_closest_peers_status(chain_id, 1)
+
+    def test_get_peer_status_when_empty(self):
+        chain_id = self.spender
+        seq_num = 1
+        assert not self.state.get_closest_peers_status(chain_id, seq_num)
 
     def test_spend_fork(self):
         value = Decimal(1, self.con)
@@ -232,8 +335,8 @@ class TestPaymentState:
         )
         assert float(self.state.get_balance(self.spender)) == -2
 
-        assert self.state.is_chain_forked(self.spender)
-        assert self.state.was_chain_forked(self.spender)
+        assert self.state.is_chain_forked(chain_id, self.spender)
+        assert self.state.was_chain_forked(chain_id, self.spender)
 
         # Fix the fork:
         f_dot = Dot((2, "000000"))
@@ -249,8 +352,8 @@ class TestPaymentState:
         )
         assert float(self.state.get_balance(self.spender)) == -3
 
-        assert not self.state.is_chain_forked(self.spender)
-        assert self.state.was_chain_forked(self.spender)
+        assert not self.state.is_chain_forked(chain_id, self.spender)
+        assert self.state.was_chain_forked(chain_id, self.spender)
 
     def test_state_updates(self):
         chain_id = self.minter
@@ -261,7 +364,7 @@ class TestPaymentState:
             chain_id, dot, GENESIS_LINK, self.minter, value, store_update=True
         )
         assert self.state.get_balance(self.minter) == value
-        assert not self.state.is_chain_forked(self.minter)
+        assert not self.state.is_chain_forked(chain_id, self.minter)
         spend_value = Decimal(12.00, self.con)
         spend_dot = Dot((2, "23123"))
         self.state.apply_spend(
@@ -275,14 +378,14 @@ class TestPaymentState:
             store_status_update=True,
         )
         assert float(self.state.get_balance(self.spender)) == 0
-        assert not self.state.is_chain_forked(self.spender)
+        assert not self.state.is_chain_forked(chain_id, self.spender)
 
         claim_dot = Dot((3, "2323"))
 
         self.state.apply_confirm(
             chain_id,
             self.receiver,
-            GENESIS_LINK,
+            Links((spend_dot,)),
             claim_dot,
             self.spender,
             spend_dot,
@@ -299,18 +402,18 @@ class TestPaymentState:
         v = self.state.get_closest_peers_status(chain_id, 2)
         assert v is not None
         assert (
-            (v[0] == 2)
-            and (len(v[1]) == 1)
-            and (v[1].get(shorten(self.spender)) == (True, True))
+                (v[0] == 2)
+                and (len(v[1]) == 1)
+                and (v[1].get(shorten(self.spender)) == (True, True))
         )
 
         v = self.state.get_closest_peers_status(chain_id, 3)
         assert v is not None
         assert (
-            v[0] == 3
-            and len(v[1]) == 2
-            and (v[1].get(shorten(self.spender)) == (True, True))
-            and (v[1].get(shorten(self.receiver)) == (True, True))
+                v[0] == 3
+                and len(v[1]) == 2
+                and (v[1].get(shorten(self.spender)) == (True, True))
+                and (v[1].get(shorten(self.receiver)) == (True, True))
         )
 
         assert v[1] == self.state.get_last_peer_status(chain_id)
