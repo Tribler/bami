@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from ipv8.test.mocking.endpoint import internet
 import pytest
+from python_project.backbone.utils import Dot, GENESIS_LINK
+from python_project.backbone.exceptions import InvalidTransactionFormatException
 from python_project.backbone.payload import (
     BlockBroadcastPayload,
     RawBlockBroadcastPayload,
@@ -13,9 +15,14 @@ from python_project.backbone.sub_community import (
 from python_project.payment.community import PaymentCommunity
 from python_project.payment.exceptions import (
     InsufficientBalanceException,
+    InvalidMintRangeException,
+    InvalidSpendRangeException,
+    InvalidWitnessTransactionException,
+    UnboundedMintException,
     UnknownMinterException,
 )
 
+from tests.conftest import FakeBlock
 from tests.mocking.base import TestBase
 
 
@@ -73,9 +80,38 @@ class TestBackBoneCommunity(TestBase):
         with pytest.raises(UnknownMinterException):
             vals.nodes[1].overlay.mint(value=Decimal(10, vals.context))
         await self.deliver_messages()
-        # Should throw invalid mint exception
         for i in range(vals.num_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(minter) == 0
+
+    def test_invalid_mint_tx_bad_format(self, std_five):
+        mint_tx = {}
+        chain_id = std_five.community_id
+        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        with pytest.raises(InvalidTransactionFormatException):
+            std_five.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+
+    def test_invalid_mint_tx_value_out_of_range(self, std_five):
+        mint_tx = {"value": 10 ** 7}
+        chain_id = std_five.community_id
+        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        with pytest.raises(InvalidMintRangeException):
+            std_five.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+
+    def test_mint_value_unbound_value(self, std_five):
+        mint_tx = {"value": 10 ** 7 - 1}
+        chain_id = std_five.community_id
+        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        std_five.nodes[0].overlay.state_db.apply_mint(
+            chain_id,
+            Dot((1, "123123")),
+            GENESIS_LINK,
+            minter,
+            Decimal(mint_tx.get("value"), std_five.context),
+            True,
+        )
+        next_mint = {"value": 1}
+        with pytest.raises(UnboundedMintException):
+            std_five.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
 
     @pytest.mark.asyncio
     async def test_invalid_spend(self, std_five):
@@ -92,6 +128,22 @@ class TestBackBoneCommunity(TestBase):
         # Should throw invalid mint exception
         for i in range(vals.num_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
+
+    def test_invalid_spend_bad_format(self, std_five):
+        spend_tx = {}
+        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        with pytest.raises(InvalidTransactionFormatException):
+            std_five.nodes[0].overlay.verify_spend(minter, spend_tx)
+
+    def test_invalid_spend_value_out_of_range(self, std_five):
+        spend_tx = {
+            "value": 10 ** 7,
+            "to_peer": std_five.nodes[1].overlay.my_pub_key_bin,
+            "prev_pairwise_link": GENESIS_LINK,
+        }
+        spender = std_five.nodes[0].overlay.my_pub_key_bin
+        with pytest.raises(InvalidSpendRangeException):
+            std_five.nodes[0].overlay.verify_spend(spender, spend_tx)
 
     @pytest.mark.asyncio
     async def test_valid_spend(self, std_five):
@@ -136,6 +188,19 @@ class TestBackBoneCommunity(TestBase):
         for i in range(vals.num_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
             assert vals.nodes[i].overlay.state_db.was_balance_negative(spender)
+
+    # Test witness transaction
+    def test_apply_invalid_witness_tx(self, std_five):
+        blk = FakeBlock(com_id=std_five.community_id)
+        i = 1
+        std_five.nodes[0].overlay.witness_delta = 100
+        while std_five.nodes[0].overlay.should_witness_chain_point(
+            blk.com_id, blk.public_key, i
+        ):
+            i += 1
+        tx = (i, {b"t": (True, True)})
+        with pytest.raises(InvalidWitnessTransactionException):
+            std_five.nodes[0].overlay.apply_witness_tx(blk, tx)
 
     def test_init_setup(self, std_five):
         assert (

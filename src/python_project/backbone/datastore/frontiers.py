@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,

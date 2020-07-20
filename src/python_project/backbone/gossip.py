@@ -13,7 +13,7 @@ from python_project.backbone.community_routines import (
     MessageStateMachine,
 )
 from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.datastore.utils import expand_ranges, hex_to_int
+from python_project.backbone.utils import expand_ranges, hex_to_int
 from python_project.backbone.payload import (
     BlocksRequestPayload,
     FrontierPayload,

@@ -8,7 +8,7 @@ from python_project.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from python_project.backbone.datastore.utils import Links
+from python_project.backbone.utils import Links
 from python_project.backbone.exceptions import InvalidBlockException
 from python_project.backbone.payload import (
     RawBlockBroadcastPayload,

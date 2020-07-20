@@ -11,7 +11,7 @@ from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.messaging.serialization import default_serializer, PackError
 
 from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     BytesLinks,
     decode_links,
     Dot,

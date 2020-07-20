@@ -19,7 +19,7 @@ from python_project.backbone.community import (
     REJECT_TYPE,
     WITNESS_TYPE,
 )
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,

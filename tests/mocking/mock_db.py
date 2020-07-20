@@ -9,7 +9,7 @@ from python_project.backbone.datastore.chain_store import (
     BaseChainFactory,
 )
 from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.datastore.utils import Dot, Links, ShortKey
+from python_project.backbone.utils import Dot, Links, ShortKey
 
 
 class MockBlockStore(BaseBlockStore):

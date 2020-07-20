@@ -6,7 +6,7 @@ from python_project.backbone.block import (
     PlexusBlock,
     UNKNOWN_SEQ,
 )
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     encode_raw,
     GENESIS_DOT,
     Links,

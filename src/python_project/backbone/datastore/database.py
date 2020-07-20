@@ -13,7 +13,7 @@ from python_project.backbone.datastore.chain_store import (
     Frontier,
     FrontierDiff,
 )
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     Dot,
     EMPTY_PK,
     encode_raw,

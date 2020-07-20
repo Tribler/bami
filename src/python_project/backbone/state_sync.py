@@ -7,7 +7,7 @@ from python_project.backbone.community_routines import (
     MessageStateMachine,
     CommunityRoutines,
 )
-from python_project.backbone.datastore.utils import encode_raw
+from python_project.backbone.utils import encode_raw
 from python_project.backbone.payload import (
     StateRequestPayload,
     StateResponsePayload,

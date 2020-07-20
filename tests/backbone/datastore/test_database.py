@@ -3,7 +3,7 @@ from python_project.backbone.datastore.block_store import LMDBLockStore
 from python_project.backbone.datastore.chain_store import ChainFactory
 from python_project.backbone.datastore.database import ChainTopic, DBManager
 from python_project.backbone.datastore.frontiers import FrontierDiff
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     Dot,
     encode_raw,
     Ranges,

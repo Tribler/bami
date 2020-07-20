@@ -4,10 +4,9 @@ from typing import Dict, Iterable, NewType, Optional, Set, Tuple
 
 import cachetools
 
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     Dot,
     GENESIS_DOT,
-    GENESIS_SEQ,
     Links,
     shorten,
     take_hash,
@@ -103,12 +102,12 @@ class PaymentState(object):
         self.prefered_statuses[chain_id][seq_num] = state_hash
 
     def _update_chain_invariants(
-            self,
-            chain_id: bytes,
-            peer_id: bytes,
-            prev_links: Links,
-            tx_dot: Dot,
-            store_update: bool,
+        self,
+        chain_id: bytes,
+        peer_id: bytes,
+        prev_links: Links,
+        tx_dot: Dot,
+        store_update: bool,
     ) -> None:
         self.chain_peers[chain_id].add(peer_id)
         self._check_forking(chain_id, peer_id, tx_dot)
@@ -117,15 +116,15 @@ class PaymentState(object):
         self._check_invariants(peer_id)
 
     def apply_spend(
-            self,
-            chain_id: bytes,
-            prev_spend_links: Links,
-            prev_chain_links: Links,
-            spend_dot: Dot,
-            spender: bytes,
-            receiver: bytes,
-            value: Decimal,
-            store_status_update: bool = False,
+        self,
+        chain_id: bytes,
+        prev_spend_links: Links,
+        prev_chain_links: Links,
+        spend_dot: Dot,
+        spender: bytes,
+        receiver: bytes,
+        value: Decimal,
+        store_status_update: bool = False,
     ) -> None:
         """Apply spend transaction to the state"""
         # apply spend to the personal chain
@@ -154,13 +153,13 @@ class PaymentState(object):
         )
 
     def apply_mint(
-            self,
-            chain_id: bytes,
-            mint_dot: Dot,
-            prev_links: Links,
-            minter: bytes,
-            value: Decimal,
-            store_update: bool = False,
+        self,
+        chain_id: bytes,
+        mint_dot: Dot,
+        prev_links: Links,
+        minter: bytes,
+        value: Decimal,
+        store_update: bool = False,
     ) -> None:
         """Apply mint transaction as it is to the state. Assumes that mint is valid!"""
         self.peer_mints[minter] += value
@@ -170,7 +169,7 @@ class PaymentState(object):
         )
 
     def _verify_reaction(
-            self, prev_links: Links, spend_dot: Dot, claimer: bytes, spender: bytes
+        self, prev_links: Links, spend_dot: Dot, claimer: bytes, spender: bytes
     ) -> None:
         """ Check if the claim/reject was not applied previously => Claim is too old.
             Check if previous links are consistent wrt spend_dot
@@ -189,15 +188,15 @@ class PaymentState(object):
             )
 
     def apply_confirm(
-            self,
-            chain_id: bytes,
-            claimer: bytes,
-            prev_links: Links,
-            claim_dot: Dot,
-            spender: bytes,
-            spend_dot: Dot,
-            value: Decimal,
-            store_update: bool = False,
+        self,
+        chain_id: bytes,
+        claimer: bytes,
+        prev_links: Links,
+        claim_dot: Dot,
+        spender: bytes,
+        spend_dot: Dot,
+        value: Decimal,
+        store_update: bool = False,
     ) -> None:
         """Apply confirm transaction to the state. Might raise exceptions if confirm is not valid:
             - Too old or inconsistent with the spend
@@ -206,7 +205,11 @@ class PaymentState(object):
         self._verify_reaction(prev_links, spend_dot, claimer, spender)
         # 2. Check if claim is consistent with the spend value
         val = self.vals_cache[spender][claimer].get(spend_dot)
-        if not val or (type(val) == tuple and val[0] != value) or (type(val) != tuple and val != value):
+        if (
+            not val
+            or (type(val) == tuple and val[0] != value)
+            or (type(val) != tuple and val != value)
+        ):
             raise InconsistentClaimException(
                 "Claim from {peer} on chain {chain_id} with value {value} invalid! Spend value: {val}".format(
                     peer=claimer, chain_id=chain_id, value=value, val=val
@@ -226,14 +229,14 @@ class PaymentState(object):
         )
 
     def apply_reject(
-            self,
-            chain_id: bytes,
-            claimer: bytes,
-            prev_links: Links,
-            reject_dot: Dot,
-            spender: bytes,
-            spend_dot: Dot,
-            store_update: bool = False,
+        self,
+        chain_id: bytes,
+        claimer: bytes,
+        prev_links: Links,
+        reject_dot: Dot,
+        spender: bytes,
+        spend_dot: Dot,
+        store_update: bool = False,
     ):
         """Apply reject transaction to the state. Will raise exception if reject is too old"""
         self._verify_reaction(prev_links, spend_dot, claimer, spender)
@@ -268,9 +271,9 @@ class PaymentState(object):
 
     def get_balance(self, peer_id: bytes) -> Decimal:
         return (
-                self.peer_mints[peer_id]
-                + self.get_total_claims(peer_id)
-                - self.get_total_spend(peer_id)
+            self.peer_mints[peer_id]
+            + self.get_total_claims(peer_id)
+            - self.get_total_spend(peer_id)
         )
 
     def was_balance_negative(self, peer_id: bytes) -> bool:
@@ -297,7 +300,7 @@ class PaymentState(object):
         return ChainState(v)
 
     def add_witness_vote(
-            self, chain_id: bytes, seq_num: int, state_hash: bytes, witness_id: bytes
+        self, chain_id: bytes, seq_num: int, state_hash: bytes, witness_id: bytes
     ) -> None:
         prev_values = self.witness_votes[chain_id].get(seq_num)
         if not prev_values:
@@ -310,7 +313,7 @@ class PaymentState(object):
         self.prefered_statuses[chain_id][seq_num] = state_hash
 
     def add_chain_state(
-            self, chain_id: bytes, seq_num: int, state_hash: bytes, state: ChainState
+        self, chain_id: bytes, seq_num: int, state_hash: bytes, state: ChainState
     ) -> None:
         calc_hash = take_hash(state)
         if calc_hash != state_hash:
@@ -322,7 +325,7 @@ class PaymentState(object):
         self.peer_statuses[chain_id][seq_num][state_hash] = state
 
     def get_closest_peers_status(
-            self, chain_id: bytes, seq_num: int
+        self, chain_id: bytes, seq_num: int
     ) -> Optional[Tuple[int, ChainState]]:
         int_max = 9999
         try:

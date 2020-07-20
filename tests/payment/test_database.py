@@ -2,17 +2,21 @@ from decimal import Decimal, getcontext
 
 import cachetools
 import pytest
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,
     GENESIS_LINK,
     Links,
-    shorten, take_hash,
+    shorten,
+    take_hash,
 )
 from python_project.payment.database import ChainState, PaymentState
-from python_project.payment.exceptions import InconsistentClaimException, InconsistentStateHashException, \
-    InvalidClaimException
+from python_project.payment.exceptions import (
+    InconsistentClaimException,
+    InconsistentStateHashException,
+    InvalidClaimException,
+)
 
 
 class TestPaymentState:
@@ -243,7 +247,13 @@ class TestPaymentState:
         with pytest.raises(InvalidClaimException):
             # Should raise exception as the claim links are not correct
             self.state.apply_confirm(
-                chain_id, self.receiver, GENESIS_LINK, claim_dot, self.spender, dot, value
+                chain_id,
+                self.receiver,
+                GENESIS_LINK,
+                claim_dot,
+                self.spender,
+                dot,
+                value,
             )
         self.state.apply_confirm(
             chain_id, self.receiver, Links((dot,)), claim_dot, self.spender, dot, value
@@ -283,7 +293,7 @@ class TestPaymentState:
     def test_add_chain_state(self):
         chain_id = self.spender
         seq_num = 1
-        state = ChainState({b't1': (True, True)})
+        state = ChainState({b"t1": (True, True)})
         state_hash = take_hash(state)
         self.state.add_chain_state(chain_id, seq_num, state_hash, state)
         self.state.prefered_statuses[chain_id][seq_num] = state_hash
@@ -295,8 +305,8 @@ class TestPaymentState:
         # Add chain state with inconsistent hash
         chain_id = self.spender
         seq_num = 1
-        state = ChainState({b't1': (True, True)})
-        state_hash = b'fake_hash'
+        state = ChainState({b"t1": (True, True)})
+        state_hash = b"fake_hash"
         real_hash = take_hash(state)
         with pytest.raises(InconsistentStateHashException):
             self.state.add_chain_state(chain_id, seq_num, state_hash, state)
@@ -402,18 +412,18 @@ class TestPaymentState:
         v = self.state.get_closest_peers_status(chain_id, 2)
         assert v is not None
         assert (
-                (v[0] == 2)
-                and (len(v[1]) == 1)
-                and (v[1].get(shorten(self.spender)) == (True, True))
+            (v[0] == 2)
+            and (len(v[1]) == 1)
+            and (v[1].get(shorten(self.spender)) == (True, True))
         )
 
         v = self.state.get_closest_peers_status(chain_id, 3)
         assert v is not None
         assert (
-                v[0] == 3
-                and len(v[1]) == 2
-                and (v[1].get(shorten(self.spender)) == (True, True))
-                and (v[1].get(shorten(self.receiver)) == (True, True))
+            v[0] == 3
+            and len(v[1]) == 2
+            and (v[1].get(shorten(self.spender)) == (True, True))
+            and (v[1].get(shorten(self.receiver)) == (True, True))
         )
 
         assert v[1] == self.state.get_last_peer_status(chain_id)

@@ -23,7 +23,7 @@ from python_project.backbone.community_routines import MessageStateMachine
 from python_project.backbone.datastore.block_store import LMDBLockStore
 from python_project.backbone.datastore.chain_store import ChainFactory
 from python_project.backbone.datastore.database import BaseDB, DBManager
-from python_project.backbone.datastore.utils import decode_raw, EMPTY_PK, encode_raw
+from python_project.backbone.utils import decode_raw, EMPTY_PK, encode_raw
 from python_project.backbone.exceptions import (
     InvalidTransactionFormatException,
     SubCommunityEmptyException,

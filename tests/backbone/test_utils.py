@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     decode_links,
     decode_raw,
     EMPTY_PK,

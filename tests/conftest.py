@@ -10,7 +10,7 @@ from pytest_mock import MockFixture
 from python_project.backbone.block import EMPTY_SIG, PlexusBlock
 from python_project.backbone.datastore.chain_store import BaseChain
 from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.datastore.utils import (
+from python_project.backbone.utils import (
     encode_links,
     encode_raw,
     GENESIS_LINK,

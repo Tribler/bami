@@ -1,7 +1,7 @@
 from ipv8.requestcache import NumberCache
 
 from python_project.backbone.community import PlexusCommunity
-from python_project.backbone.datastore.utils import hex_to_int
+from python_project.backbone.utils import hex_to_int
 
 
 class WitnessBlockCache(NumberCache):
