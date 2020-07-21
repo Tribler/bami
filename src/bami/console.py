@@ -3,7 +3,7 @@ import textwrap
 
 import click
 
-from . import __version__, wikipedia
+from . import __version__
 
 
 @click.command()
@@ -22,7 +22,5 @@ def main(language: str) -> None:
     Args:
         language: Wikipedia page language, default 'en'.
     """
-    page = wikipedia.random_page(language=language)
-
-    click.secho(page.title, fg="green")
-    click.echo(textwrap.fill(page.extract))
+    click.secho("Title", fg="green")
+    click.echo(textwrap.fill("Extract"))

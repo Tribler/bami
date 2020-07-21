@@ -15,6 +15,6 @@ repos:
         types: [python3]
     -   id: tests
         name: tests
-        entry: poetry run tests
+        entry: nox run tests
         language: system
         types: [python3]

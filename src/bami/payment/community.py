@@ -105,16 +105,28 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # By default will witness all sub-communities i'm part of
         self.should_witness_subcom[sub_com_id] = True
 
+    def get_block_and_blob_by_dot(
+        self, chain_id: bytes, dot: Dot
+    ) -> Tuple[bytes, BamiBlock]:
+        """Get blob and serialized block and by the chain_id and dot.
+        Can raise DatabaseDesynchronizedException if no block found."""
+        blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
+        if not blk_blob:
+            raise DatabaseDesynchronizedException(
+                "Block is not found in db: {chain_id}, {dot}".format(
+                    chain_id=chain_id, dot=dot
+                )
+            )
+        block = BamiBlock.unpack(blk_blob, self.serializer)
+        return blk_blob, block
+
+    def get_block_by_dot(self, chain_id: bytes, dot: Dot) -> BamiBlock:
+        """Get block by the chain_id and dot. Can raise DatabaseDesynchronizedException"""
+        return self.get_block_and_blob_by_dot(chain_id, dot)[1]
+
     def receive_dots_ordered(self, chain_id: bytes, dots: List[Dot]) -> None:
         for dot in dots:
-            blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
-            if not blk_blob:
-                raise DatabaseDesynchronizedException(
-                    "Block is not found in db: {chain_id}, {dot}".format(
-                        chain_id=chain_id, dot=dot
-                    )
-                )
-            block = BamiBlock.unpack(blk_blob, self.serializer)
+            blk_blob, block = self.get_block_and_blob_by_dot(chain_id, dot)
             if block.com_dot in self.state_db.applied_dots:
                 raise Exception(
                     "Already applied?",
@@ -153,7 +165,8 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
     def should_store_store_update(self, chain_id: bytes, seq_num: int) -> bool:
         """Store the status of the chain at the seq_num for further witnessing or verification"""
         # Should depend on if witnessing? - or something different
-        return self.should_witness_chain_point(chain_id, self.my_pub_key_bin, seq_num)
+        return True
+        # return self.should_witness_chain_point(chain_id, self.my_pub_key_bin, seq_num)
 
     def should_witness_chain_point(
         self, chain_id: bytes, peer_id: bytes, seq_num: int

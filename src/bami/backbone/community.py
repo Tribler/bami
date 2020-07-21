@@ -6,16 +6,7 @@ from binascii import hexlify, unhexlify
 from enum import Enum
 import logging
 import random
-from threading import RLock
 from typing import Any, Dict, Iterable, List, Optional, Type, Union
-
-from ipv8.community import Community, DEFAULT_MAX_PEERS
-from ipv8.keyvault.keys import Key
-from ipv8.lazy_community import lazy_wrapper
-from ipv8.peer import Peer
-from ipv8.peerdiscovery.network import Network
-from ipv8.requestcache import RequestCache
-from ipv8_service import IPv8
 
 from bami.backbone.block import BamiBlock
 from bami.backbone.block_sync import BlockSyncMixin
@@ -23,7 +14,6 @@ from bami.backbone.community_routines import MessageStateMachine
 from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import BaseDB, DBManager
-from bami.backbone.utils import decode_raw, EMPTY_PK, encode_raw
 from bami.backbone.exceptions import (
     InvalidTransactionFormatException,
     SubCommunityEmptyException,
@@ -37,6 +27,14 @@ from bami.backbone.sub_community import (
     SubCommunityDiscoveryStrategy,
     SubCommunityMixin,
 )
+from bami.backbone.utils import decode_raw, EMPTY_PK, encode_raw
+from ipv8.community import Community, DEFAULT_MAX_PEERS
+from ipv8.keyvault.keys import Key
+from ipv8.lazy_community import lazy_wrapper
+from ipv8.peer import Peer
+from ipv8.peerdiscovery.network import Network
+from ipv8.requestcache import RequestCache
+from ipv8_service import IPv8
 
 WITNESS_TYPE = b"witness"
 CONFIRM_TYPE = b"confirm"
@@ -191,7 +189,7 @@ class BamiCommunity(
         self.persistence.close()
 
     @property
-    def settings(self) -> Any:
+    def settings(self) -> BamiSettings:
         return self._settings
 
     @property
