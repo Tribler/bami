@@ -3,12 +3,12 @@ from typing import Any
 
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.peer import Peer
-from python_project.backbone.community_routines import (
+from bami.backbone.community_routines import (
     MessageStateMachine,
     CommunityRoutines,
 )
-from python_project.backbone.utils import encode_raw
-from python_project.backbone.payload import (
+from bami.backbone.utils import encode_raw
+from bami.backbone.payload import (
     StateRequestPayload,
     StateResponsePayload,
     StateByHashRequestPayload,

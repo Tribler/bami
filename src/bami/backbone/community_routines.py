@@ -6,7 +6,7 @@ from ipv8.messaging.payload import Payload
 from ipv8.peer import Peer
 from ipv8.requestcache import RequestCache
 
-from python_project.backbone.datastore.database import BaseDB
+from bami.backbone.datastore.database import BaseDB
 
 
 class CommunityRoutines(ABC):

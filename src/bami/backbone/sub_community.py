@@ -5,8 +5,8 @@ from ipv8.community import Community
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.discovery import EdgeWalk, RandomWalk
 
-from python_project.backbone.community_routines import CommunityRoutines
-from python_project.backbone.exceptions import UnavailableIPv8Exception
+from bami.backbone.community_routines import CommunityRoutines
+from bami.backbone.exceptions import UnavailableIPv8Exception
 
 
 class BaseSubCommunity(ABC):
@@ -27,8 +27,12 @@ class BaseSubCommunity(ABC):
     def add_peer(self, peer: Peer):
         pass
 
+    @abstractmethod
+    async def unload(self):
+        pass
 
-class IPv8SubCommunity(BaseSubCommunity, Community):
+
+class IPv8SubCommunity(Community, BaseSubCommunity):
     def get_known_peers(self) -> Iterable[Peer]:
         return self.get_peers()
 
@@ -48,6 +52,9 @@ class IPv8SubCommunity(BaseSubCommunity, Community):
 
 
 class LightSubCommunity(BaseSubCommunity):
+    async def unload(self):
+        pass
+
     def __init__(self, subcom_id: bytes = None):
         self._subcom_id = subcom_id
         self.peers = set()

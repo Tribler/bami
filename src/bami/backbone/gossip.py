@@ -8,18 +8,18 @@ from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
 from ipv8.requestcache import NumberCache
 
-from python_project.backbone.community_routines import (
+from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.utils import expand_ranges, hex_to_int
-from python_project.backbone.payload import (
+from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
+from bami.backbone.utils import expand_ranges, hex_to_int
+from bami.backbone.payload import (
     BlocksRequestPayload,
     FrontierPayload,
     RawBlockPayload,
 )
-from python_project.backbone.sub_community import SubCommunityRoutines
+from bami.backbone.sub_community import SubCommunityRoutines
 
 
 class NextPeerSelectionStrategy(ABC):

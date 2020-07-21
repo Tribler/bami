@@ -1,6 +1,6 @@
 # docs/conf.py
 """Sphinx configuration."""
-project = "python_project"
+project = "bami"
 author = "X Team"
 extensions = [
     "sphinx.ext.autodoc",

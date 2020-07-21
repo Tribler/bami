@@ -1,19 +1,19 @@
 from ipv8.keyvault.crypto import default_eccrypto
-from python_project.backbone.block import (
+from bami.backbone.block import (
     EMPTY_PK,
     EMPTY_SIG,
     GENESIS_SEQ,
-    PlexusBlock,
+    BamiBlock,
     UNKNOWN_SEQ,
 )
-from python_project.backbone.utils import (
+from bami.backbone.utils import (
     encode_raw,
     GENESIS_DOT,
     Links,
     shorten,
     ShortKey,
 )
-from python_project.backbone.payload import BlockPayload
+from bami.backbone.payload import BlockPayload
 
 from tests.conftest import FakeBlock
 from tests.mocking.mock_db import MockChain, MockDBManager
@@ -44,7 +44,7 @@ class TestChainBlock:
         """
         key = default_eccrypto.generate_key(u"curve25519")
         db = MockDBManager()
-        block = PlexusBlock.create(
+        block = BamiBlock.create(
             b"test", encode_raw({"id": 42}), db, key.pub().key_to_bin()
         )
 
@@ -71,7 +71,7 @@ class TestChainBlock:
             MockChain, "consistent_terminal", Links((prev.pers_dot,)),
         )
 
-        block = PlexusBlock.create(b"test", encode_raw({"id": 42}), db, prev.public_key)
+        block = BamiBlock.create(b"test", encode_raw({"id": 42}), db, prev.public_key)
 
         assert block.previous == Links((prev.pers_dot,))
         assert block.sequence_number == prev.sequence_number + 1
@@ -98,7 +98,7 @@ class TestChainBlock:
         monkeypatch.setattr(
             MockChain, "consistent_terminal", Links((link.pers_dot,)),
         )
-        block = PlexusBlock.create(
+        block = BamiBlock.create(
             b"test",
             encode_raw({"id": 42}),
             db,
@@ -137,7 +137,7 @@ class TestChainBlock:
         monkeypatch.setattr(
             MockChain, "consistent_terminal", Links((link.com_dot,)),
         )
-        block = PlexusBlock.create(
+        block = BamiBlock.create(
             b"test", encode_raw({"id": 42}), db, key.pub().key_to_bin(), com_id=com_key
         )
 
@@ -202,13 +202,13 @@ class TestChainBlock:
         blk = FakeBlock()
         blk_bytes = blk.pack()
         unpacked = blk.serializer.ez_unpack_serializables([BlockPayload], blk_bytes)
-        blk2 = PlexusBlock.from_payload(unpacked[0])
+        blk2 = BamiBlock.from_payload(unpacked[0])
         assert blk2 == blk
 
     def test_pack_unpack(self):
         blk = FakeBlock()
         blk_bytes = blk.pack()
-        blk2 = PlexusBlock.unpack(blk_bytes, blk.serializer)
+        blk2 = BamiBlock.unpack(blk_bytes, blk.serializer)
         assert blk == blk2
 
     def test_hash_function(self):

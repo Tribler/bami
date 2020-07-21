@@ -17,21 +17,21 @@ from ipv8.peerdiscovery.network import Network
 from ipv8.requestcache import RequestCache
 from ipv8_service import IPv8
 
-from python_project.backbone.block import PlexusBlock
-from python_project.backbone.block_sync import BlockSyncMixin
-from python_project.backbone.community_routines import MessageStateMachine
-from python_project.backbone.datastore.block_store import LMDBLockStore
-from python_project.backbone.datastore.chain_store import ChainFactory
-from python_project.backbone.datastore.database import BaseDB, DBManager
-from python_project.backbone.utils import decode_raw, EMPTY_PK, encode_raw
-from python_project.backbone.exceptions import (
+from bami.backbone.block import BamiBlock
+from bami.backbone.block_sync import BlockSyncMixin
+from bami.backbone.community_routines import MessageStateMachine
+from bami.backbone.datastore.block_store import LMDBLockStore
+from bami.backbone.datastore.chain_store import ChainFactory
+from bami.backbone.datastore.database import BaseDB, DBManager
+from bami.backbone.utils import decode_raw, EMPTY_PK, encode_raw
+from bami.backbone.exceptions import (
     InvalidTransactionFormatException,
     SubCommunityEmptyException,
 )
-from python_project.backbone.gossip import SubComGossipMixin
-from python_project.backbone.payload import SubscriptionsPayload
-from python_project.backbone.settings import PlexusSettings
-from python_project.backbone.sub_community import (
+from bami.backbone.gossip import SubComGossipMixin
+from bami.backbone.payload import SubscriptionsPayload
+from bami.backbone.settings import BamiSettings
+from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
     SubCommunityDiscoveryStrategy,
@@ -49,7 +49,7 @@ class BlockResponse(Enum):
     DELAY = 3
 
 
-class PlexusCommunity(
+class BamiCommunity(
     Community,
     BlockSyncMixin,
     SubComGossipMixin,
@@ -80,7 +80,7 @@ class PlexusCommunity(
         anonymize: bool = False,
         db: BaseDB = None,
         work_dir: str = None,
-        settings: PlexusSettings = None,
+        settings: BamiSettings = None,
         **kwargs
     ):
         """
@@ -94,7 +94,7 @@ class PlexusCommunity(
             db:
         """
         if not settings:
-            self._settings = PlexusSettings()
+            self._settings = BamiSettings()
         else:
             self._settings = settings
 
@@ -105,8 +105,7 @@ class PlexusCommunity(
         else:
             self._persistence = db
         self._ipv8 = ipv8
-        self.receive_block_lock = RLock()
-        super(PlexusCommunity, self).__init__(
+        super(BamiCommunity, self).__init__(
             my_peer, endpoint, network, max_peers, anonymize=anonymize
         )
 
@@ -122,8 +121,6 @@ class PlexusCommunity(
 
         self.shutting_down = False
 
-        self.periodic_sync_lc = {}
-
         # Sub-Communities logic
         self.my_subscriptions = dict()
 
@@ -133,7 +130,7 @@ class PlexusCommunity(
         self.bootstrap_master = None
 
         # Setup and add message handlers
-        for base in PlexusCommunity.__bases__:
+        for base in BamiCommunity.__bases__:
             if issubclass(base, MessageStateMachine):
                 base.setup_messages(self)
 
@@ -186,10 +183,10 @@ class PlexusCommunity(
         self.shutting_down = True
 
         await self.request_cache.shutdown()
-        for mid in self.my_subscriptions:
-            if mid in self.periodic_sync_lc and not self.periodic_sync_lc[mid].done():
-                self.periodic_sync_lc[mid].cancel()
-        await super(PlexusCommunity, self).unload()
+
+        for subcom_id in self.my_subscriptions:
+            await self.my_subscriptions[subcom_id].unload()
+        await super(BamiCommunity, self).unload()
         # Close the persistence layer
         self.persistence.close()
 
@@ -275,7 +272,7 @@ class PlexusCommunity(
 
     def share_in_community(
         self,
-        block: Union[PlexusBlock, bytes],
+        block: Union[BamiBlock, bytes],
         subcom_id: bytes = None,
         ttl: int = None,
         fanout: int = None,
@@ -325,7 +322,7 @@ class PlexusCommunity(
         pass
 
     @abstractmethod
-    def apply_witness_tx(self, block: PlexusBlock, witness_tx: Any) -> None:
+    def apply_witness_tx(self, block: BamiBlock, witness_tx: Any) -> None:
         pass
 
     def verify_witness_transaction(self, chain_id: bytes, witness_tx: Any) -> None:
@@ -360,7 +357,7 @@ class PlexusCommunity(
                 )
                 self.share_in_community(blk, chain_id)
 
-    def process_witness(self, block: PlexusBlock) -> None:
+    def process_witness(self, block: BamiBlock) -> None:
         """Process received witness transaction"""
         witness_tx = self.unpack_witness_blob(block.transaction)
         chain_id = block.com_id
@@ -376,7 +373,7 @@ class PlexusCommunity(
         return decode_raw(witness_blob)
 
     # ------ Confirm and reject functions --------------
-    def confirm(self, block: PlexusBlock, extra_data: Dict = None) -> None:
+    def confirm(self, block: BamiBlock, extra_data: Dict = None) -> None:
         """Create confirm block linked to block. Link will be in the transaction with block dot.
            Add extra data to the transaction with a 'extra_data' dictionary.
         """
@@ -397,16 +394,16 @@ class PlexusCommunity(
                 "Invalid claim ", claimer, confirm_tx
             )
 
-    def process_confirm(self, block: PlexusBlock) -> None:
+    def process_confirm(self, block: BamiBlock) -> None:
         confirm_tx = decode_raw(block.transaction)
         self.verify_confirm_tx(block.public_key, confirm_tx)
         self.apply_confirm_tx(block, confirm_tx)
 
     @abstractmethod
-    def apply_confirm_tx(self, block: PlexusBlock, confirm_tx: Dict) -> None:
+    def apply_confirm_tx(self, block: BamiBlock, confirm_tx: Dict) -> None:
         pass
 
-    def reject(self, block: PlexusBlock, extra_data: Dict = None) -> None:
+    def reject(self, block: BamiBlock, extra_data: Dict = None) -> None:
         # change it to confirm
         # create claim block and share in the community
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
@@ -426,18 +423,18 @@ class PlexusCommunity(
                 "Invalid reject ", rejector, confirm_tx
             )
 
-    def process_reject(self, block: PlexusBlock) -> None:
+    def process_reject(self, block: BamiBlock) -> None:
         reject_tx = decode_raw(block.transaction)
         self.verify_reject_tx(block.public_key, reject_tx)
         self.apply_reject_tx(block, reject_tx)
 
     @abstractmethod
-    def apply_reject_tx(self, block: PlexusBlock, reject_tx: Dict) -> None:
+    def apply_reject_tx(self, block: BamiBlock, reject_tx: Dict) -> None:
         pass
 
     @abstractmethod
     def block_response(
-        self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
+        self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
     ) -> BlockResponse:
         """
         Respond to block BlockResponse: Reject, Confirm, Delay
@@ -457,7 +454,7 @@ class PlexusCommunity(
     # ----------- Auditing chain state wrp invariants ----------------
 
 
-class PlexusTestnetCommunity(PlexusCommunity, metaclass=ABCMeta):
+class BamiTestnetCommunity(BamiCommunity, metaclass=ABCMeta):
     """
     This community defines the testnet for Plexus
     """

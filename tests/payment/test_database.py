@@ -2,7 +2,7 @@ from decimal import Decimal, getcontext
 
 import cachetools
 import pytest
-from python_project.backbone.utils import (
+from bami.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,
@@ -11,8 +11,8 @@ from python_project.backbone.utils import (
     shorten,
     take_hash,
 )
-from python_project.payment.database import ChainState, PaymentState
-from python_project.payment.exceptions import (
+from bami.payment.database import ChainState, PaymentState
+from bami.payment.exceptions import (
     InconsistentClaimException,
     InconsistentStateHashException,
     InvalidClaimException,

@@ -10,16 +10,16 @@ from typing import Any, Dict, List, Optional, Tuple
 import cachetools
 from ipv8.peer import Peer
 
-from python_project.backbone.block import PlexusBlock
-from python_project.backbone.caches import WitnessBlockCache
-from python_project.backbone.community import (
+from bami.backbone.block import BamiBlock
+from bami.backbone.caches import WitnessBlockCache
+from bami.backbone.community import (
     BlockResponse,
     CONFIRM_TYPE,
-    PlexusCommunity,
+    BamiCommunity,
     REJECT_TYPE,
     WITNESS_TYPE,
 )
-from python_project.backbone.utils import (
+from bami.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,
@@ -27,12 +27,12 @@ from python_project.backbone.utils import (
     shorten,
     take_hash,
 )
-from python_project.backbone.exceptions import (
+from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
 )
-from python_project.payment.database import ChainState, PaymentState
-from python_project.payment.exceptions import (
+from bami.payment.database import ChainState, PaymentState
+from bami.payment.exceptions import (
     InsufficientBalanceException,
     InvalidMintRangeException,
     InvalidSpendRangeException,
@@ -40,8 +40,8 @@ from python_project.payment.exceptions import (
     UnboundedMintException,
     UnknownMinterException,
 )
-from python_project.payment.settings import PaymentSettings
-from python_project.payment.utils import MINT_TYPE, SPEND_TYPE
+from bami.payment.settings import PaymentSettings
+from bami.payment.utils import MINT_TYPE, SPEND_TYPE
 
 """
 Exchange of the value within one community, where value lives only in one community.
@@ -54,11 +54,11 @@ Exchange of the value within one community, where value lives only in one commun
 """
 
 
-class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
+class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.transfer_queue = Queue()
+        # self.transfer_queue = Queue()
         # self.transfer_queue_task = ensure_future(self.evaluate_transfer_queue())
 
         # Add state db
@@ -78,11 +78,13 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             self.evaluate_counter_signing_blocks()
         )
 
+        self.periodic_sync_lc = {}
+
         self.witness_delta = kwargs.get("witness_delta")
         if not self.witness_delta:
             self.witness_delta = self.settings.witness_block_delta
 
-    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
+    def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
         pass
 
@@ -112,7 +114,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                         chain_id=chain_id, dot=dot
                     )
                 )
-            block = PlexusBlock.unpack(blk_blob, self.serializer)
+            block = BamiBlock.unpack(blk_blob, self.serializer)
             if block.com_dot in self.state_db.applied_dots:
                 raise Exception(
                     "Already applied?",
@@ -240,7 +242,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         )
         self.share_in_community(block, chain_id)
 
-    def process_mint(self, mint_blk: PlexusBlock) -> None:
+    def process_mint(self, mint_blk: BamiBlock) -> None:
         """Process received mint transaction"""
         minter = mint_blk.public_key
         mint_tx = decode_raw(mint_blk.transaction)
@@ -318,7 +320,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                 "Spend value out of range", spender, spend_transaction.get("value")
             )
 
-    def process_spend(self, spend_block: PlexusBlock) -> None:
+    def process_spend(self, spend_block: BamiBlock) -> None:
         # Store spend in the database
         spend_tx = decode_raw(spend_block.transaction)
         spender = spend_block.public_key
@@ -350,16 +352,13 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
     # ------------ Block Response processing ---------
 
-    def add_block_to_response_processing(self, block: PlexusBlock) -> None:
+    def add_block_to_response_processing(self, block: BamiBlock) -> None:
         self.tracked_blocks[block.com_id].add(block.com_dot)
 
         self.counter_signing_block_queue.put_nowait((block.com_seq_num, (0, block)))
 
     def process_counter_signing_block(
-        self,
-        block: PlexusBlock,
-        time_passed: float = None,
-        num_block_passed: int = None,
+        self, block: BamiBlock, time_passed: float = None, num_block_passed: int = None,
     ) -> bool:
         """
         Process block that should be counter-signed and return True if the block should be delayed more.
@@ -397,7 +396,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
                 await sleep(0.001)
 
     def block_response(
-        self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
+        self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
     ) -> BlockResponse:
         # Analyze the risk of accepting this block
         stat = self.state_db.get_closest_peers_status(block.com_id, block.com_seq_num)
@@ -475,7 +474,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         return encode_raw(chain_state)
 
     def apply_witness_tx(
-        self, block: PlexusBlock, witness_tx: Tuple[int, ChainState]
+        self, block: BamiBlock, witness_tx: Tuple[int, ChainState]
     ) -> None:
         state = witness_tx[1]
         state_hash = take_hash(state)
@@ -496,7 +495,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
 
     # ------ Confirm and reject transactions -------
 
-    def apply_confirm_tx(self, block: PlexusBlock, confirm_tx: Dict) -> None:
+    def apply_confirm_tx(self, block: BamiBlock, confirm_tx: Dict) -> None:
         claim_dot = block.com_dot
         chain_id = block.com_id
         claimer = block.public_key
@@ -513,7 +512,7 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
             self.should_store_store_update(chain_id, seq_num),
         )
 
-    def apply_reject_tx(self, block: PlexusBlock, reject_tx: Dict) -> None:
+    def apply_reject_tx(self, block: BamiBlock, reject_tx: Dict) -> None:
         self.state_db.apply_reject(
             block.com_id,
             block.public_key,
@@ -525,6 +524,9 @@ class PaymentCommunity(PlexusCommunity, metaclass=ABCMeta):
         )
 
     async def unload(self):
+        for mid in self.periodic_sync_lc:
+            if not self.periodic_sync_lc[mid].done():
+                self.periodic_sync_lc[mid].cancel()
         if not self.block_sign_queue_task.done():
             self.block_sign_queue_task.cancel()
         await super().unload()

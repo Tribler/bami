@@ -7,14 +7,14 @@ from ipv8.messaging.payload import Payload
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
 from ipv8.requestcache import RequestCache
-from python_project.backbone.block import PlexusBlock
-from python_project.backbone.community import PlexusCommunity, BlockResponse
-from python_project.backbone.community_routines import (
+from bami.backbone.block import BamiBlock
+from bami.backbone.community import BamiCommunity, BlockResponse
+from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.sub_community import (
+from bami.backbone.datastore.database import BaseDB
+from bami.backbone.sub_community import (
     SubCommunityRoutines,
     BaseSubCommunityFactory,
     SubCommunityDiscoveryStrategy,
@@ -60,6 +60,9 @@ class FakeRoutines(CommunityRoutines):
 
 
 class MockSubCommuntiy(BaseSubCommunity):
+    async def unload(self):
+        pass
+
     def add_peer(self, peer: Peer):
         pass
 
@@ -156,28 +159,31 @@ class MockedCommunity(Community, CommunityRoutines):
         return await super().unload()
 
 
-class FakeBackCommunity(PlexusCommunity):
+class FakeBackCommunity(BamiCommunity):
+    def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
+        pass
+
     def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
         pass
 
     def build_witness_blob(self, chain_id: bytes, seq_num: int) -> Optional[bytes]:
         pass
 
-    def apply_witness_tx(self, block: PlexusBlock, witness_tx: Any) -> None:
+    def apply_witness_tx(self, block: BamiBlock, witness_tx: Any) -> None:
         pass
 
-    def apply_confirm_tx(self, block: PlexusBlock, confirm_tx: Dict) -> None:
+    def apply_confirm_tx(self, block: BamiBlock, confirm_tx: Dict) -> None:
         pass
 
-    def apply_reject_tx(self, block: PlexusBlock, reject_tx: Dict) -> None:
+    def apply_reject_tx(self, block: BamiBlock, reject_tx: Dict) -> None:
         pass
 
     def block_response(
-        self, block: PlexusBlock, wait_time: float = None, wait_blocks: int = None
+        self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
     ) -> BlockResponse:
         pass
 
-    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
+    def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         pass
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:

@@ -1,6 +1,6 @@
 import pytest
-from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.utils import Links, Ranges
+from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
+from bami.backbone.utils import Links, Ranges
 
 
 class StdVals:

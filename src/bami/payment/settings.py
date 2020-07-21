@@ -1,7 +1,7 @@
-from python_project.backbone.settings import PlexusSettings
+from bami.backbone.settings import BamiSettings
 
 
-class PaymentSettings(PlexusSettings):
+class PaymentSettings(BamiSettings):
     def __init__(self):
         super().__init__()
         self.asset_precision = 10

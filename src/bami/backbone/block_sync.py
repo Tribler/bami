@@ -3,14 +3,14 @@ from typing import Union, Iterable
 
 from ipv8.lazy_community import lazy_wrapper_unsigned
 from ipv8.peer import Peer
-from python_project.backbone.block import PlexusBlock
-from python_project.backbone.community_routines import (
+from bami.backbone.block import BamiBlock
+from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from python_project.backbone.utils import Links
-from python_project.backbone.exceptions import InvalidBlockException
-from python_project.backbone.payload import (
+from bami.backbone.utils import Links
+from bami.backbone.exceptions import InvalidBlockException
+from bami.backbone.payload import (
     RawBlockBroadcastPayload,
     BlockBroadcastPayload,
     RawBlockPayload,
@@ -28,7 +28,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         self.add_message_handler(BlockBroadcastPayload, self.received_block_broadcast)
 
     def send_block(
-        self, block: Union[PlexusBlock, bytes], peers: Iterable[Peer], ttl: int = 1
+        self, block: Union[BamiBlock, bytes], peers: Iterable[Peer], ttl: int = 1
     ) -> None:
         """
         Send a block to the set of peers. If ttl is higher than 1: will gossip the message further.
@@ -55,13 +55,13 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
 
     @lazy_wrapper_unsigned(RawBlockPayload)
     def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
-        block = PlexusBlock.unpack(payload.block_bytes, self.serializer)
+        block = BamiBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 
     @lazy_wrapper_unsigned(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
-        block = PlexusBlock.from_payload(payload, self.serializer)
+        block = BamiBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 
@@ -69,41 +69,39 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     def received_raw_block_broadcast(
         self, peer: Peer, payload: RawBlockBroadcastPayload
     ) -> None:
-        block = PlexusBlock.unpack(payload.block_bytes, self.serializer)
+        block = BamiBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
     @lazy_wrapper_unsigned(BlockBroadcastPayload)
     def received_block_broadcast(self, peer: Peer, payload: BlockBroadcastPayload):
-        block = PlexusBlock.from_payload(payload, self.serializer)
+        block = BamiBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
-    def process_broadcast_block(self, block: PlexusBlock, ttl: int):
+    def process_broadcast_block(self, block: BamiBlock, ttl: int):
         """Process broadcast block and relay further"""
         if block.hash not in self.relayed_broadcasts and ttl > 1:
             # self.send_block(block, ttl=ttl - 1)
             pass
 
     @abstractmethod
-    def process_block_unordered(self, blk: PlexusBlock, peer: Peer) -> None:
+    def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         """
         Process a received half block immediately when received. Does not guarantee order on the block.
         """
         pass
 
-    def validate_persist_block(self, block: PlexusBlock, peer: Peer = None) -> bool:
+    def validate_persist_block(self, block: BamiBlock, peer: Peer = None) -> bool:
         """
         Validate a block and if it's valid, persist it.
         Raises:
             InvalidBlockException - if block is not valid
         """
         block = (
-            PlexusBlock.unpack(block, self.serializer)
-            if type(block) is bytes
-            else block
+            BamiBlock.unpack(block, self.serializer) if type(block) is bytes else block
         )
         block_blob = block if type(block) is bytes else block.pack()
 
@@ -136,7 +134,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         com_id: bytes = None,
         links: Links = None,
         personal_links: Links = None,
-    ) -> PlexusBlock:
+    ) -> BamiBlock:
         """
         This function will create, sign, persist block with given parameters.
         Args:
@@ -148,7 +146,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         Returns:
             signed block
         """
-        block = PlexusBlock.create(
+        block = BamiBlock.create(
             block_type,
             transaction,
             self.persistence,

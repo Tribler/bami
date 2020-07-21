@@ -1,17 +1,21 @@
 from typing import Iterable
 
-from ipv8.keyvault.crypto import default_eccrypto
-from ipv8.peer import Peer
-from ipv8.test.mocking.endpoint import internet
-import pytest
-from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.gossip import (
+from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
+from bami.backbone.gossip import (
     GossipFrontiersMixin,
     NextPeerSelectionStrategy,
 )
-from python_project.backbone.payload import BlocksRequestPayload, FrontierPayload
+from bami.backbone.payload import BlocksRequestPayload, FrontierPayload
+from ipv8.keyvault.crypto import default_eccrypto
+from ipv8.peer import Peer
+import pytest
 
-from tests.mocking.base import TestBase
+from tests.mocking.base import (
+    create_and_connect_nodes,
+    deliver_messages,
+    SetupValues,
+    unload_nodes,
+)
 from tests.mocking.community import MockedCommunity, MockSettings
 from tests.mocking.mock_db import MockChain, MockDBManager
 
@@ -27,59 +31,60 @@ class FakeGossipCommunity(MockedCommunity, GossipFrontiersMixin):
         return MockNextPeerSelection()
 
 
-class TestGossipBase(TestBase):
-    __testing__ = False
-    NUM_NODES = 2
+NUM_NODES = 2
 
-    @pytest.yield_fixture(autouse=True)
-    def main_fix(self):
-        self.nodes = []
-        internet.clear()
-        self._tempdirs = []
 
-        super().setUp()
-        self.initialize(FakeGossipCommunity, self.NUM_NODES)
+@pytest.fixture()
+def overlay_class():
+    return FakeGossipCommunity
 
-        # TODO: Add additional setup
-        # Make sure every node has a community to listen to
-        self.community_key = default_eccrypto.generate_key(u"curve25519").pub()
-        self.community_id = self.community_key.key_to_bin()
-        # for node in self.nodes:
-        #    node.overlay.subscribe_to_subcom(self.community_id)
-        yield
 
-    @pytest.mark.asyncio
-    async def test_init_correctly(self):
-        assert chr(FrontierPayload.msg_id) in self.nodes[0].overlay.decode_map
-        assert chr(BlocksRequestPayload.msg_id) in self.nodes[0].overlay.decode_map
-        await self.tearDown()
+@pytest.fixture()
+async def set_vals(tmpdir_factory, overlay_class):
+    dirs = [
+        tmpdir_factory.mktemp(str(overlay_class.__name__), numbered=True)
+        for _ in range(NUM_NODES)
+    ]
+    nodes = create_and_connect_nodes(NUM_NODES, work_dirs=dirs, ov_class=overlay_class)
+    # Make sure every node has a community to listen to
+    community_key = default_eccrypto.generate_key(u"curve25519").pub()
+    community_id = community_key.key_to_bin()
+    yield SetupValues(nodes=nodes, community_id=community_id)
+    await unload_nodes(nodes)
+    for k in dirs:
+        k.remove(ignore_errors=True)
 
-    @pytest.mark.asyncio
-    async def test_one_gossip_round(self, monkeypatch, mocker):
-        monkeypatch.setattr(MockDBManager, "get_chain", lambda _, __: MockChain())
-        front = Frontier(((1, "val1"),), (), ())
-        monkeypatch.setattr(MockChain, "frontier", front)
-        monkeypatch.setattr(
-            MockNextPeerSelection,
-            "get_next_gossip_peers",
-            lambda _, __, ___: [p.overlay.my_peer for p in self.nodes],
-        )
-        monkeypatch.setattr(
-            MockDBManager,
-            "reconcile",
-            lambda _, c_id, frontier, pub_key: FrontierDiff(((1, 1),), {}),
-        )
-        monkeypatch.setattr(MockSettings, "gossip_collect_time", 0.1)
-        monkeypatch.setattr(MockSettings, "gossip_fanout", 5)
-        monkeypatch.setattr(
-            MockDBManager,
-            "get_block_blobs_by_frontier_diff",
-            lambda _, c_id, f_diff, __: [b"blob1"],
-        )
 
-        self.nodes[0].overlay.gossip_sync_task(self.community_id)
-        spy = mocker.spy(self.nodes[0].overlay, "send_packet")
+def test_init_correctly(set_vals):
+    assert chr(FrontierPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
+    assert chr(BlocksRequestPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
 
-        await self.deliver_messages(0.5)
-        spy.assert_called()
-        await self.tearDown()
+
+@pytest.mark.asyncio
+async def test_one_gossip_round(set_vals, monkeypatch, mocker):
+    monkeypatch.setattr(MockDBManager, "get_chain", lambda _, __: MockChain())
+    front = Frontier(((1, "val1"),), (), ())
+    monkeypatch.setattr(MockChain, "frontier", front)
+    monkeypatch.setattr(
+        MockNextPeerSelection,
+        "get_next_gossip_peers",
+        lambda _, __, ___: [p.overlay.my_peer for p in set_vals.nodes],
+    )
+    monkeypatch.setattr(
+        MockDBManager,
+        "reconcile",
+        lambda _, c_id, frontier, pub_key: FrontierDiff(((1, 1),), {}),
+    )
+    monkeypatch.setattr(MockSettings, "gossip_collect_time", 0.1)
+    monkeypatch.setattr(MockSettings, "gossip_fanout", 5)
+    monkeypatch.setattr(
+        MockDBManager,
+        "get_block_blobs_by_frontier_diff",
+        lambda _, c_id, f_diff, __: [b"blob1"],
+    )
+
+    set_vals.nodes[0].overlay.gossip_sync_task(set_vals.community_id)
+    spy = mocker.spy(set_vals.nodes[0].overlay, "send_packet")
+
+    await deliver_messages(0.5)
+    spy.assert_called()

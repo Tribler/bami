@@ -1,6 +1,6 @@
 from ipv8.keyvault.crypto import default_eccrypto
 import pytest
-from python_project.backbone.sub_community import IPv8SubCommunity, SubCommunityMixin
+from bami.backbone.sub_community import IPv8SubCommunity, SubCommunityMixin
 
 from tests.mocking.community import FakeRoutines, MockSubCommunityRoutines
 from tests.mocking.ipv8 import FakeIPv8

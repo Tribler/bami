@@ -4,8 +4,8 @@ from typing import Iterable, List, Optional, Set, Tuple
 
 import cachetools
 
-from python_project.backbone.datastore.frontiers import Frontier, FrontierDiff
-from python_project.backbone.utils import (
+from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
+from bami.backbone.utils import (
     Dot,
     expand_ranges,
     GENESIS_DOT,

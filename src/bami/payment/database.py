@@ -4,14 +4,14 @@ from typing import Dict, Iterable, NewType, Optional, Set, Tuple
 
 import cachetools
 
-from python_project.backbone.utils import (
+from bami.backbone.utils import (
     Dot,
     GENESIS_DOT,
     Links,
     shorten,
     take_hash,
 )
-from python_project.payment.exceptions import (
+from bami.payment.exceptions import (
     InconsistentClaimException,
     InconsistentStateHashException,
     InvalidClaimException,

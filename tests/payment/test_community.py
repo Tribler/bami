@@ -1,19 +1,17 @@
 from decimal import Decimal
 
-from ipv8.test.mocking.endpoint import internet
-import pytest
-from python_project.backbone.utils import Dot, GENESIS_LINK
-from python_project.backbone.exceptions import InvalidTransactionFormatException
-from python_project.backbone.payload import (
+from bami.backbone.exceptions import InvalidTransactionFormatException
+from bami.backbone.payload import (
     BlockBroadcastPayload,
     RawBlockBroadcastPayload,
 )
-from python_project.backbone.sub_community import (
+from bami.backbone.sub_community import (
     IPv8SubCommunityFactory,
     RandomWalkDiscoveryStrategy,
 )
-from python_project.payment.community import PaymentCommunity
-from python_project.payment.exceptions import (
+from bami.backbone.utils import Dot, GENESIS_LINK
+from bami.payment.community import PaymentCommunity
+from bami.payment.exceptions import (
     InsufficientBalanceException,
     InvalidMintRangeException,
     InvalidSpendRangeException,
@@ -21,9 +19,15 @@ from python_project.payment.exceptions import (
     UnboundedMintException,
     UnknownMinterException,
 )
+import pytest
 
 from tests.conftest import FakeBlock
-from tests.mocking.base import TestBase
+from tests.mocking.base import (
+    create_and_connect_nodes,
+    deliver_messages,
+    SetupValues,
+    unload_nodes,
+)
 
 
 class FakePaymentCommunity(
@@ -32,90 +36,108 @@ class FakePaymentCommunity(
     pass
 
 
-class SetupValues:
-    def __init__(self, nodes, context, com_id) -> None:
-        self.nodes = nodes
-        self.context = context
-        self.community_id = com_id
-        self.num_nodes = len(self.nodes)
-
-
 # Add tests for all exceptions
 # Add tests on validity of transactions
 
+NUM_NODES = 5
 
-class TestBackBoneCommunity(TestBase):
-    def setup_nodes(self, num_nodes: int):
-        self.nodes = []
-        internet.clear()
-        self.setUp()
-        self.initialize(FakePaymentCommunity, num_nodes)
 
-        self.context = self.nodes[0].overlay.state_db.context
-        self.community_id = self.nodes[0].overlay.my_pub_key_bin
-        for node in self.nodes:
-            node.overlay.subscribe_to_subcom(self.community_id)
-        self.setUp()
+@pytest.fixture()
+def overlay_class():
+    return FakePaymentCommunity
 
-    @pytest.fixture()
-    async def std_five(self):
-        self._tempdirs = []
-        self.setup_nodes(num_nodes=5)
-        yield SetupValues(self.nodes, self.context, self.community_id)
-        await self.tearDown()
 
-    @pytest.mark.asyncio
-    async def test_valid_mint(self, std_five):
-        vals = std_five
-        minter = vals.nodes[0].overlay.my_pub_key_bin
-        vals.nodes[0].overlay.mint(value=Decimal(10, vals.context))
-        await self.deliver_messages(0.5)
-        for i in range(vals.num_nodes):
-            assert vals.nodes[i].overlay.state_db.get_balance(minter) > 0
+@pytest.fixture()
+async def set_vals(tmpdir_factory, overlay_class):
+    dirs = [
+        tmpdir_factory.mktemp(str(overlay_class.__name__), numbered=True)
+        for _ in range(NUM_NODES)
+    ]
+    nodes = create_and_connect_nodes(NUM_NODES, work_dirs=dirs, ov_class=overlay_class)
+    # Make sure every node has a community to listen to
+    community_id = nodes[0].overlay.my_pub_key_bin
+    context = nodes[0].overlay.state_db.context
+    for node in nodes:
+        node.overlay.subscribe_to_subcom(community_id)
+    yield SetupValues(nodes=nodes, community_id=community_id, context=context)
+    await unload_nodes(nodes)
+    for k in dirs:
+        k.remove(ignore_errors=True)
 
-    @pytest.mark.asyncio
-    async def test_invalid_mint(self, std_five):
-        vals = std_five
-        minter = vals.nodes[1].overlay.my_pub_key_bin
-        with pytest.raises(UnknownMinterException):
-            vals.nodes[1].overlay.mint(value=Decimal(10, vals.context))
-        await self.deliver_messages()
-        for i in range(vals.num_nodes):
-            assert vals.nodes[i].overlay.state_db.get_balance(minter) == 0
 
-    def test_invalid_mint_tx_bad_format(self, std_five):
+class TestInitCommunity:
+    def test_empty(self, set_vals):
+        nodes = set_vals.nodes
+        assert len(nodes) == NUM_NODES
+
+    def test_init_setup(self, set_vals):
+        nodes = set_vals.nodes
+        assert chr(RawBlockBroadcastPayload.msg_id) in nodes[0].overlay.decode_map
+        assert chr(BlockBroadcastPayload.msg_id) in nodes[0].overlay.decode_map
+
+    def test_subscribe(self, set_vals):
+        nodes = set_vals.nodes
+        assert nodes[0].overlay.is_subscribed(set_vals.community_id)
+        assert nodes[1].overlay.is_subscribed(set_vals.community_id)
+
+
+class TestMint:
+    def test_invalid_mint_tx_bad_format(self, set_vals):
         mint_tx = {}
-        chain_id = std_five.community_id
-        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        chain_id = set_vals.community_id
+        minter = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidTransactionFormatException):
-            std_five.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
-    def test_invalid_mint_tx_value_out_of_range(self, std_five):
+    def test_invalid_mint_tx_value_out_of_range(self, set_vals):
         mint_tx = {"value": 10 ** 7}
-        chain_id = std_five.community_id
-        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        chain_id = set_vals.community_id
+        minter = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidMintRangeException):
-            std_five.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
-    def test_mint_value_unbound_value(self, std_five):
+    def test_mint_value_unbound_value(self, set_vals):
         mint_tx = {"value": 10 ** 7 - 1}
-        chain_id = std_five.community_id
-        minter = std_five.nodes[0].overlay.my_pub_key_bin
-        std_five.nodes[0].overlay.state_db.apply_mint(
+        chain_id = set_vals.community_id
+        minter = set_vals.nodes[0].overlay.my_pub_key_bin
+        set_vals.nodes[0].overlay.state_db.apply_mint(
             chain_id,
             Dot((1, "123123")),
             GENESIS_LINK,
             minter,
-            Decimal(mint_tx.get("value"), std_five.context),
+            Decimal(mint_tx.get("value"), set_vals.context),
             True,
         )
         next_mint = {"value": 1}
         with pytest.raises(UnboundedMintException):
-            std_five.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
+            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
 
     @pytest.mark.asyncio
-    async def test_invalid_spend(self, std_five):
-        vals = std_five
+    async def test_invalid_mint(self, set_vals):
+        nodes = set_vals.nodes
+        context = set_vals.context
+        minter = nodes[1].overlay.my_pub_key_bin
+        with pytest.raises(UnknownMinterException):
+            nodes[1].overlay.mint(value=Decimal(10, context))
+        await deliver_messages()
+        for i in range(NUM_NODES):
+            assert nodes[i].overlay.state_db.get_balance(minter) == 0
+
+    @pytest.mark.asyncio
+    async def test_valid_mint(self, set_vals):
+        nodes = set_vals.nodes
+        context = set_vals.context
+        minter = nodes[0].overlay.my_pub_key_bin
+        nodes[0].overlay.mint(value=Decimal(10, context))
+        await deliver_messages(0.5)
+        for i in range(NUM_NODES):
+            assert nodes[i].overlay.state_db.get_balance(minter) > 0
+
+
+class TestSpend:
+    @pytest.mark.asyncio
+    async def test_invalid_spend(self, set_vals):
+        vals = set_vals
         spender = vals.nodes[1].overlay.my_pub_key_bin
         with pytest.raises(InsufficientBalanceException):
             vals.nodes[1].overlay.spend(
@@ -124,30 +146,30 @@ class TestBackBoneCommunity(TestBase):
                 value=Decimal(10, vals.context),
             )
 
-        await self.deliver_messages()
+        await deliver_messages()
         # Should throw invalid mint exception
-        for i in range(vals.num_nodes):
+        for i in range(NUM_NODES):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
 
-    def test_invalid_spend_bad_format(self, std_five):
+    def test_invalid_spend_bad_format(self, set_vals):
         spend_tx = {}
-        minter = std_five.nodes[0].overlay.my_pub_key_bin
+        minter = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidTransactionFormatException):
-            std_five.nodes[0].overlay.verify_spend(minter, spend_tx)
+            set_vals.nodes[0].overlay.verify_spend(minter, spend_tx)
 
-    def test_invalid_spend_value_out_of_range(self, std_five):
+    def test_invalid_spend_value_out_of_range(self, set_vals):
         spend_tx = {
             "value": 10 ** 7,
-            "to_peer": std_five.nodes[1].overlay.my_pub_key_bin,
+            "to_peer": set_vals.nodes[1].overlay.my_pub_key_bin,
             "prev_pairwise_link": GENESIS_LINK,
         }
-        spender = std_five.nodes[0].overlay.my_pub_key_bin
+        spender = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidSpendRangeException):
-            std_five.nodes[0].overlay.verify_spend(spender, spend_tx)
+            set_vals.nodes[0].overlay.verify_spend(spender, spend_tx)
 
     @pytest.mark.asyncio
-    async def test_valid_spend(self, std_five):
-        vals = std_five
+    async def test_valid_spend(self, set_vals):
+        vals = set_vals
         minter = vals.nodes[0].overlay.my_pub_key_bin
         vals.nodes[0].overlay.mint(value=Decimal(10, vals.context))
         spender = minter
@@ -160,9 +182,9 @@ class TestBackBoneCommunity(TestBase):
 
         assert vals.nodes[0].overlay.state_db.get_balance(spender) == 0
 
-        await self.deliver_messages(0.5)
+        await deliver_messages(0.5)
         # Should throw invalid mint exception
-        for i in range(vals.num_nodes):
+        for i in range(NUM_NODES):
             assert (
                 vals.nodes[i].overlay.state_db.get_balance(spender) == 0
             ), "Peer number {}".format(i)
@@ -172,8 +194,8 @@ class TestBackBoneCommunity(TestBase):
             assert not vals.nodes[i].overlay.state_db.was_balance_negative(spender)
 
     @pytest.mark.asyncio
-    async def test_invalid_spend_ignore_validation(self, std_five):
-        vals = std_five
+    async def test_invalid_spend_ignore_validation(self, set_vals):
+        vals = set_vals
         spender = vals.nodes[1].overlay.my_pub_key_bin
         vals.nodes[1].overlay.spend(
             chain_id=vals.community_id,
@@ -183,31 +205,23 @@ class TestBackBoneCommunity(TestBase):
         )
         assert vals.nodes[1].overlay.state_db.get_balance(spender) == -10
 
-        await self.deliver_messages(0.5)
+        await deliver_messages(0.5)
         # As the counterparty will reject the block => The spend transaction is reverted
-        for i in range(vals.num_nodes):
+        for i in range(NUM_NODES):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
             assert vals.nodes[i].overlay.state_db.was_balance_negative(spender)
 
+
+class TestWitness:
     # Test witness transaction
-    def test_apply_invalid_witness_tx(self, std_five):
-        blk = FakeBlock(com_id=std_five.community_id)
+    def test_apply_invalid_witness_tx(self, set_vals):
+        blk = FakeBlock(com_id=set_vals.community_id)
         i = 1
-        std_five.nodes[0].overlay.witness_delta = 100
-        while std_five.nodes[0].overlay.should_witness_chain_point(
+        set_vals.nodes[0].overlay.witness_delta = 100
+        while set_vals.nodes[0].overlay.should_witness_chain_point(
             blk.com_id, blk.public_key, i
         ):
             i += 1
         tx = (i, {b"t": (True, True)})
         with pytest.raises(InvalidWitnessTransactionException):
-            std_five.nodes[0].overlay.apply_witness_tx(blk, tx)
-
-    def test_init_setup(self, std_five):
-        assert (
-            chr(RawBlockBroadcastPayload.msg_id) in std_five.nodes[0].overlay.decode_map
-        )
-        assert chr(BlockBroadcastPayload.msg_id) in std_five.nodes[0].overlay.decode_map
-
-    def test_subscribe(self, std_five):
-        assert std_five.nodes[0].overlay.is_subscribed(std_five.community_id)
-        assert std_five.nodes[1].overlay.is_subscribed(std_five.community_id)
+            set_vals.nodes[0].overlay.apply_witness_tx(blk, tx)

@@ -1,7 +1,7 @@
 from ipv8.requestcache import NumberCache
 
-from python_project.backbone.community import PlexusCommunity
-from python_project.backbone.utils import hex_to_int
+from bami.backbone.community import BamiCommunity
+from bami.backbone.utils import hex_to_int
 
 
 class WitnessBlockCache(NumberCache):
@@ -9,7 +9,7 @@ class WitnessBlockCache(NumberCache):
 
     def __init__(
         self,
-        community: "PlexusCommunity",
+        community: "BamiCommunity",
         chain_id: bytes,
         seq_num: int,
         delta_time: float = None,

@@ -10,7 +10,7 @@ from nox.sessions import Session
 locations = "src", "tests", "noxfile.py", "docs/conf.py"
 nox.options.sessions = ("tests",)
 # Additional options "safety", "lint", "lint", "mypy", "pytype"
-package = "python_project"
+package = "bami"
 
 
 def install_with_constraints(session: Session, *args: str, **kwargs: Any) -> None:

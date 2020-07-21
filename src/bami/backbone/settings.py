@@ -22,7 +22,7 @@ class SyncMode(Enum):
     PASSIVE = 4
 
 
-class PlexusSettings(object):
+class BamiSettings(object):
     """
     This class holds various settings regarding TrustChain.
     """

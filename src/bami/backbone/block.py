@@ -10,8 +10,8 @@ from typing import Any, List
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.messaging.serialization import default_serializer, PackError
 
-from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.utils import (
+from bami.backbone.datastore.database import BaseDB
+from bami.backbone.utils import (
     BytesLinks,
     decode_links,
     Dot,
@@ -25,7 +25,7 @@ from python_project.backbone.utils import (
     shorten,
     UNKNOWN_SEQ,
 )
-from python_project.backbone.payload import BlockPayload
+from bami.backbone.payload import BlockPayload
 
 SKIP_ATTRIBUTES = {
     "key",
@@ -37,7 +37,7 @@ SKIP_ATTRIBUTES = {
 }
 
 
-class PlexusBlock(object):
+class BamiBlock(object):
     """
     Container for Plexus block information
     """
@@ -68,7 +68,7 @@ class PlexusBlock(object):
         :param serializer: An optional custom serializer to use for this block.
         :type serializer: Serializer
         """
-        super(PlexusBlock, self).__init__()
+        super(BamiBlock, self).__init__()
         self.serializer = serializer
         if data is None:
             # data
@@ -175,7 +175,7 @@ class PlexusBlock(object):
         return sha256(self.pack()).digest()
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, PlexusBlock):
+        if not isinstance(other, BamiBlock):
             return False
         return self.pack() == other.pack()
 
@@ -216,14 +216,14 @@ class PlexusBlock(object):
     @classmethod
     def unpack(
         cls, block_blob: bytes, serializer: Any = default_serializer
-    ) -> PlexusBlock:
+    ) -> BamiBlock:
         payload = serializer.ez_unpack_serializables([BlockPayload], block_blob)
-        return PlexusBlock.from_payload(payload[0], serializer)
+        return BamiBlock.from_payload(payload[0], serializer)
 
     @classmethod
     def from_payload(
         cls, payload: BlockPayload, serializer=default_serializer
-    ) -> PlexusBlock:
+    ) -> BamiBlock:
         """
         Create a block according to a given payload and serializer.
         This method can be used when receiving a block from the network.

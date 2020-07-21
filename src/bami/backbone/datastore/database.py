@@ -6,14 +6,14 @@ from collections import defaultdict
 from enum import Enum
 from typing import Dict, Iterable, Optional, Set, Tuple
 
-from python_project.backbone.datastore.block_store import BaseBlockStore
-from python_project.backbone.datastore.chain_store import (
+from bami.backbone.datastore.block_store import BaseBlockStore
+from bami.backbone.datastore.chain_store import (
     BaseChain,
     BaseChainFactory,
     Frontier,
     FrontierDiff,
 )
-from python_project.backbone.utils import (
+from bami.backbone.utils import (
     Dot,
     EMPTY_PK,
     encode_raw,

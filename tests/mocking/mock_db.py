@@ -1,15 +1,15 @@
 from typing import Optional, Iterable
 
-from python_project.backbone.block import PlexusBlock
-from python_project.backbone.datastore.block_store import BaseBlockStore
-from python_project.backbone.datastore.chain_store import (
+from bami.backbone.block import BamiBlock
+from bami.backbone.datastore.block_store import BaseBlockStore
+from bami.backbone.datastore.chain_store import (
     BaseChain,
     FrontierDiff,
     Frontier,
     BaseChainFactory,
 )
-from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.utils import Dot, Links, ShortKey
+from bami.backbone.datastore.database import BaseDB
+from bami.backbone.utils import Dot, Links, ShortKey
 
 
 class MockBlockStore(BaseBlockStore):
@@ -75,7 +75,7 @@ class MockDBManager(BaseDB):
     def get_chain(self, chain_id) -> Optional[BaseChain]:
         pass
 
-    def add_block(self, block: PlexusBlock, block_serializer) -> None:
+    def add_block(self, block: BamiBlock, block_serializer) -> None:
         pass
 
     def get_block_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:

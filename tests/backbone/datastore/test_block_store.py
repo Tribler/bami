@@ -1,5 +1,5 @@
 import pytest
-from python_project.backbone.datastore.block_store import LMDBLockStore
+from bami.backbone.datastore.block_store import LMDBLockStore
 
 
 @pytest.fixture

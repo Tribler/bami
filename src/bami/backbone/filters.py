@@ -1,4 +1,4 @@
-from python_project.backbone.utils import Links
+from bami.backbone.utils import Links
 
 
 class BaseLinkFilter(object):

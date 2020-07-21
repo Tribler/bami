@@ -1,8 +1,8 @@
 from itertools import chain
 
 import pytest
-from python_project.backbone.datastore.chain_store import Chain
-from python_project.backbone.utils import (
+from bami.backbone.datastore.chain_store import Chain
+from bami.backbone.utils import (
     expand_ranges,
     GENESIS_DOT,
     GENESIS_LINK,

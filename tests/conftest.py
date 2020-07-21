@@ -7,10 +7,10 @@ from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
 import pytest
 from pytest_mock import MockFixture
-from python_project.backbone.block import EMPTY_SIG, PlexusBlock
-from python_project.backbone.datastore.chain_store import BaseChain
-from python_project.backbone.datastore.database import BaseDB
-from python_project.backbone.utils import (
+from bami.backbone.block import EMPTY_SIG, BamiBlock
+from bami.backbone.datastore.chain_store import BaseChain
+from bami.backbone.datastore.database import BaseDB
+from bami.backbone.utils import (
     encode_links,
     encode_raw,
     GENESIS_LINK,
@@ -33,7 +33,7 @@ def mock_requests_get(mocker: MockFixture) -> Mock:
 
 
 # Fixtures
-class FakeBlock(PlexusBlock):
+class FakeBlock(BamiBlock):
     """
     Test Block that simulates a block used in TrustChain.
     Also used in other test files for TrustChain.
@@ -70,7 +70,7 @@ class FakeBlock(PlexusBlock):
         if not transaction:
             transaction = encode_raw({"id": 42})
 
-        PlexusBlock.__init__(
+        BamiBlock.__init__(
             self,
             (
                 block_type,
@@ -113,16 +113,14 @@ def create_batches():
     return _create_batches
 
 
-def insert_to_chain(
-    chain_obj: BaseChain, blk: PlexusBlock, personal_chain: bool = True
-):
+def insert_to_chain(chain_obj: BaseChain, blk: BamiBlock, personal_chain: bool = True):
     block_links = blk.links if not personal_chain else blk.previous
     block_seq_num = blk.com_seq_num if not personal_chain else blk.sequence_number
     yield chain_obj.add_block(block_links, block_seq_num, blk.hash)
 
 
 def insert_to_chain_or_blk_store(
-    chain_obj: Union[BaseChain, BaseDB], blk: PlexusBlock, personal_chain: bool = True,
+    chain_obj: Union[BaseChain, BaseDB], blk: BamiBlock, personal_chain: bool = True,
 ):
     if isinstance(chain_obj, BaseChain):
         yield from insert_to_chain(chain_obj, blk, personal_chain)
@@ -132,7 +130,7 @@ def insert_to_chain_or_blk_store(
 
 def insert_batch_seq(
     chain_obj: Union[BaseChain, BaseDB],
-    batch: List[PlexusBlock],
+    batch: List[BamiBlock],
     personal_chain: bool = False,
 ) -> None:
     for blk in batch:
@@ -141,7 +139,7 @@ def insert_batch_seq(
 
 def insert_batch_reversed(
     chain_obj: Union[BaseChain, BaseDB],
-    batch: List[PlexusBlock],
+    batch: List[BamiBlock],
     personal_chain: bool = False,
 ) -> None:
     for blk in reversed(batch):
@@ -150,7 +148,7 @@ def insert_batch_reversed(
 
 def insert_batch_random(
     chain_obj: Union[BaseChain, BaseDB],
-    batch: List[PlexusBlock],
+    batch: List[BamiBlock],
     personal_chain: bool = False,
 ) -> None:
     from random import shuffle
