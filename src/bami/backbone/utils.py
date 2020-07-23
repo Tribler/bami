@@ -73,7 +73,7 @@ def encode_raw(val: Any) -> bytes:
 
 def decode_raw(byte_raw: bytes) -> Any:
     """Decode bytes to python struct"""
-    return loads(byte_raw, strict_map_key=False, use_list=False)
+    return loads(byte_raw, strict_map_key=False, use_list=False, raw=False)
 
 
 def encode_links(link_val: Links) -> BytesLinks:
