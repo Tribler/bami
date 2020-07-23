@@ -143,7 +143,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
                     self.update_risk(chain_id, block.public_key, blk_dot[0])
 
             # Process blocks according to their type
-            self.logger.debug("Processing block", block.type, chain_id, block.hash)
+            self.logger.debug("Processing block %s, %s, %s", block.type, chain_id, block.hash)
             if block.type == MINT_TYPE:
                 self.process_mint(block)
             elif block.type == SPEND_TYPE:
@@ -303,7 +303,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             block = self.create_signed_block(
                 block_type=SPEND_TYPE, transaction=encode_raw(spend_tx), com_id=chain_id
             )
-            self.logger.info("Created spend block", block.com_dot)
+            self.logger.info("Created spend block %s", block.com_dot)
             self.share_in_community(block, chain_id)
         else:
             raise InsufficientBalanceException("Not enough balance for spend")
