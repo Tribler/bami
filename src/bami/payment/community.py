@@ -143,7 +143,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
                     self.update_risk(chain_id, block.public_key, blk_dot[0])
 
             # Process blocks according to their type
-            self.logger.debug("Processing block %s, %s, %s", block.type, chain_id, block.hash)
+            self.logger.debug(
+                "Processing block %s, %s, %s", block.type, chain_id, block.hash
+            )
             if block.type == MINT_TYPE:
                 self.process_mint(block)
             elif block.type == SPEND_TYPE:
@@ -212,30 +214,30 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
                 "Got minting from unacceptable peer ", chain_id, minter
             )
         # 2. Mint if properly formatted
-        if not mint_transaction.get("value"):
+        if not mint_transaction.get(b"value"):
             raise InvalidTransactionFormatException(
                 "Mint transaction badly formatted ", mint_transaction, chain_id, minter
             )
         # 3. Minting value within the range
         if not (
             Decimal(self.settings.mint_value_range[0], self.context)
-            < mint_transaction["value"]
+            < mint_transaction[b"value"]
             < Decimal(self.settings.mint_value_range[1], self.context)
         ):
             raise InvalidMintRangeException(
-                chain_id, minter, mint_transaction.get("value")
+                chain_id, minter, mint_transaction.get(b"value")
             )
         # 4. Total value is bounded
         if not (
             self.state_db.peer_mints[minter]
-            + Decimal(mint_transaction.get("value"), self.context)
+            + Decimal(mint_transaction.get(b"value"), self.context)
             < Decimal(self.settings.mint_max_value, self.context)
         ):
             raise UnboundedMintException(
                 chain_id,
                 minter,
                 self.state_db.peer_mints[minter],
-                mint_transaction.get("value"),
+                mint_transaction.get(b"value"),
             )
 
     def mint(self, value: Decimal = None, chain_id: bytes = None) -> None:
@@ -248,7 +250,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             # Community id is the same as the peer id
             chain_id = self.my_pub_key_bin
         # Mint transaction: value
-        mint_tx = {"value": float(value)}
+        mint_tx = {b"value": float(value)}
         self.verify_mint(chain_id, self.my_pub_key_bin, mint_tx)
         block = self.create_signed_block(
             block_type=MINT_TYPE, transaction=encode_raw(mint_tx), com_id=chain_id
@@ -270,7 +272,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             mint_dot,
             prev_links,
             minter,
-            Decimal(mint_tx.get("value"), self.context),
+            Decimal(mint_tx.get(b"value"), self.context),
             self.should_store_store_update(chain_id, seq_num),
         )
 
@@ -293,9 +295,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         bal = self.state_db.get_balance(self.my_pub_key_bin)
         if ignore_validation or bal - value >= 0:
             spend_tx = {
-                "value": float(value),
-                "to_peer": counter_party,
-                "prev_pairwise_link": self.state_db.get_last_pairwise_links(
+                b"value": float(value),
+                b"to_peer": counter_party,
+                b"prev_pairwise_link": self.state_db.get_last_pairwise_links(
                     self.my_pub_key_bin, counter_party
                 ),
             }
@@ -316,9 +318,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         """
         # 1. Verify the spend format
         if (
-            not spend_transaction.get("value")
-            or not spend_transaction.get("to_peer")
-            or not spend_transaction.get("prev_pairwise_link")
+            not spend_transaction.get(b"value")
+            or not spend_transaction.get(b"to_peer")
+            or not spend_transaction.get(b"prev_pairwise_link")
         ):
             raise InvalidTransactionFormatException(
                 "Spend transaction badly formatted ", spender, spend_transaction
@@ -326,11 +328,11 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # 2. Verify the spend value in range
         if not (
             self.settings.spend_value_range[0]
-            < spend_transaction.get("value")
+            < spend_transaction.get(b"value")
             < self.settings.spend_value_range[1]
         ):
             raise InvalidSpendRangeException(
-                "Spend value out of range", spender, spend_transaction.get("value")
+                "Spend value out of range", spender, spend_transaction.get(b"value")
             )
 
     def process_spend(self, spend_block: BamiBlock) -> None:
@@ -343,9 +345,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         spend_dot = spend_block.com_dot
         pers_links = spend_block.links
 
-        prev_spend_links = spend_tx.get("prev_pairwise_link")
-        value = Decimal(spend_tx.get("value"), self.context)
-        to_peer = spend_tx.get("to_peer")
+        prev_spend_links = spend_tx.get(b"prev_pairwise_link")
+        value = Decimal(spend_tx.get(b"value"), self.context)
+        to_peer = spend_tx.get(b"to_peer")
         seq_num = spend_dot[0]
 
         self.state_db.apply_spend(
@@ -385,7 +387,8 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         res = self.block_response(block, time_passed, num_block_passed)
         if res == BlockResponse.CONFIRM:
             self.confirm(
-                block, extra_data={"value": decode_raw(block.transaction).get("value")}
+                block,
+                extra_data={b"value": decode_raw(block.transaction).get(b"value")},
             )
             return False
         elif res == BlockResponse.REJECT:
@@ -519,9 +522,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             claimer,
             com_links,
             claim_dot,
-            confirm_tx["initiator"],
-            confirm_tx["dot"],
-            Decimal(confirm_tx["value"], self.context),
+            confirm_tx[b"initiator"],
+            confirm_tx[b"dot"],
+            Decimal(confirm_tx[b"value"], self.context),
             self.should_store_store_update(chain_id, seq_num),
         )
 
@@ -531,8 +534,8 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             block.public_key,
             block.links,
             block.com_dot,
-            reject_tx["initiator"],
-            reject_tx["dot"],
+            reject_tx[b"initiator"],
+            reject_tx[b"dot"],
             self.should_store_store_update(block.com_id, block.com_seq_num),
         )
 

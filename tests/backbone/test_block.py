@@ -45,7 +45,7 @@ class TestChainBlock:
         key = default_eccrypto.generate_key(u"curve25519")
         db = MockDBManager()
         block = BamiBlock.create(
-            b"test", encode_raw({"id": 42}), db, key.pub().key_to_bin()
+            b"test", encode_raw({b"id": 42}), db, key.pub().key_to_bin()
         )
 
         assert block.previous == Links((GENESIS_DOT,))
@@ -53,7 +53,7 @@ class TestChainBlock:
         assert block.public_key == key.pub().key_to_bin()
         assert block.signature == EMPTY_SIG
         assert block.type == b"test"
-        assert block.transaction == encode_raw({"id": 42})
+        assert block.transaction == encode_raw({b"id": 42})
         assert block.com_id == EMPTY_PK
         assert block.com_seq_num == UNKNOWN_SEQ
 
@@ -71,14 +71,14 @@ class TestChainBlock:
             MockChain, "consistent_terminal", Links((prev.pers_dot,)),
         )
 
-        block = BamiBlock.create(b"test", encode_raw({"id": 42}), db, prev.public_key)
+        block = BamiBlock.create(b"test", encode_raw({b"id": 42}), db, prev.public_key)
 
         assert block.previous == Links((prev.pers_dot,))
         assert block.sequence_number == prev.sequence_number + 1
         assert block.public_key == prev.public_key
         assert block.signature == EMPTY_SIG
         assert block.type == b"test"
-        assert block.transaction == encode_raw({"id": 42})
+        assert block.transaction == encode_raw({b"id": 42})
         assert block.com_id == EMPTY_PK
         assert block.com_seq_num == UNKNOWN_SEQ
 

@@ -377,7 +377,7 @@ class BamiCommunity(
         """
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
         dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
-        confirm_tx = {"initiator": block.public_key, "dot": dot}
+        confirm_tx = {b"initiator": block.public_key, b"dot": dot}
         if extra_data:
             confirm_tx.update(extra_data)
         block = self.create_signed_block(
@@ -387,7 +387,7 @@ class BamiCommunity(
 
     def verify_confirm_tx(self, claimer: bytes, confirm_tx: Dict) -> None:
         # 1. verify claim format
-        if not confirm_tx.get("initiator") or not confirm_tx.get("dot"):
+        if not confirm_tx.get(b"initiator") or not confirm_tx.get(b"dot"):
             raise InvalidTransactionFormatException(
                 "Invalid claim ", claimer, confirm_tx
             )
@@ -406,7 +406,7 @@ class BamiCommunity(
         # create claim block and share in the community
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
         dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
-        reject_tx = {"initiator": block.public_key, "dot": dot}
+        reject_tx = {b"initiator": block.public_key, b"dot": dot}
         if extra_data:
             reject_tx.update(extra_data)
         block = self.create_signed_block(
@@ -416,7 +416,7 @@ class BamiCommunity(
 
     def verify_reject_tx(self, rejector: bytes, confirm_tx: Dict) -> None:
         # 1. verify reject format
-        if not confirm_tx.get("initiator") or not confirm_tx.get("dot"):
+        if not confirm_tx.get(b"initiator") or not confirm_tx.get(b"dot"):
             raise InvalidTransactionFormatException(
                 "Invalid reject ", rejector, confirm_tx
             )

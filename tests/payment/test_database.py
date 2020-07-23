@@ -320,7 +320,7 @@ class TestPaymentState:
 
     def test_spend_fork(self):
         value = Decimal(1, self.con)
-        dot = Dot((1, "123123"))
+        dot = Dot((1, b"123123"))
         chain_id = self.spender
 
         self.state.apply_spend(
@@ -333,7 +333,7 @@ class TestPaymentState:
             value,
         )
         assert float(self.state.get_balance(self.spender)) == -1
-        new_dot = Dot((1, "5464646"))
+        new_dot = Dot((1, b"5464646"))
         self.state.apply_spend(
             chain_id,
             GENESIS_LINK,
@@ -349,7 +349,7 @@ class TestPaymentState:
         assert self.state.was_chain_forked(chain_id, self.spender)
 
         # Fix the fork:
-        f_dot = Dot((2, "000000"))
+        f_dot = Dot((2, b"000000"))
         value = Decimal(3, self.con)
         self.state.apply_spend(
             chain_id,
@@ -368,7 +368,7 @@ class TestPaymentState:
     def test_state_updates(self):
         chain_id = self.minter
         value = Decimal(12.00, self.con)
-        dot = Dot((1, "123123"))
+        dot = Dot((1, b"123123"))
 
         self.state.apply_mint(
             chain_id, dot, GENESIS_LINK, self.minter, value, store_update=True
@@ -376,7 +376,7 @@ class TestPaymentState:
         assert self.state.get_balance(self.minter) == value
         assert not self.state.is_chain_forked(chain_id, self.minter)
         spend_value = Decimal(12.00, self.con)
-        spend_dot = Dot((2, "23123"))
+        spend_dot = Dot((2, b"23123"))
         self.state.apply_spend(
             chain_id,
             GENESIS_LINK,
@@ -390,7 +390,7 @@ class TestPaymentState:
         assert float(self.state.get_balance(self.spender)) == 0
         assert not self.state.is_chain_forked(chain_id, self.spender)
 
-        claim_dot = Dot((3, "2323"))
+        claim_dot = Dot((3, b"23323"))
 
         self.state.apply_confirm(
             chain_id,

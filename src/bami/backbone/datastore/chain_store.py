@@ -9,6 +9,7 @@ from bami.backbone.utils import (
     Dot,
     expand_ranges,
     GENESIS_DOT,
+    GENESIS_HASH,
     Links,
     ranges,
     Ranges,
@@ -89,7 +90,7 @@ class Chain(BaseChain):
         # Unknown blocks in the data structure
         self.holes = set()
         # Current terminal nodes in the DAG
-        self.terminal = Links(((0, ShortKey("30303030")),))
+        self.terminal = Links(((0, shorten(GENESIS_HASH)),))
 
         self.const_terminal = self.terminal
 

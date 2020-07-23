@@ -54,8 +54,8 @@ def test_shorten_size(keys_fixture):
 
 
 def test_encode_decode_raw():
-    vals = {"id": 42}
-    assert decode_raw(encode_raw(vals))["id"] == 42
+    vals = {b"id": 42}
+    assert decode_raw(encode_raw(vals))[b"id"] == 42
 
 
 def test_encode_decode_bytelist():
@@ -73,12 +73,11 @@ from decimal import Decimal, getcontext
 
 
 def test_decimal():
-
     new_con = getcontext()
     new_con.prec = 4
     t = Decimal(2.191, new_con)
     t2 = Decimal(2.11, new_con)
 
-    l = encode_raw({"value": float(t2)})
+    l = encode_raw({b"value": float(t2)})
     p = decode_raw(l)
-    assert p.get("value") == float(t2)
+    assert p.get(b"value") == float(t2)

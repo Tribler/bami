@@ -6,7 +6,7 @@ from typing import Any, NewType, Set, Tuple
 from msgpack import dumps, loads
 
 KEY_LEN = 8
-ShortKey = NewType("ShortKey", str)
+ShortKey = NewType("ShortKey", bytes)
 BytesLinks = NewType("BytesLinks", bytes)
 Dot = NewType("Dot", Tuple[int, ShortKey])
 Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
@@ -23,7 +23,7 @@ ANY_COUNTERPARTY_PK = EMPTY_PK
 
 
 def shorten(key: bytes) -> ShortKey:
-    return ShortKey(hexlify(key)[-KEY_LEN:].decode())
+    return ShortKey(key[-KEY_LEN:])
 
 
 GENESIS_DOT = Dot((GENESIS_SEQ - 1, shorten(GENESIS_HASH)))
@@ -73,7 +73,7 @@ def encode_raw(val: Any) -> bytes:
 
 def decode_raw(byte_raw: bytes) -> Any:
     """Decode bytes to python struct"""
-    return loads(byte_raw, strict_map_key=False, use_list=False, raw=False)
+    return loads(byte_raw, strict_map_key=False, use_list=False)
 
 
 def encode_links(link_val: Links) -> BytesLinks:

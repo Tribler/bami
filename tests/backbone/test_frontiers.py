@@ -4,7 +4,7 @@ from bami.backbone.utils import Links, Ranges
 
 
 class StdVals:
-    terminal = Links(((5, "test1"),))
+    terminal = Links(((5, b"test1"),))
     term_bits = (True,)
     holes = Ranges(())
     incon = Links(())
@@ -13,15 +13,15 @@ class StdVals:
 
 
 class InconVals:
-    terminal = Links(((0, "gen"), (5, "test1")))
+    terminal = Links(((0, b"gen"), (5, b"test1")))
     term_bits = (
         True,
         False,
     )
     holes = Ranges(((1, 4),))
-    incon = Links(((4, "test1"),))
-    con_terminal = Links(((0, "gen"),))
-    conflicts = {(5, "test1"): {1: ("gen",), 5: ("test2",)}}
+    incon = Links(((4, b"test1"),))
+    con_terminal = Links(((0, b"gen"),))
+    conflicts = {(5, b"test1"): {1: (b"gen",), 5: (b"test2",)}}
 
 
 @pytest.mark.parametrize("val", [StdVals, InconVals])

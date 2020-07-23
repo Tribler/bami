@@ -27,13 +27,13 @@ class Frontier:
 
     def to_bytes(self) -> bytes:
         return encode_raw(
-            {"t": self.terminal, "h": self.holes, "i": self.inconsistencies}
+            {b"t": self.terminal, b"h": self.holes, b"i": self.inconsistencies}
         )
 
     @classmethod
     def from_bytes(cls, bytes_frontier: bytes):
         front_dict = decode_raw(bytes_frontier)
-        return cls(front_dict.get("t"), front_dict.get("h"), front_dict.get("i"),)
+        return cls(front_dict.get(b"t"), front_dict.get(b"h"), front_dict.get(b"i"),)
 
 
 @dataclass
@@ -42,12 +42,12 @@ class FrontierDiff:
     conflicts: Dict[Dot, Dict[int, Tuple[ShortKey]]]
 
     def to_bytes(self) -> bytes:
-        return encode_raw({"m": self.missing, "c": self.conflicts})
+        return encode_raw({b"m": self.missing, b"c": self.conflicts})
 
     @classmethod
     def from_bytes(cls, bytes_frontier: bytes):
         val_dict = decode_raw(bytes_frontier)
-        return cls(val_dict.get("m"), val_dict.get("c"))
+        return cls(val_dict.get(b"m"), val_dict.get(b"c"))
 
     def is_empty(self):
         return len(self.missing) == 0 and len(self.conflicts) == 0

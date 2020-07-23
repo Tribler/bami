@@ -90,14 +90,14 @@ class TestMint:
             set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
     def test_invalid_mint_tx_value_out_of_range(self, set_vals):
-        mint_tx = {"value": 10 ** 7}
+        mint_tx = {b"value": 10 ** 7}
         chain_id = set_vals.community_id
         minter = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidMintRangeException):
             set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
     def test_mint_value_unbound_value(self, set_vals):
-        mint_tx = {"value": 10 ** 7 - 1}
+        mint_tx = {b"value": 10 ** 7 - 1}
         chain_id = set_vals.community_id
         minter = set_vals.nodes[0].overlay.my_pub_key_bin
         set_vals.nodes[0].overlay.state_db.apply_mint(
@@ -105,10 +105,10 @@ class TestMint:
             Dot((1, "123123")),
             GENESIS_LINK,
             minter,
-            Decimal(mint_tx.get("value"), set_vals.context),
+            Decimal(mint_tx.get(b"value"), set_vals.context),
             True,
         )
-        next_mint = {"value": 1}
+        next_mint = {b"value": 1}
         with pytest.raises(UnboundedMintException):
             set_vals.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
 
@@ -159,9 +159,9 @@ class TestSpend:
 
     def test_invalid_spend_value_out_of_range(self, set_vals):
         spend_tx = {
-            "value": 10 ** 7,
-            "to_peer": set_vals.nodes[1].overlay.my_pub_key_bin,
-            "prev_pairwise_link": GENESIS_LINK,
+            b"value": 10 ** 7,
+            b"to_peer": set_vals.nodes[1].overlay.my_pub_key_bin,
+            b"prev_pairwise_link": GENESIS_LINK,
         }
         spender = set_vals.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidSpendRangeException):

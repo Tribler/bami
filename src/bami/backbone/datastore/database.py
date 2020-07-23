@@ -257,7 +257,7 @@ class DBManager(BaseDB):
         # 1. Add block blob and transaction blob to the block storage
         self.block_store.add_block(block_hash, block_blob)
         self.block_store.add_tx(block_hash, block_tx)
-        self.block_store.add_extra(block_hash, encode_raw({"type": block.type}))
+        self.block_store.add_extra(block_hash, encode_raw({b"type": block.type}))
 
         # 2. There are two chains: personal and community chain
         pers = block.public_key
