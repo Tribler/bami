@@ -214,7 +214,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # 2. Mint if properly formatted
         if not mint_transaction.get("value"):
             raise InvalidTransactionFormatException(
-                "Mint transaction badly formatted ", chain_id, minter
+                "Mint transaction badly formatted ", mint_transaction, chain_id, minter
             )
         # 3. Minting value within the range
         if not (
