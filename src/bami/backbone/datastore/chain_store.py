@@ -375,6 +375,7 @@ class Chain(BaseChain):
         if not last_reconcile_point:
             last_reconcile_point = 0
         extra_dots = {}
+        return FrontierDiff(missing, tuple(conflicts))
         for c in conflicts:
             # TODO: revisit this. How to choose the 'from' sequence number
             last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
@@ -387,6 +388,7 @@ class Chain(BaseChain):
                 if self.versions.get(k):
                     extra_val[k] = tuple(self.versions.get(k))
             extra_dots[c] = extra_val
+
         return FrontierDiff(missing, extra_dots)
 
 
