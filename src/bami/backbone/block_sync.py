@@ -56,12 +56,14 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     @lazy_wrapper(RawBlockPayload)
     def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
         block = BamiBlock.unpack(payload.block_bytes, self.serializer)
+        self.logger.debug('Received block from pull gossip %s from peer %s', block.com_dot, peer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 
     @lazy_wrapper(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
         block = BamiBlock.from_payload(payload, self.serializer)
+        self.logger.debug('Received block from push gossip %s from peer %s', block.com_dot, peer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 

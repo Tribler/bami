@@ -420,6 +420,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             priority, block_info = await self.counter_signing_block_queue.get()
             process_time, block = block_info
             should_delay = self.process_counter_signing_block(block, process_time)
+            self.logger.debug('Processing counter signing block. Delayed: %s', should_delay)
             if should_delay:
                 self.counter_signing_block_queue.put_nowait(
                     (priority, (process_time + _delta, block))

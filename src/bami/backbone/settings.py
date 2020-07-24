@@ -29,11 +29,11 @@ class BamiSettings(object):
 
     def __init__(self):
         # Push gossip properties: fanout and ttl (number of hops)
-        self.push_gossip_fanout = 5
+        self.push_gossip_fanout = 9
         self.push_gossip_ttl = 1
 
         # witness every k block on average with probability 1/K
-        self.witness_block_delta = 1
+        self.witness_block_delta = 5
         # Wait time before witnessing
         self.witness_delta_time = 0.4
 

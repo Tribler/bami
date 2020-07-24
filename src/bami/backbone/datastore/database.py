@@ -156,12 +156,11 @@ class DBManager(BaseDB):
         conflict_dict: Dict[Dot, Dict[int, Tuple[ShortKey]]],
         val_to_request: Set,
     ):
-        for c in conflict_dict:
-            val = self.get_block_blob_by_dot(chain_id, c)
-            if not val:
-                raise Exception("No block", chain_id, c)
-            yield val
-        """
+        # for c in conflict_dict:
+        #    val = self.get_block_blob_by_dot(chain_id, c)
+        #    if not val:
+        #        raise Exception("No block", chain_id, c)
+        #    yield val
         for conf_dot, conf_dict in conflict_dict.items():
             if not conf_dict:
                 val = self.get_block_blob_by_dot(chain_id, conf_dot)
@@ -192,7 +191,6 @@ class DBManager(BaseDB):
             if not val:
                 raise Exception("Exception not val", chain_id, conf_dot)
             yield val
-        """
 
     def get_block_blobs_by_frontier_diff(
         self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
