@@ -56,6 +56,11 @@ class LMDBLockStore(BaseBlockStore):
         self.extra = self.env.open_db(key=b"extra")
         # add sub dbs if required
 
+    def iterate_blocks(self):
+        with self.env.begin() as txn:
+            for k, v in txn.cursor(db=self.blocks):
+                yield k, v
+
     def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
         with self.env.begin(write=True) as txn:
             txn.put(block_hash, block_blob, db=self.blocks)

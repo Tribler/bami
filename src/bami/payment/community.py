@@ -156,10 +156,12 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             elif block.type == WITNESS_TYPE:
                 self.process_witness(block)
             # Witness block react on new block:
-            if self.should_witness_subcom.get(
-                chain_id
-            ) and self.should_witness_chain_point(
-                chain_id, self.my_pub_key_bin, block.com_seq_num
+            if (
+                self.should_witness_subcom.get(chain_id)
+                and block.type != b"witness"
+                and self.should_witness_chain_point(
+                    chain_id, self.my_pub_key_bin, block.com_seq_num
+                )
             ):
                 self.schedule_witness_block(chain_id, block.com_seq_num)
 
