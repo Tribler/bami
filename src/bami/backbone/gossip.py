@@ -1,25 +1,23 @@
 from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
+from asyncio import Queue, sleep
 from random import sample
-from typing import Iterable, List, Optional, Tuple
-
-from ipv8.lazy_community import lazy_wrapper
-from ipv8.peer import Peer
-from ipv8.requestcache import NumberCache
+from typing import Iterable
 
 from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
 from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
-from bami.backbone.utils import expand_ranges, hex_to_int
 from bami.backbone.payload import (
     BlocksRequestPayload,
     FrontierPayload,
     RawBlockPayload,
 )
 from bami.backbone.sub_community import SubCommunityRoutines
+from ipv8.lazy_community import lazy_wrapper
+from ipv8.peer import Peer
 
 
 class NextPeerSelectionStrategy(ABC):
@@ -63,69 +61,9 @@ class GossipRoutines(ABC):
         """Start of the gossip state machine"""
         pass
 
-
-class GossipFrontierSyncCache(NumberCache):
-    """
-    This cache works as queue that tracks outstanding sync requests with other peers in a community
-    """
-
-    def __init__(self, community: GossipFrontiersMixin, chain_id: bytes) -> None:
-        cache_num = hex_to_int(chain_id)
-        self.community = community
-
-        self.chain_id = chain_id
-        self.working_front = dict()
-
-        NumberCache.__init__(
-            self, community.request_cache, community.COMMUNITY_CACHE, cache_num
-        )
-
-    @property
-    def timeout_delay(self):
-        return self.community.settings.gossip_collect_time
-
-    def receive_frontier(self, peer: Peer, frontier: Frontier) -> None:
-        # TODO: add verification for the frontier. Hiding transactions?
-        self.working_front[peer.public_key.key_to_bin()] = (peer, frontier)
-
-    def process_working_front(self) -> List[Optional[Tuple[Peer, FrontierDiff]]]:
-        candidate = None
-        cand_max = 0
-
-        for peer_key, peer_front in self.working_front.items():
-            frontier_diff = self.community.persistence.reconcile(
-                self.chain_id, peer_front[1], peer_key
-            )
-
-            num = len(expand_ranges(frontier_diff.missing)) + len(
-                frontier_diff.conflicts
-            )
-
-            if not frontier_diff.is_empty() and num > cand_max:
-                candidate = (peer_front[0], frontier_diff)
-                cand_max = num
-        return [candidate]
-
-    def on_timeout(self):
-        # TODO convert this to a queue
-        async def add_later():
-            try:
-                self.community.request_cache.add(
-                    GossipFrontierSyncCache(self.community, self.chain_id)
-                )
-            except RuntimeError:
-                # TODO add logger reaction here
-                pass
-
-        # Process received frontiers
-        candidates = self.process_working_front()
-        # Send requests to candidates
-        for cand in candidates:
-            # Send request to candidate peer
-            if cand:
-                self.community.send_packet(
-                    cand[0], BlocksRequestPayload(self.chain_id, cand[1].to_bytes())
-                )
+    @abstractmethod
+    def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
+        pass
 
 
 class GossipFrontiersMixin(
@@ -145,25 +83,29 @@ class GossipFrontiersMixin(
             for peer in next_peers:
                 self.send_packet(peer, FrontierPayload(subcom_id, frontier.to_bytes()))
 
+    async def process_frontier_queue(self, subcom_id: bytes):
+        while True:
+            _delta = self.settings.gossip_collect_time
+            peer, frontier = await self.incoming_frontier_queue(subcom_id).get()
+            frontier_diff = self.persistence.reconcile(
+                subcom_id, frontier, peer.public_key.key_to_bin()
+            )
+            if frontier_diff.is_empty():
+                # Move to the next
+                await sleep(0.001)
+            else:
+                # Request blocks and wait for some time
+                self.send_packet(
+                    peer, BlocksRequestPayload(subcom_id, frontier_diff.to_bytes())
+                )
+                await sleep(self.settings.gossip_collect_time)
+
     @lazy_wrapper(FrontierPayload)
     def received_frontier(self, peer: Peer, payload: FrontierPayload) -> None:
         frontier = Frontier.from_bytes(payload.frontier)
         chain_id = payload.chain_id
         # Process frontier
-        cache = self.request_cache.get(
-            GossipFrontiersMixin.COMMUNITY_CACHE, hex_to_int(chain_id)
-        )
-        if cache:
-            cache.receive_frontier(peer, frontier)
-        else:
-            # Create new cache
-            diff = self.persistence.reconcile(
-                chain_id, frontier, peer.public_key.key_to_bin()
-            )
-            if not diff.is_empty():
-                # Request blocks from the peer
-                self.send_packet(peer, BlocksRequestPayload(chain_id, diff.to_bytes()))
-                self.request_cache.add(GossipFrontierSyncCache(self, chain_id))
+        self.incoming_frontier_queue(chain_id).put_nowait((peer, frontier))
 
     @lazy_wrapper(BlocksRequestPayload)
     def received_blocks_request(

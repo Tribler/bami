@@ -39,7 +39,10 @@ class FakePaymentCommunity(
 # Add tests for all exceptions
 # Add tests on validity of transactions
 
-NUM_NODES = 5
+
+@pytest.fixture(params=[5, 20])
+def num_nodes(request):
+    return request.param
 
 
 @pytest.fixture()
@@ -48,12 +51,12 @@ def overlay_class():
 
 
 @pytest.fixture()
-async def set_vals(tmpdir_factory, overlay_class):
+async def set_vals(tmpdir_factory, overlay_class, num_nodes):
     dirs = [
         tmpdir_factory.mktemp(str(overlay_class.__name__), numbered=True)
-        for _ in range(NUM_NODES)
+        for _ in range(num_nodes)
     ]
-    nodes = create_and_connect_nodes(NUM_NODES, work_dirs=dirs, ov_class=overlay_class)
+    nodes = create_and_connect_nodes(num_nodes, work_dirs=dirs, ov_class=overlay_class)
     # Make sure every node has a community to listen to
     community_id = nodes[0].overlay.my_pub_key_bin
     context = nodes[0].overlay.state_db.context
@@ -66,9 +69,9 @@ async def set_vals(tmpdir_factory, overlay_class):
 
 
 class TestInitCommunity:
-    def test_empty(self, set_vals):
+    def test_empty(self, set_vals, num_nodes):
         nodes = set_vals.nodes
-        assert len(nodes) == NUM_NODES
+        assert len(nodes) == num_nodes
 
     def test_init_setup(self, set_vals):
         nodes = set_vals.nodes
@@ -120,7 +123,8 @@ class TestMint:
         with pytest.raises(UnknownMinterException):
             nodes[1].overlay.mint(value=Decimal(10, context))
         await deliver_messages()
-        for i in range(NUM_NODES):
+        n_nodes = len(set_vals.nodes)
+        for i in range(n_nodes):
             assert nodes[i].overlay.state_db.get_balance(minter) == 0
 
     @pytest.mark.asyncio
@@ -130,7 +134,8 @@ class TestMint:
         minter = nodes[0].overlay.my_pub_key_bin
         nodes[0].overlay.mint(value=Decimal(10, context))
         await deliver_messages(0.5)
-        for i in range(NUM_NODES):
+        n_nodes = len(set_vals.nodes)
+        for i in range(n_nodes):
             assert nodes[i].overlay.state_db.get_balance(minter) > 0
 
 
@@ -148,7 +153,8 @@ class TestSpend:
 
         await deliver_messages()
         # Should throw invalid mint exception
-        for i in range(NUM_NODES):
+        n_nodes = len(set_vals.nodes)
+        for i in range(n_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
 
     def test_invalid_spend_bad_format(self, set_vals):
@@ -181,10 +187,10 @@ class TestSpend:
         )
 
         assert vals.nodes[0].overlay.state_db.get_balance(spender) == 0
-
-        await deliver_messages(0.5)
+        n_nodes = len(set_vals.nodes)
+        await deliver_messages(0.1 * n_nodes)
         # Should throw invalid mint exception
-        for i in range(NUM_NODES):
+        for i in range(n_nodes):
             assert (
                 vals.nodes[i].overlay.state_db.get_balance(spender) == 0
             ), "Peer number {}".format(i)
@@ -204,10 +210,11 @@ class TestSpend:
             ignore_validation=True,
         )
         assert vals.nodes[1].overlay.state_db.get_balance(spender) == -10
+        n_nodes = len(vals.nodes)
 
-        await deliver_messages(0.5)
+        await deliver_messages(0.1 * n_nodes)
         # As the counterparty will reject the block => The spend transaction is reverted
-        for i in range(NUM_NODES):
+        for i in range(n_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
             assert vals.nodes[i].overlay.state_db.was_balance_negative(spender)
 

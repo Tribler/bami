@@ -33,11 +33,6 @@ class CommunityRoutines(ABC):
     def settings(self) -> Any:
         pass
 
-    @property
-    @abstractmethod
-    def request_cache(self) -> RequestCache:
-        pass
-
 
 class MessageStateMachine(ABC):
     @abstractmethod

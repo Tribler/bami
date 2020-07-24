@@ -79,18 +79,24 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
         self.periodic_sync_lc = {}
 
+        self.incoming_queues = {}
+        self.processing_queue_tasks = {}
+
         self.witness_delta = kwargs.get("witness_delta")
         if not self.witness_delta:
             self.witness_delta = self.settings.witness_block_delta
+
+    def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
+        return self.incoming_queues[subcom_id]
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
         pass
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
-        # Add master peer to the known minter group
+        # 1. Add master peer to the known minter group
         self.state_db.add_known_minters(sub_com_id, {sub_com_id})
-        # Start gossip sync task periodically
+        # 2. Start gossip sync task periodically
         self.periodic_sync_lc[sub_com_id] = self.register_task(
             "gossip_sync_" + str(sub_com_id),
             self.gossip_sync_task,
@@ -98,10 +104,14 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             delay=random() * self._settings.gossip_sync_max_delay,
             interval=self.settings.gossip_sync_time,
         )
-        # receive updates on the chain respecting order
+        # 3. Init incoming worker for synchronising
+        self.incoming_queues[sub_com_id] = Queue()
+        self.processing_queue_tasks[sub_com_id] = ensure_future(
+            self.process_frontier_queue(sub_com_id)
+        )
+        # 4. Process incoming blocks in order
         self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
-        # Join the community as a witness
-        # By default will witness all sub-communities i'm part of
+        # 5. Join the community as a witness for that community
         self.should_witness_subcom[sub_com_id] = True
 
     def get_block_and_blob_by_dot(
@@ -549,9 +559,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         )
 
     async def unload(self):
-        for mid in self.periodic_sync_lc:
-            if not self.periodic_sync_lc[mid].done():
-                self.periodic_sync_lc[mid].cancel()
+        for mid in self.processing_queue_tasks:
+            if not self.processing_queue_tasks[mid].done():
+                self.processing_queue_tasks[mid].cancel()
         if not self.block_sign_queue_task.done():
             self.block_sign_queue_task.cancel()
         await super().unload()

@@ -33,7 +33,6 @@ from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
-from ipv8.requestcache import RequestCache
 from ipv8_service import IPv8
 
 WITNESS_TYPE = b"witness"
@@ -107,7 +106,6 @@ class BamiCommunity(
             my_peer, endpoint, network, max_peers, anonymize=anonymize
         )
 
-        self._request_cache = RequestCache()
         self._logger = logging.getLogger(self.__class__.__name__)
         # Create DB Manager
 
@@ -191,10 +189,6 @@ class BamiCommunity(
     @property
     def settings(self) -> BamiSettings:
         return self._settings
-
-    @property
-    def request_cache(self) -> RequestCache:
-        return self._request_cache
 
     @property
     def persistence(self) -> BaseDB:

@@ -1,3 +1,4 @@
+from asyncio.queues import Queue
 from typing import Iterable
 
 from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
@@ -26,6 +27,9 @@ class MockNextPeerSelection(NextPeerSelectionStrategy):
 
 
 class FakeGossipCommunity(MockedCommunity, GossipFrontiersMixin):
+    def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
+        pass
+
     @property
     def gossip_strategy(self) -> NextPeerSelectionStrategy:
         return MockNextPeerSelection()
@@ -83,8 +87,6 @@ async def test_one_gossip_round(set_vals, monkeypatch, mocker):
         lambda _, c_id, f_diff, __: [b"blob1"],
     )
 
-    set_vals.nodes[0].overlay.gossip_sync_task(set_vals.community_id)
     spy = mocker.spy(set_vals.nodes[0].overlay, "send_packet")
-
-    await deliver_messages(0.5)
+    set_vals.nodes[0].overlay.gossip_sync_task(set_vals.community_id)
     spy.assert_called()

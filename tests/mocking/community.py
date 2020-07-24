@@ -1,3 +1,4 @@
+from asyncio.queues import Queue
 from typing import Any, Optional, Union, Type, Iterable, Dict
 
 from ipv8.community import Community
@@ -160,6 +161,9 @@ class MockedCommunity(Community, CommunityRoutines):
 
 
 class FakeBackCommunity(BamiCommunity):
+    def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
+        pass
+
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         pass
 
