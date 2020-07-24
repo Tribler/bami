@@ -257,7 +257,7 @@ class TestFrontierReconciliation:
 
         front_diff = chain.reconcile(chain2.frontier)
 
-        assert len(front_diff.conflicts) == 2
+        assert len(front_diff.conflicts) == 1
         assert all(k[0] == 100 for k in front_diff.conflicts)
         assert not front_diff.missing
 
@@ -396,8 +396,6 @@ class TestNewConsistentDots:
         chain_obj = Chain()
 
         vals = wrap_return(insert_function(chain_obj, batchs[0][:10]))
-        print(vals)
-        print(chain(*vals))
         assert len(vals) == 10
         assert min(vals)[0] == 1 and max(vals)[0] == 10
 
@@ -429,7 +427,6 @@ class TestNewConsistentDots:
         assert min(vals)[0] == 7 and max(vals)[0] == 20
 
         for i in range(1, 21):
-            print(chain.get_all_short_hash_by_seq_num(i))
             assert len(list(chain.get_dots_by_seq_num(i))) == 2
 
     def test_insert_with_merge_block(self, create_batches, insert_function):

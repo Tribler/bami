@@ -420,7 +420,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             priority, block_info = await self.counter_signing_block_queue.get()
             process_time, block = block_info
             should_delay = self.process_counter_signing_block(block, process_time)
-            self.logger.debug('Processing counter signing block. Delayed: %s', should_delay)
+            self.logger.debug(
+                "Processing counter signing block. Delayed: %s", should_delay
+            )
             if should_delay:
                 self.counter_signing_block_queue.put_nowait(
                     (priority, (process_time + _delta, block))
@@ -456,7 +458,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # 1. Diversity on the block building
         f = self.settings.diversity_confirm
 
-        if len(self.peer_conf[(block.com_id, block.com_seq_num)]) > f:
+        if len(self.peer_conf[(block.com_id, block.com_seq_num)]) >= f:
             return BlockResponse.CONFIRM
         else:
             return BlockResponse.DELAY

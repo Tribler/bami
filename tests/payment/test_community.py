@@ -176,6 +176,7 @@ class TestSpend:
     @pytest.mark.asyncio
     async def test_valid_spend(self, set_vals):
         vals = set_vals
+        n_nodes = len(set_vals.nodes)
         minter = vals.nodes[0].overlay.my_pub_key_bin
         vals.nodes[0].overlay.mint(value=Decimal(10, vals.context))
         spender = minter
@@ -187,7 +188,7 @@ class TestSpend:
         )
 
         assert vals.nodes[0].overlay.state_db.get_balance(spender) == 0
-        n_nodes = len(set_vals.nodes)
+
         await deliver_messages(0.1 * n_nodes)
         # Should throw invalid mint exception
         for i in range(n_nodes):

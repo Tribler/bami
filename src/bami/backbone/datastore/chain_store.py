@@ -377,17 +377,18 @@ class Chain(BaseChain):
         extra_dots = {}
         # return FrontierDiff(missing, tuple(conflicts))
         # TODO: revisit this. How to choose the 'from' sequence number
-        c = max(conflicts)
-        last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
-        est_diff = c[0] - last_point
-        mod_blk = round(est_diff / self.max_extra_dots)
-        mod_blk = mod_blk + 1 if not mod_blk else mod_blk
+        if conflicts:
+            c = max(conflicts)
+            last_point = last_reconcile_point if c[0] > last_reconcile_point else 0
+            est_diff = c[0] - last_point
+            mod_blk = round(est_diff / self.max_extra_dots)
+            mod_blk = mod_blk + 1 if not mod_blk else mod_blk
 
-        extra_val = {}
-        for k in range(last_point + mod_blk, c[0] + 1, mod_blk):
-            if self.versions.get(k):
-                extra_val[k] = tuple(self.versions.get(k))
-        extra_dots[c] = extra_val
+            extra_val = {}
+            for k in range(last_point + mod_blk, c[0] + 1, mod_blk):
+                if self.versions.get(k):
+                    extra_val[k] = tuple(self.versions.get(k))
+            extra_dots[c] = extra_val
 
         return FrontierDiff(missing, extra_dots)
 
