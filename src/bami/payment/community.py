@@ -11,7 +11,6 @@ import cachetools
 from ipv8.peer import Peer
 
 from bami.backbone.block import BamiBlock
-from bami.backbone.caches import WitnessBlockCache
 from bami.backbone.community import (
     BlockResponse,
     CONFIRM_TYPE,
@@ -433,9 +432,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # Verify the risk of missing some information:
         #  - There is diverse peers building upon the block
 
-        # TODO: revisit that
+        # TODO: revisit that - number should depend on total number of peers in community.
         # 1. Diversity on the block building
-        f = 3
+        f = self.settings.diversity_confirm
 
         if len(self.peer_conf[(block.com_id, block.com_seq_num)]) > f:
             return BlockResponse.CONFIRM
@@ -470,15 +469,23 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         self, chain_id: bytes, seq_num: int, delay: float = None
     ):
         # Schedule witness transaction
-        cache_id = hex_to_int(chain_id + bytes(seq_num))
-        cache: WitnessBlockCache = self.request_cache.get(
-            WitnessBlockCache.CACHE_PREFIX, cache_id
-        )
-        if cache:
-            # New block at the same sequence number arrived - reschedule it
-            cache.reschedule()
+        name_prefix = str(hex_to_int(chain_id + bytes(seq_num)))
+        if self.is_pending_task_active(name_prefix):
+            self.replace_task(
+                name_prefix,
+                self.witness,
+                chain_id,
+                seq_num,
+                delay=self.settings.witness_delta_time,
+            )
         else:
-            self.request_cache.add(WitnessBlockCache(self, chain_id, seq_num, delay))
+            self.register_task(
+                name_prefix,
+                self.witness,
+                chain_id,
+                seq_num,
+                delay=self.settings.witness_delta_time,
+            )
 
     def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
         return len(witness_tx) == 2 and witness_tx[0] > 0 and len(witness_tx[1]) > 0

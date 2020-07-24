@@ -10,3 +10,6 @@ class PaymentSettings(BamiSettings):
         self.mint_max_value = 10 ** 7
         # Spend settings
         self.spend_value_range = (0, 10 ** 7)
+
+        # Required diversity
+        self.diversity_confirm = 2

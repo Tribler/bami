@@ -180,11 +180,11 @@ class BamiCommunity(
         self.logger.debug("Unloading the Plexus Community.")
         self.shutting_down = True
 
-        await self.request_cache.shutdown()
-
         for subcom_id in self.my_subscriptions:
             await self.my_subscriptions[subcom_id].unload()
+        self.cancel_all_pending_tasks()
         await super(BamiCommunity, self).unload()
+
         # Close the persistence layer
         self.persistence.close()
 
