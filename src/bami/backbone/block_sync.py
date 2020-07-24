@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Union, Iterable
 
-from ipv8.lazy_community import lazy_wrapper_unsigned
+from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
 from bami.backbone.block import BamiBlock
 from bami.backbone.community_routines import (
@@ -51,21 +51,21 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
                 else block.to_block_payload()
             )
         for p in peers:
-            self.send_packet(p, packet, sig=False)
+            self.send_packet(p, packet)
 
-    @lazy_wrapper_unsigned(RawBlockPayload)
+    @lazy_wrapper(RawBlockPayload)
     def received_raw_block(self, peer: Peer, payload: RawBlockPayload) -> None:
         block = BamiBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 
-    @lazy_wrapper_unsigned(BlockPayload)
+    @lazy_wrapper(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
         block = BamiBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
         self.process_block_unordered(block, peer)
 
-    @lazy_wrapper_unsigned(RawBlockBroadcastPayload)
+    @lazy_wrapper(RawBlockBroadcastPayload)
     def received_raw_block_broadcast(
         self, peer: Peer, payload: RawBlockBroadcastPayload
     ) -> None:
@@ -74,7 +74,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
-    @lazy_wrapper_unsigned(BlockBroadcastPayload)
+    @lazy_wrapper(BlockBroadcastPayload)
     def received_block_broadcast(self, peer: Peer, payload: BlockBroadcastPayload):
         block = BamiBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)

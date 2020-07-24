@@ -7,6 +7,7 @@ from decimal import Decimal
 from random import Random, random
 from typing import Any, Dict, List, Optional, Tuple
 
+from bami.backbone.datastore.frontiers import Frontier
 import cachetools
 from ipv8.peer import Peer
 
@@ -23,6 +24,7 @@ from bami.backbone.utils import (
     Dot,
     encode_raw,
     hex_to_int,
+    Links,
     shorten,
     take_hash,
 )
@@ -92,6 +94,8 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
         self.logger.debug("Processing block %s, %s", blk.type, blk.com_dot)
+        frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
+        self.incoming_frontier_queue(blk.com_id).put_nowait((peer, frontier))
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         # 1. Add master peer to the known minter group
@@ -317,6 +321,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
                 block_type=SPEND_TYPE, transaction=encode_raw(spend_tx), com_id=chain_id
             )
             self.logger.info("Created spend block %s", block.com_dot)
+            counter_peer = self.get_peer_by_key(counter_party, chain_id)
+            if counter_peer:
+                self.send_block(block, [counter_peer])
             self.share_in_community(block, chain_id)
         else:
             raise InsufficientBalanceException("Not enough balance for spend")

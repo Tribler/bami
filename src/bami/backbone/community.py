@@ -256,6 +256,19 @@ class BamiCommunity(
 
     # -------- Community block sharing  -------------
 
+    def get_peer_by_key(
+        self, peer_key: bytes, subcom_id: bytes = None
+    ) -> Optional[Peer]:
+        if subcom_id:
+            subcom_peers = self.get_subcom(subcom_id).get_known_peers()
+            for peer in subcom_peers:
+                if peer.public_key.key_to_bin() == peer_key:
+                    return peer
+        for peer in self.get_peers():
+            if peer.public_key.key_to_bin() == peer_key:
+                return peer
+        return None
+
     def choose_community_peers(
         self, com_peers: Iterable[Peer], current_seed: Any, commitee_size: int
     ) -> Iterable[Peer]:

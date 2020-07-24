@@ -96,7 +96,9 @@ class GossipFrontiersMixin(
                 await sleep(0.001)
             else:
                 # Request blocks and wait for some time
-                self.logger.debug("Sending frontier diff %s to peer %s", frontier_diff, peer)
+                self.logger.debug(
+                    "Sending frontier diff %s to peer %s", frontier_diff, peer
+                )
                 self.send_packet(
                     peer, BlocksRequestPayload(subcom_id, frontier_diff.to_bytes())
                 )
@@ -121,7 +123,7 @@ class GossipFrontiersMixin(
         )
         self.logger.debug("Sending %s blocks to peer %s", len(blocks), peer)
         for block in blocks:
-            self.send_packet(peer, RawBlockPayload(block), sig=False)
+            self.send_packet(peer, RawBlockPayload(block))
 
     def setup_messages(self) -> None:
         self.add_message_handler(FrontierPayload, self.received_frontier)

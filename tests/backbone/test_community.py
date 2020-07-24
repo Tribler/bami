@@ -58,7 +58,7 @@ async def test_share_in_community(mocker, set_vals):
     set_vals.nodes[0].overlay.share_in_community(blk, set_vals.community_id)
     spy = mocker.spy(set_vals.nodes[1].overlay, "validate_persist_block")
     await deliver_messages()
-    spy.assert_called_once_with(blk, set_vals.nodes[0].overlay.my_peer.address)
+    spy.assert_called_once_with(blk, set_vals.nodes[0].overlay.my_peer)
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_confirm_block(mocker, set_vals):
     set_vals.nodes[0].overlay.confirm(blk)
     spy = mocker.spy(set_vals.nodes[1].overlay, "validate_persist_block")
     await deliver_messages()
-    spy.assert_called_with(ANY, set_vals.nodes[0].overlay.my_peer.address)
+    spy.assert_called_with(ANY, set_vals.nodes[0].overlay.my_peer)
 
 
 @pytest.mark.asyncio
@@ -76,7 +76,7 @@ async def test_reject_block(mocker, set_vals):
     set_vals.nodes[0].overlay.reject(blk)
     spy = mocker.spy(set_vals.nodes[1].overlay, "validate_persist_block")
     await deliver_messages()
-    spy.assert_called_with(ANY, set_vals.nodes[0].overlay.my_peer.address)
+    spy.assert_called_with(ANY, set_vals.nodes[0].overlay.my_peer)
 
 
 def test_init_setup(set_vals):
