@@ -81,6 +81,7 @@ class GossipFrontiersMixin(
                 subcom_id, self.settings.gossip_fanout
             )
             for peer in next_peers:
+                self.logger.debug("Sending frontier %s to peer %s", frontier, peer)
                 self.send_packet(peer, FrontierPayload(subcom_id, frontier.to_bytes()))
 
     async def process_frontier_queue(self, subcom_id: bytes):
@@ -95,6 +96,7 @@ class GossipFrontiersMixin(
                 await sleep(0.001)
             else:
                 # Request blocks and wait for some time
+                self.logger.debug("Sending frontier diff %s to peer %s", frontier_diff, peer)
                 self.send_packet(
                     peer, BlocksRequestPayload(subcom_id, frontier_diff.to_bytes())
                 )
@@ -117,6 +119,7 @@ class GossipFrontiersMixin(
         blocks = self.persistence.get_block_blobs_by_frontier_diff(
             chain_id, f_diff, vals_to_request
         )
+        self.logger.debug("Sending %s blocks to peer %s", len(blocks), peer)
         for block in blocks:
             self.send_packet(peer, RawBlockPayload(block), sig=False)
 

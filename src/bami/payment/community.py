@@ -91,7 +91,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
-        pass
+        self.logger.debug("Processing block %s, %s", blk.type, blk.com_dot)
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         # 1. Add master peer to the known minter group
