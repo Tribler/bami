@@ -93,13 +93,17 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
-        self.logger.debug("Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id)
+        self.logger.debug(
+            "Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id
+        )
         frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
-        self.incoming_frontier_queue(blk.com_id).put_nowait((peer, frontier))
+        subcom_id = b'w'+blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
+        self.incoming_frontier_queue(subcom_id).put_nowait((peer, frontier))
 
     def start_gossip_sync(self, subcom_id: bytes, interval: float = None) -> None:
         if not interval:
             interval = self.settings.gossip_sync_time
+        self.logger.debug("Starting gossip with frontiers on chain %s", subcom_id)
         self.periodic_sync_lc[subcom_id] = self.register_task(
             "gossip_sync_" + str(subcom_id),
             self.gossip_sync_task,

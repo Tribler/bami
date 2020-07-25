@@ -276,6 +276,8 @@ class DBManager(BaseDB):
             pers = prefix + pers
             com = prefix + com
 
+        print('Adding block ', block.com_dot, ' to chain ', pers, ' and ', com)
+
         # 2.1: Process the block wrt personal chain
         if pers not in self.chains:
             self.chains[pers] = self.chain_factory.create_chain()
