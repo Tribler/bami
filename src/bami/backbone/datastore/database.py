@@ -198,6 +198,7 @@ class DBManager(BaseDB):
         self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
     ) -> Iterable[bytes]:
         chain = self.get_chain(chain_id)
+        print('Getting blocks by diff ', frontier_diff, ' on chain ', chain_id)
         if chain:
             # Processing missing holes
             blks = set(
@@ -205,6 +206,7 @@ class DBManager(BaseDB):
                     chain, chain_id, expand_ranges(frontier_diff.missing)
                 )
             )
+            print('Missing blocks ', len(blks))
             blks.update(
                 set(
                     self._process_conflicting(
@@ -212,6 +214,7 @@ class DBManager(BaseDB):
                     )
                 )
             )
+            print('Total blocks ', len(blks))
             return blks
         return []
 
