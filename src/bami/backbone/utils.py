@@ -13,13 +13,16 @@ Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
 Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
 StateVote = NewType("StateVote", Tuple[bytes, bytes, bytes])
 
-
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
 GENESIS_SEQ = 1
 UNKNOWN_SEQ = 0
 EMPTY_SIG = b"0" * 64
 EMPTY_PK = b"0" * 74
 ANY_COUNTERPARTY_PK = EMPTY_PK
+
+WITNESS_TYPE = b"witness"
+CONFIRM_TYPE = b"confirm"
+REJECT_TYPE = b"reject"
 
 
 def shorten(key: bytes) -> ShortKey:

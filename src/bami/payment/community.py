@@ -14,19 +14,19 @@ from ipv8.peer import Peer
 from bami.backbone.block import BamiBlock
 from bami.backbone.community import (
     BlockResponse,
-    CONFIRM_TYPE,
     BamiCommunity,
-    REJECT_TYPE,
-    WITNESS_TYPE,
 )
 from bami.backbone.utils import (
+    CONFIRM_TYPE,
     decode_raw,
     Dot,
     encode_raw,
     hex_to_int,
     Links,
+    REJECT_TYPE,
     shorten,
     take_hash,
+    WITNESS_TYPE,
 )
 from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
@@ -97,7 +97,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             "Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id
         )
         frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
-        subcom_id = b'w'+blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
+        subcom_id = b"w" + blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
         self.incoming_frontier_queue(subcom_id).put_nowait((peer, frontier))
 
     def start_gossip_sync(self, subcom_id: bytes, interval: float = None) -> None:
@@ -183,7 +183,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             # Witness block react on new block:
             if (
                 self.should_witness_subcom.get(chain_id)
-                and block.type != b"witness"
+                and block.type != WITNESS_TYPE
                 and self.should_witness_chain_point(
                     chain_id, self.my_pub_key_bin, block.com_seq_num
                 )

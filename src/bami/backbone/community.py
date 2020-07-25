@@ -27,17 +27,21 @@ from bami.backbone.sub_community import (
     SubCommunityDiscoveryStrategy,
     SubCommunityMixin,
 )
-from bami.backbone.utils import decode_raw, EMPTY_PK, encode_raw
+from bami.backbone.utils import (
+    CONFIRM_TYPE,
+    decode_raw,
+    EMPTY_PK,
+    encode_raw,
+    REJECT_TYPE,
+    shorten,
+    WITNESS_TYPE,
+)
 from ipv8.community import Community, DEFAULT_MAX_PEERS
 from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
 from ipv8_service import IPv8
-
-WITNESS_TYPE = b"witness"
-CONFIRM_TYPE = b"confirm"
-REJECT_TYPE = b"reject"
 
 
 class BlockResponse(Enum):
@@ -357,6 +361,9 @@ class BamiCommunity(
         if chain:
             witness_blob = self.build_witness_blob(chain_id, seq_num)
             if witness_blob:
+                self.logger.debug(
+                    "Creating witness block on chain %s: %s", shorten(chain_id), seq_num
+                )
                 blk = self.create_signed_block(
                     block_type=WITNESS_TYPE, transaction=witness_blob, com_id=chain_id
                 )

@@ -8,7 +8,7 @@ from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from bami.backbone.utils import Links
+from bami.backbone.utils import Links, WITNESS_TYPE
 from bami.backbone.exceptions import InvalidBlockException
 from bami.backbone.payload import (
     RawBlockBroadcastPayload,
@@ -117,7 +117,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         else:
             if not self.persistence.has_block(block.hash):
                 chain_id = block.com_id
-                prefix = b"w" if block.type == b"witness" else b""
+                prefix = b"w" if block.type == WITNESS_TYPE else b""
                 if (
                     self.persistence.get_chain(prefix + chain_id)
                     and self.persistence.get_chain(prefix + chain_id).versions.get(
@@ -139,6 +139,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         self,
         block_type: bytes = b"unknown",
         transaction: bytes = b"",
+        prefix: bytes = b"",
         com_id: bytes = None,
         links: Links = None,
         personal_links: Links = None,
@@ -148,12 +149,14 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         Args:
             block_type: bytes of the block
             transaction: bytes blob of the transaction
+            prefix: prefix for the community id. For example b'w' - for witnessing transactions
             com_id: sub-community id if applicable
             links: explicitly link to certain links in the sub-community. Warning - may lead to forks!
             personal_links: explicitly link to certain blocks in the own chain. Warning - may lead to forks!
         Returns:
             signed block
         """
+        com_id = com_id if not com_id else prefix + com_id
         block = BamiBlock.create(
             block_type,
             transaction,
