@@ -103,20 +103,24 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         subcom_id = b"w" + blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
         self.incoming_frontier_queue(subcom_id).put_nowait((peer, frontier))
 
-    def start_gossip_sync(self, subcom_id: bytes, interval: float = None) -> None:
+    def start_gossip_sync(
+        self, subcom_id: bytes, prefix: bytes = b"", interval: float = None
+    ) -> None:
         if not interval:
             interval = self.settings.gossip_sync_time
-        self.logger.debug("Starting gossip with frontiers on chain %s", subcom_id)
-        self.periodic_sync_lc[subcom_id] = self.register_task(
-            "gossip_sync_" + str(subcom_id),
+        full_com_id = prefix + subcom_id
+        self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
+        self.periodic_sync_lc[full_com_id] = self.register_task(
+            "gossip_sync_" + str(full_com_id),
             self.gossip_sync_task,
             subcom_id,
+            prefix,
             delay=random() * self._settings.gossip_sync_max_delay,
             interval=interval,
         )
-        self.incoming_queues[subcom_id] = Queue()
-        self.processing_queue_tasks[subcom_id] = ensure_future(
-            self.process_frontier_queue(subcom_id)
+        self.incoming_queues[full_com_id] = Queue()
+        self.processing_queue_tasks[full_com_id] = ensure_future(
+            self.process_frontier_queue(full_com_id)
         )
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
@@ -125,7 +129,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # 2. Start gossip sync task periodically on the chain updates
         self.start_gossip_sync(sub_com_id)
         # 3 Gossip witness updates on the sub-chain
-        self.start_gossip_sync(b"w" + sub_com_id)
+        self.start_gossip_sync(sub_com_id, prefix=b"w")
         # 4. Process incoming blocks in order
         self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
         # 5. Witness all updates: on chain

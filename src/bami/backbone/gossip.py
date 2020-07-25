@@ -71,11 +71,11 @@ class GossipFrontiersMixin(
 ):
     COMMUNITY_CACHE = u"gossip_cache"
 
-    def gossip_sync_task(self, subcom_id: bytes) -> None:
+    def gossip_sync_task(self, subcom_id: bytes, prefix: bytes = b"") -> None:
         """Start of the gossip state machine"""
-        chain = self.persistence.get_chain(subcom_id)
+        chain = self.persistence.get_chain(prefix + subcom_id)
         if not chain:
-            self.logger.debug('No chain for %s', subcom_id)
+            self.logger.debug("No chain for %s", subcom_id)
         if chain:
             frontier = chain.frontier
             # Select next peers for the gossip round
@@ -87,9 +87,11 @@ class GossipFrontiersMixin(
                     "Sending frontier %s to peer %s. Witness chain: %s",
                     frontier,
                     peer,
-                    subcom_id.startswith(b"w"),
+                    prefix.startswith(b"w"),
                 )
-                self.send_packet(peer, FrontierPayload(subcom_id, frontier.to_bytes()))
+                self.send_packet(
+                    peer, FrontierPayload(prefix + subcom_id, frontier.to_bytes())
+                )
 
     async def process_frontier_queue(self, subcom_id: bytes):
         while True:
