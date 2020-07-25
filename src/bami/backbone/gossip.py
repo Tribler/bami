@@ -74,6 +74,8 @@ class GossipFrontiersMixin(
     def gossip_sync_task(self, subcom_id: bytes) -> None:
         """Start of the gossip state machine"""
         chain = self.persistence.get_chain(subcom_id)
+        if not chain:
+            self.logger.debug('No chain for %s', subcom_id)
         if chain:
             frontier = chain.frontier
             # Select next peers for the gossip round
