@@ -84,17 +84,17 @@ class SubscriptionsPayload(ComparablePayload):
 @vp_compile
 class BlocksRequestPayload(ComparablePayload):
     msg_id = 8
-    format_list = ["74s", "varlenH"]
+    format_list = ["varlenH", "varlenH"]
     names = ["subcom_id", "frontier_diff"]
 
 
 class StateRequestPayload(ComparablePayload):
     msg_id = 9
-    format_list = ["74s", "varlenH"]
+    format_list = ["varlenH", "varlenH"]
     names = ["chain_id", "state_request"]
 
 
 class StateResponsePayload(ComparablePayload):
     msg_id = 10
-    format_list = ["74s", "varlenH"]
+    format_list = ["varlenH", "varlenH"]
     names = ["subcom_id", "frontier_diff"]

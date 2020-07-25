@@ -198,7 +198,7 @@ class DBManager(BaseDB):
         self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
     ) -> Iterable[bytes]:
         chain = self.get_chain(chain_id)
-        print('Getting blocks by diff ', frontier_diff, ' on chain ', chain_id)
+        print("Getting blocks by diff ", frontier_diff, " on chain ", chain_id)
         if chain:
             # Processing missing holes
             blks = set(
@@ -206,7 +206,7 @@ class DBManager(BaseDB):
                     chain, chain_id, expand_ranges(frontier_diff.missing)
                 )
             )
-            print('Missing blocks ', len(blks))
+            print("Missing blocks ", len(blks))
             blks.update(
                 set(
                     self._process_conflicting(
@@ -214,7 +214,7 @@ class DBManager(BaseDB):
                     )
                 )
             )
-            print('Total blocks ', len(blks))
+            print("Total blocks ", len(blks))
             return blks
         return []
 
@@ -276,7 +276,6 @@ class DBManager(BaseDB):
         com = block.com_id
 
         if prefix:
-            pers = prefix + pers
             com = prefix + com
 
         print("Adding block ", block.com_dot, " to chain ", pers, " and ", com)
@@ -306,6 +305,7 @@ class DBManager(BaseDB):
                 self.notify(ChainTopic.GROUP, chain_id=com, dots=pers_dots_list)
             else:
                 if com not in self.chains:
+                    print("Creating community chain", com)
                     self.chains[com] = self.chain_factory.create_chain()
                 com_block_dot = Dot((block.com_seq_num, block.short_hash))
                 com_dots_list = self.chains[com].add_block(
