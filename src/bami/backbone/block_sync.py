@@ -156,15 +156,15 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         Returns:
             signed block
         """
-        com_id = com_id if not com_id else prefix + com_id
         block = BamiBlock.create(
             block_type,
             transaction,
             self.persistence,
             self.my_pub_key_bin,
-            com_id,
-            links,
-            personal_links,
+            com_id=com_id,
+            com_links=links,
+            pers_links=personal_links,
+            prefix=prefix,
         )
         block.sign(self.my_peer_key)
         self.validate_persist_block(block, self.my_peer)

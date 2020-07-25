@@ -260,6 +260,7 @@ class BamiBlock(object):
         transaction: bytes,
         database: BaseDB,
         public_key: bytes,
+        prefix: bytes = b"",
         com_id: bytes = None,
         com_links: Links = None,
         pers_links: Links = None,
@@ -312,7 +313,7 @@ class BamiBlock(object):
                 last_com_links = com_links
                 com_seq_num = max(last_com_links)[0]
             else:
-                com_chain = database.get_chain(com_id)
+                com_chain = database.get_chain(prefix + com_id)
                 last_com_links = (
                     com_chain.consistent_terminal
                     if com_chain

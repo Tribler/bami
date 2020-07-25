@@ -365,7 +365,10 @@ class BamiCommunity(
                     "Creating witness block on chain %s: %s", shorten(chain_id), seq_num
                 )
                 blk = self.create_signed_block(
-                    block_type=WITNESS_TYPE, transaction=witness_blob, prefix=b'w', com_id=chain_id
+                    block_type=WITNESS_TYPE,
+                    transaction=witness_blob,
+                    prefix=b"w",
+                    com_id=chain_id,
                 )
                 self.share_in_community(blk, chain_id)
 
