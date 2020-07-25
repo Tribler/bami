@@ -92,10 +92,13 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         return self.incoming_queues[subcom_id]
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
+        """Process witness block out of order"""
         # No block is processed out of order in this community
         self.logger.debug(
             "Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id
         )
+        if blk.type == WITNESS_TYPE:
+            self.process_witness(blk)
         frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
         subcom_id = b"w" + blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
         self.incoming_frontier_queue(subcom_id).put_nowait((peer, frontier))
@@ -125,8 +128,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         self.start_gossip_sync(b"w" + sub_com_id)
         # 4. Process incoming blocks in order
         self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
-        # 5. Join the community as a witness for that community
-        self.persistence.add_observer(b"w" + sub_com_id, self.receive_dots_ordered)
+        # 5. Witness all updates: on chain
         self.should_witness_subcom[sub_com_id] = True
 
     def get_block_and_blob_by_dot(
@@ -153,7 +155,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             blk_blob, block = self.get_block_and_blob_by_dot(chain_id, dot)
             if block.com_dot in self.state_db.applied_dots:
                 raise Exception(
-                    "Already applied?",
+                    "Block already applied?",
                     block.com_dot,
                     self.state_db.vals_cache,
                     self.state_db.peer_mints,
@@ -179,7 +181,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             elif block.type == REJECT_TYPE:
                 self.process_reject(block)
             elif block.type == WITNESS_TYPE:
-                self.process_witness(block)
+                raise Exception("Witness block received, while shouldn't")
             # Witness block react on new block:
             if (
                 self.should_witness_subcom.get(chain_id)
