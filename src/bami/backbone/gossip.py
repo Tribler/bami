@@ -102,7 +102,7 @@ class GossipFrontiersMixin(
             else:
                 # Request blocks and wait for some time
                 self.logger.debug(
-                    "Sending frontier diff %s to peer %s. Witness chain: ",
+                    "Sending frontier diff %s to peer %s. Witness chain: %s",
                     frontier_diff,
                     peer,
                     subcom_id.startswith(b"w"),
