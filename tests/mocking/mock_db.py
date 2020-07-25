@@ -75,7 +75,9 @@ class MockDBManager(BaseDB):
     def get_chain(self, chain_id) -> Optional[BaseChain]:
         pass
 
-    def add_block(self, block: BamiBlock, block_serializer) -> None:
+    def add_block(
+        self, block: BamiBlock, block_serializer, prefix: bytes = None
+    ) -> None:
         pass
 
     def get_block_blob_by_dot(self, chain_id: bytes, block_dot: Dot) -> Optional[bytes]:

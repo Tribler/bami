@@ -97,25 +97,32 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
         self.incoming_frontier_queue(blk.com_id).put_nowait((peer, frontier))
 
+    def start_gossip_sync(self, subcom_id: bytes, interval: float = None) -> None:
+        if not interval:
+            interval = self.settings.gossip_sync_time
+        self.periodic_sync_lc[subcom_id] = self.register_task(
+            "gossip_sync_" + str(subcom_id),
+            self.gossip_sync_task,
+            subcom_id,
+            delay=random() * self._settings.gossip_sync_max_delay,
+            interval=interval,
+        )
+        self.incoming_queues[subcom_id] = Queue()
+        self.processing_queue_tasks[subcom_id] = ensure_future(
+            self.process_frontier_queue(subcom_id)
+        )
+
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         # 1. Add master peer to the known minter group
         self.state_db.add_known_minters(sub_com_id, {sub_com_id})
-        # 2. Start gossip sync task periodically
-        self.periodic_sync_lc[sub_com_id] = self.register_task(
-            "gossip_sync_" + str(sub_com_id),
-            self.gossip_sync_task,
-            sub_com_id,
-            delay=random() * self._settings.gossip_sync_max_delay,
-            interval=self.settings.gossip_sync_time,
-        )
-        # 3. Init incoming worker for synchronising
-        self.incoming_queues[sub_com_id] = Queue()
-        self.processing_queue_tasks[sub_com_id] = ensure_future(
-            self.process_frontier_queue(sub_com_id)
-        )
+        # 2. Start gossip sync task periodically on the chain updates
+        self.start_gossip_sync(sub_com_id)
+        # 3 Gossip witness updates on the sub-chain
+        self.start_gossip_sync(b"w" + sub_com_id)
         # 4. Process incoming blocks in order
         self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
         # 5. Join the community as a witness for that community
+        self.persistence.add_observer(b"w" + sub_com_id, self.receive_dots_ordered)
         self.should_witness_subcom[sub_com_id] = True
 
     def get_block_and_blob_by_dot(

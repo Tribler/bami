@@ -116,22 +116,24 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             raise InvalidBlockException("Block invalid", str(block), peer)
         else:
             if not self.persistence.has_block(block.hash):
+                chain_id = block.com_id
+                prefix = b"w" if block.type == b"witness" else b""
                 if (
-                    self.persistence.get_chain(block.com_id)
-                    and self.persistence.get_chain(block.com_id).versions.get(
+                    self.persistence.get_chain(prefix + chain_id)
+                    and self.persistence.get_chain(prefix + chain_id).versions.get(
                         block.com_seq_num
                     )
                     and block.short_hash
-                    in self.persistence.get_chain(block.com_id).versions[
+                    in self.persistence.get_chain(prefix + chain_id).versions[
                         block.com_seq_num
                     ]
                 ):
                     raise Exception(
                         "Inconsisistency between block store and chain store",
-                        self.persistence.get_chain(block.com_id).versions,
+                        self.persistence.get_chain(prefix + chain_id).versions,
                         block.com_dot,
                     )
-                self.persistence.add_block(block_blob, block)
+                self.persistence.add_block(block_blob, block, prefix=prefix)
 
     def create_signed_block(
         self,
