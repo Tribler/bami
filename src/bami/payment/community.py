@@ -93,7 +93,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         # No block is processed out of order in this community
-        self.logger.debug("Processing block %s, %s", blk.type, blk.com_dot)
+        self.logger.debug("Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id)
         frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
         self.incoming_frontier_queue(blk.com_id).put_nowait((peer, frontier))
 
