@@ -264,6 +264,7 @@ class BamiBlock(object):
         com_id: bytes = None,
         com_links: Links = None,
         pers_links: Links = None,
+        use_consistent_links: bool = True,
     ):
         """
         Create PlexusBlock wrt local database knowledge.
@@ -277,6 +278,7 @@ class BamiBlock(object):
             com_id: id of the community which block is part of [optional]
             com_links: Explicitly link with these blocks [optional]
             pers_links: Create a block at a certain [optional]
+            use_consistent_links: Build on top of blocks that are known
 
         Returns:
             PlexusBlock
@@ -284,12 +286,16 @@ class BamiBlock(object):
         """
 
         # Decide to link blocks in the personal chain:
-        personal_chain = database.get_chain(prefix+public_key)
+        personal_chain = database.get_chain(prefix + public_key)
         if not personal_chain:
             # There are no blocks in the personal chain yet
             last_link = Links((GENESIS_DOT,))
         else:
-            last_link = personal_chain.consistent_terminal
+            last_link = (
+                personal_chain.consistent_terminal
+                if use_consistent_links
+                else personal_chain.terminal
+            )
 
         # Fork personal chain at the
         if pers_links:
@@ -314,11 +320,14 @@ class BamiBlock(object):
                 com_seq_num = max(last_com_links)[0]
             else:
                 com_chain = database.get_chain(prefix + com_id)
-                last_com_links = (
-                    com_chain.consistent_terminal
-                    if com_chain
-                    else Links((GENESIS_DOT,))
-                )
+                if not com_chain:
+                    last_com_links = Links((GENESIS_DOT,))
+                else:
+                    last_com_links = (
+                        com_chain.consistent_terminal
+                        if use_consistent_links
+                        else com_chain.terminal
+                    )
                 # TODO: add link filtering here
                 com_seq_num = max(last_com_links)[0] + 1
 

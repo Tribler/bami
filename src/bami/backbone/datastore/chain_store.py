@@ -46,6 +46,11 @@ class BaseChain(ABC):
     def consistent_terminal(self) -> Links:
         pass
 
+    @property
+    @abstractmethod
+    def terminal(self) -> Links:
+        pass
+
     @abstractmethod
     def get_next_links(self, block_dot: Dot) -> Optional[Links]:
         pass
@@ -90,7 +95,7 @@ class Chain(BaseChain):
         # Unknown blocks in the data structure
         self.holes = set()
         # Current terminal nodes in the DAG
-        self.terminal = Links(((0, shorten(GENESIS_HASH)),))
+        self._terminal = Links(((0, shorten(GENESIS_HASH)),))
 
         self.const_terminal = self.terminal
 
@@ -110,6 +115,10 @@ class Chain(BaseChain):
             return None
         for k in self.versions.get(seq_num):
             yield Dot((seq_num, k))
+
+    @property
+    def terminal(self) -> Links:
+        return self._terminal
 
     @property
     def consistent_terminal(self) -> Links:
@@ -274,9 +283,9 @@ class Chain(BaseChain):
             const_step = sorted(const_step)
             self.const_terminal = Links(tuple(const_step))
 
-        new_term.update(self.__calc_terminal(self.terminal))
+        new_term.update(self.__calc_terminal(self._terminal))
         new_term = sorted(new_term)
-        self.terminal = Links(tuple(new_term))
+        self._terminal = Links(tuple(new_term))
 
     def _update_forward_pointers(self, block_links: Links, block_dot: Dot) -> None:
         for dot in block_links:

@@ -88,6 +88,10 @@ class MockDBManager(BaseDB):
 
 
 class MockChain(BaseChain):
+    @property
+    def terminal(self) -> Links:
+        pass
+
     def get_all_short_hash_by_seq_num(self, seq_num: int) -> Iterable[ShortKey]:
         pass
 

@@ -33,17 +33,17 @@ class BamiSettings(object):
         self.push_gossip_ttl = 1
 
         # witness every k block on average with probability 1/K
-        self.witness_block_delta = 1
+        self.witness_block_delta = 2
         # Wait time before witnessing
-        self.witness_delta_time = 0.3
+        self.witness_delta_time = 0.1
 
         # Track chains of every overlay neighbour
         self.track_neighbours_chains = False
 
         # Time for one frontier gossip round
         self.gossip_sync_max_delay = 0.1
-        self.gossip_sync_time = 0.2
-        self.gossip_collect_time = 0.1
+        self.gossip_sync_time = 0.5
+        self.gossip_collect_time = 0.2
         self.block_sign_delta = 0.3
         # Maximum wait time 100
         # Maximum wait block 100

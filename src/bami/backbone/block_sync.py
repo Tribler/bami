@@ -143,6 +143,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         com_id: bytes = None,
         links: Links = None,
         personal_links: Links = None,
+        use_consistent_links: bool = True,
     ) -> BamiBlock:
         """
         This function will create, sign, persist block with given parameters.
@@ -153,6 +154,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             com_id: sub-community id if applicable
             links: explicitly link to certain links in the sub-community. Warning - may lead to forks!
             personal_links: explicitly link to certain blocks in the own chain. Warning - may lead to forks!
+            use_consistent_links ():
         Returns:
             signed block
         """
@@ -165,6 +167,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             com_links=links,
             pers_links=personal_links,
             prefix=prefix,
+            use_consistent_links=use_consistent_links,
         )
         block.sign(self.my_peer_key)
         self.validate_persist_block(block, self.my_peer)

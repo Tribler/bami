@@ -366,6 +366,7 @@ class BamiCommunity(
                     transaction=witness_blob,
                     prefix=b"w",
                     com_id=chain_id,
+                    use_consistent_links=False,
                 )
                 self.logger.debug(
                     "Creating witness block on chain %s: %s, com_dot %s, pers_dot %s",
