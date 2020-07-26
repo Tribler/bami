@@ -135,7 +135,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # 4. Process incoming blocks in order
         self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
         # 5. Witness all updates: on chain
-        self.should_witness_subcom[sub_com_id] = True
+        self.should_witness_subcom[sub_com_id] = self.settings.should_witness_block
 
     def get_block_and_blob_by_dot(
         self, chain_id: bytes, dot: Dot

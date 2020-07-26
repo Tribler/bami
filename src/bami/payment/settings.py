@@ -13,3 +13,4 @@ class PaymentSettings(BamiSettings):
 
         # Required diversity
         self.diversity_confirm = 0
+        self.should_witness_block = False
