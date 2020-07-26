@@ -502,7 +502,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             return False
 
     def update_risk(self, chain_id: bytes, conf_peer_id: bytes, target_seq_num: int):
-        print('Risk update: ', shorten(conf_peer_id), target_seq_num)
+        print("Risk update: ", shorten(conf_peer_id), target_seq_num)
         self.peer_conf[(chain_id, target_seq_num)][conf_peer_id] += 1
 
     # ----------- Witness transactions --------------

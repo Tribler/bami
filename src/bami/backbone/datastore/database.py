@@ -276,6 +276,8 @@ class DBManager(BaseDB):
         com = block.com_id
 
         if prefix:
+            if com == pers:
+                pers = prefix + pers
             com = prefix + com
 
         print("Adding block ", block.com_dot, " to chain ", pers, " and ", com)
