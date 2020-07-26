@@ -361,14 +361,14 @@ class BamiCommunity(
         if chain:
             witness_blob = self.build_witness_blob(chain_id, seq_num)
             if witness_blob:
-                self.logger.debug(
-                    "Creating witness block on chain %s: %s", shorten(chain_id), seq_num
-                )
                 blk = self.create_signed_block(
                     block_type=WITNESS_TYPE,
                     transaction=witness_blob,
                     prefix=b"w",
                     com_id=chain_id,
+                )
+                self.logger.debug(
+                    "Creating witness block on chain %s: %s, com_dot %s", shorten(blk.com_id), seq_num, blk.com_dot
                 )
                 self.share_in_community(blk, chain_id)
 
