@@ -130,6 +130,12 @@ class GossipFrontiersMixin(
         f_diff = FrontierDiff.from_bytes(payload.frontier_diff)
         chain_id = payload.subcom_id
         vals_to_request = set()
+        self.logger.debug(
+            "Received block request %s from peer %s. Witness chain: %s",
+            f_diff,
+            peer,
+            chain_id.startswith(b"w"),
+        )
         blocks = self.persistence.get_block_blobs_by_frontier_diff(
             chain_id, f_diff, vals_to_request
         )
