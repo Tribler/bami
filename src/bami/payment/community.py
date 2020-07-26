@@ -70,7 +70,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         self.context = self.state_db.context
 
         self.reachability_cache = defaultdict(lambda: cachetools.LRUCache(100))
-        self.tracked_blocks = defaultdict(lambda: set())
+
+        # Dictionary chain_id: block_dot -> block
+        self.tracked_blocks = defaultdict(lambda: {})
         self.peer_conf = defaultdict(lambda: defaultdict(int))
         self.should_witness_subcom = {}
 
@@ -403,7 +405,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
     # ------------ Block Response processing ---------
 
     def add_block_to_response_processing(self, block: BamiBlock) -> None:
-        self.tracked_blocks[block.com_id].add(block.com_dot)
+        self.tracked_blocks[block.com_id][block.com_dot] = block
 
         self.counter_signing_block_queue.put_nowait((block.com_seq_num, (0, block)))
 
@@ -446,7 +448,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
                 )
                 await sleep(_delta)
             else:
-                self.tracked_blocks[block.com_id].remove(block.com_dot)
+                self.tracked_blocks[block.com_id].pop(block.com_dot)
                 await sleep(0.001)
 
     def block_response(
@@ -500,6 +502,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             return False
 
     def update_risk(self, chain_id: bytes, conf_peer_id: bytes, target_seq_num: int):
+        print('Risk update: ', shorten(conf_peer_id), target_seq_num)
         self.peer_conf[(chain_id, target_seq_num)][conf_peer_id] += 1
 
     # ----------- Witness transactions --------------
@@ -554,6 +557,16 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             block.com_id, seq_num, state_hash, block.public_key
         )
         self.state_db.add_chain_state(block.com_id, seq_num, state_hash, state)
+
+        chain_id = block.com_id
+        if self.tracked_blocks.get(chain_id):
+            for block_dot, tracked_block in self.tracked_blocks[chain_id].items():
+                if (
+                    block_dot[0] <= seq_num
+                    and state.get(shorten(tracked_block.public_key))
+                    and state.get(shorten(tracked_block.public_key)) == (True, True)
+                ):
+                    self.update_risk(chain_id, block.public_key, block_dot[0])
 
     # ------ Confirm and reject transactions -------
 

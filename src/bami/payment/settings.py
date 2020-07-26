@@ -12,4 +12,4 @@ class PaymentSettings(BamiSettings):
         self.spend_value_range = (0, 10 ** 7)
 
         # Required diversity
-        self.diversity_confirm = 0
+        self.diversity_confirm = 3

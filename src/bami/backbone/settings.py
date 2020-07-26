@@ -33,9 +33,9 @@ class BamiSettings(object):
         self.push_gossip_ttl = 1
 
         # witness every k block on average with probability 1/K
-        self.witness_block_delta = 5
+        self.witness_block_delta = 1
         # Wait time before witnessing
-        self.witness_delta_time = 0.4
+        self.witness_delta_time = 0.3
 
         # Track chains of every overlay neighbour
         self.track_neighbours_chains = False
