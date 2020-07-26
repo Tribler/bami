@@ -368,7 +368,11 @@ class BamiCommunity(
                     com_id=chain_id,
                 )
                 self.logger.debug(
-                    "Creating witness block on chain %s: %s, com_dot %s", shorten(blk.com_id), seq_num, blk.com_dot
+                    "Creating witness block on chain %s: %s, com_dot %s, pers_dot %s",
+                    shorten(blk.com_id),
+                    seq_num,
+                    blk.com_dot,
+                    blk.pers_dot,
                 )
                 self.share_in_community(blk, chain_id)
 
