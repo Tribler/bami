@@ -273,7 +273,7 @@ class BamiBlock(object):
             transaction: transaction blob bytes
             database: local database with chains
             public_key: public key of the block creator
-            link_filter: Filter object to attack to block that are valid according to the business logic
+            prefix: prefix for the public key
             com_id: id of the community which block is part of [optional]
             com_links: Explicitly link with these blocks [optional]
             pers_links: Create a block at a certain [optional]
@@ -284,7 +284,7 @@ class BamiBlock(object):
         """
 
         # Decide to link blocks in the personal chain:
-        personal_chain = database.get_chain(public_key)
+        personal_chain = database.get_chain(prefix+public_key)
         if not personal_chain:
             # There are no blocks in the personal chain yet
             last_link = Links((GENESIS_DOT,))
