@@ -55,7 +55,7 @@ class LightSubCommunity(BaseSubCommunity):
     async def unload(self):
         pass
 
-    def __init__(self, subcom_id: bytes = None):
+    def __init__(self, subcom_id: bytes = None, max_peers: int = None):
         self._subcom_id = subcom_id
         self.peers = set()
 
@@ -218,11 +218,13 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
     def is_subscribed(self, community_id: bytes) -> bool:
         return community_id in self.my_subcoms
 
-    def join_subcom(self, subcom_id: bytes):
+    def join_subcom(self, subcom_id: bytes) -> None:
         if subcom_id not in self.my_subcoms:
             # This sub-community is still not known
             # Set max peers setting
-            subcom = self.subcom_factory.create_subcom(subcom_id=subcom_id)
+            subcom = self.subcom_factory.create_subcom(
+                subcom_id=subcom_id, max_peers=self.settings.subcom_max_peers
+            )
             # Add the sub-community to the main overlay
             self.add_subcom(subcom_id, subcom)
             # Call discovery routine for this sub-community

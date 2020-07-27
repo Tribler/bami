@@ -1,13 +1,6 @@
 from asyncio.queues import Queue
-from typing import Any, Optional, Union, Type, Iterable, Dict
+from typing import Any, Dict, Iterable, Optional, Type, Union
 
-from ipv8.community import Community
-from ipv8.keyvault.crypto import default_eccrypto
-from ipv8.keyvault.keys import Key
-from ipv8.messaging.payload import Payload
-from ipv8.peer import Peer
-from ipv8.peerdiscovery.network import Network
-from ipv8.requestcache import RequestCache
 from bami.backbone.block import BamiBlock
 from bami.backbone.community import BamiCommunity, BlockResponse
 from bami.backbone.community_routines import (
@@ -15,14 +8,14 @@ from bami.backbone.community_routines import (
     MessageStateMachine,
 )
 from bami.backbone.datastore.database import BaseDB
-from bami.backbone.sub_community import (
-    SubCommunityRoutines,
-    BaseSubCommunityFactory,
-    SubCommunityDiscoveryStrategy,
-    BaseSubCommunity,
-    IPv8SubCommunityFactory,
-    LightSubCommunityFactory,
-)
+from bami.backbone.settings import BamiSettings
+from bami.backbone.sub_community import (BaseSubCommunity, BaseSubCommunityFactory, IPv8SubCommunityFactory,
+                                         LightSubCommunityFactory, SubCommunityDiscoveryStrategy, SubCommunityRoutines)
+from ipv8.community import Community
+from ipv8.keyvault.crypto import default_eccrypto
+from ipv8.keyvault.keys import Key
+from ipv8.peer import Peer
+from ipv8.requestcache import RequestCache
 
 from tests.mocking.mock_db import MockDBManager
 
@@ -38,7 +31,7 @@ class FakeRoutines(CommunityRoutines):
 
     @property
     def settings(self) -> Any:
-        pass
+        return BamiSettings()
 
     def __init__(self):
         self.crypto = default_eccrypto

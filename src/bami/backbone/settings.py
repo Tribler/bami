@@ -1,5 +1,7 @@
 from enum import Enum
 
+from ipv8.community import DEFAULT_MAX_PEERS
+
 
 class SecurityMode(Enum):
     """
@@ -54,6 +56,10 @@ class BamiSettings(object):
         self.work_directory = ".block_db"
         # Gossip fanout for frontiers exchange
         self.gossip_fanout = 6
+
+        # Community max peers
+        self.main_max_peers = -1
+        self.subcom_max_peers = -1
 
         # Whether we are a crawler (and fetching whole chains)
         self.crawler = False

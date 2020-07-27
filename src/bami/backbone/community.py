@@ -77,7 +77,7 @@ class BamiCommunity(
         endpoint: Any,
         network: Network,
         ipv8: Optional[IPv8] = None,
-        max_peers: int = DEFAULT_MAX_PEERS,
+        max_peers: int = None,
         anonymize: bool = False,
         db: BaseDB = None,
         work_dir: str = None,
@@ -105,6 +105,8 @@ class BamiCommunity(
             self._persistence = DBManager(ChainFactory(), LMDBLockStore(work_dir))
         else:
             self._persistence = db
+        if not max_peers:
+            max_peers = self.settings.main_max_peers
         self._ipv8 = ipv8
         super(BamiCommunity, self).__init__(
             my_peer, endpoint, network, max_peers, anonymize=anonymize

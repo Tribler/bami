@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Type
+from typing import Callable, Type
 
+from bami.backbone.datastore.database import BaseDB
+from bami.backbone.settings import BamiSettings
 from ipv8.keyvault.keys import Key
 from ipv8.messaging.payload import Payload
 from ipv8.peer import Peer
-from ipv8.requestcache import RequestCache
-
-from bami.backbone.datastore.database import BaseDB
 
 
 class CommunityRoutines(ABC):
@@ -30,7 +29,7 @@ class CommunityRoutines(ABC):
 
     @property
     @abstractmethod
-    def settings(self) -> Any:
+    def settings(self) -> BamiSettings:
         pass
 
 

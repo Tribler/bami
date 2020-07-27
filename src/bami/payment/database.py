@@ -180,7 +180,7 @@ class PaymentState(object):
                     spend_dot=spend_dot, current=self.claim_dict[claimer][spender]
                 )
             )
-        if max(prev_links) < spend_dot:
+        if max(prev_links) < spend_dot and spend_dot not in prev_links:
             raise InvalidClaimException(
                 "Links ({links}) in the chain have no spend dot ({dot})".format(
                     links=prev_links, dot=spend_dot
