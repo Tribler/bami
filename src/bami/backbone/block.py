@@ -51,6 +51,7 @@ class BamiBlock(object):
             "sequence_number",
             "previous",
             "links",
+            "com_prefix",
             "com_id",
             "com_seq_num",
             "timestamp",
@@ -87,6 +88,7 @@ class BamiBlock(object):
             self._links = encode_links(self.links)
 
             # Metadata for community identifiers
+            self.com_prefix = b""
             self.com_id = EMPTY_PK
             self.com_seq_num: int = UNKNOWN_SEQ
 
@@ -109,11 +111,15 @@ class BamiBlock(object):
             self.links = decode_links(self._links)
 
             self.type, self.public_key, self.sequence_number = data[0], data[2], data[3]
-            self.com_id, self.com_seq_num = data[6], int(data[7])
+            self.com_prefix, self.com_id, self.com_seq_num = (
+                data[6],
+                data[7],
+                int(data[8]),
+            )
             self.signature, self.timestamp, self.insert_time = (
-                data[8],
                 data[9],
                 data[10],
+                data[11],
             )
 
             self.type = (
@@ -138,7 +144,7 @@ class BamiBlock(object):
 
     def __str__(self):
         # This makes debugging and logging easier
-        return "Block {0} from ...{1}:{2} links {3} for {4} type {5} cseq {6} cid {7}".format(
+        return "Block {0} from ...{1}:{2} links {3} for {4} type {5} cseq {6} cid {7}.{8}".format(
             self.short_hash,
             shorten(self.public_key),
             self.sequence_number,
@@ -146,6 +152,7 @@ class BamiBlock(object):
             self.transaction,
             self.type,
             self.com_seq_num,
+            self.com_prefix,
             self.com_id,
         )
 
@@ -191,6 +198,7 @@ class BamiBlock(object):
             self.sequence_number,
             self._previous,
             self._links,
+            self.com_prefix,
             self.com_id,
             self.com_seq_num,
             self.signature if signature else EMPTY_SIG,
@@ -236,6 +244,7 @@ class BamiBlock(object):
                 payload.sequence_number,
                 payload.previous,
                 payload.links,
+                payload.com_prefix,
                 payload.com_id,
                 payload.com_seq_num,
                 payload.signature,
@@ -260,7 +269,7 @@ class BamiBlock(object):
         transaction: bytes,
         database: BaseDB,
         public_key: bytes,
-        prefix: bytes = b"",
+        com_prefix: bytes = b"",
         com_id: bytes = None,
         com_links: Links = None,
         pers_links: Links = None,
@@ -274,19 +283,23 @@ class BamiBlock(object):
             transaction: transaction blob bytes
             database: local database with chains
             public_key: public key of the block creator
-            prefix: prefix for the public key
+            com_prefix: prefix for the chain identification [optional]
             com_id: id of the community which block is part of [optional]
             com_links: Explicitly link with these blocks [optional]
             pers_links: Create a block at a certain [optional]
-            use_consistent_links: Build on top of blocks that are known
+            use_consistent_links: Build on top of blocks that are known. By default: True
 
         Returns:
             PlexusBlock
 
         """
 
+        if public_key == com_id:
+            full_pers_chain_id = com_prefix + public_key
+        else:
+            full_pers_chain_id = public_key
+        personal_chain = database.get_chain(full_pers_chain_id)
         # Decide to link blocks in the personal chain:
-        personal_chain = database.get_chain(prefix + public_key)
         if not personal_chain:
             # There are no blocks in the personal chain yet
             last_link = Links((GENESIS_DOT,))
@@ -319,7 +332,7 @@ class BamiBlock(object):
                 last_com_links = com_links
                 com_seq_num = max(last_com_links)[0]
             else:
-                com_chain = database.get_chain(prefix + com_id)
+                com_chain = database.get_chain(com_prefix + com_id)
                 if not com_chain:
                     last_com_links = Links((GENESIS_DOT,))
                 else:
@@ -334,6 +347,7 @@ class BamiBlock(object):
             ret.links = last_com_links
             ret.com_seq_num = com_seq_num
             ret.com_id = com_id
+            ret.com_prefix = com_prefix
 
         ret._links = encode_links(ret.links)
         ret._previous = encode_links(ret.previous)

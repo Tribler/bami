@@ -30,9 +30,7 @@ class BaseDB(ABC, Notifier):
         pass
 
     @abstractmethod
-    def add_block(
-        self, block_blob: bytes, block: "PlexusBlock", prefix: bytes = None
-    ) -> None:
+    def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
         pass
 
     @abstractmethod
@@ -256,9 +254,7 @@ class DBManager(BaseDB):
     def has_block(self, block_hash: bytes) -> bool:
         return self.block_store.get_block_by_hash(block_hash) is not None
 
-    def add_block(
-        self, block_blob: bytes, block: "PlexusBlock", prefix: bytes = None
-    ) -> None:
+    def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
 
         block_hash = block.hash
         block_tx = block.transaction
@@ -272,9 +268,11 @@ class DBManager(BaseDB):
         pers = block.public_key
         com = block.com_id
 
-        if prefix:
-            pers = prefix + pers
-            com = prefix + com
+        if pers == com:
+            pers = block.com_prefix + pers
+            com = block.com_prefix + com
+        else:
+            com = block.com_prefix + com
 
         # 2.1: Process the block wrt personal chain
         if pers not in self.chains:

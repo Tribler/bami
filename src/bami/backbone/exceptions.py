@@ -16,3 +16,7 @@ class InvalidBlockException(Exception):
 
 class SubCommunityEmptyException(Exception):
     pass
+
+
+class UnknownChainException(Exception):
+    pass

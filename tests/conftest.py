@@ -45,6 +45,7 @@ class FakeBlock(BamiBlock):
         previous: Links = None,
         key: LibNaCLSK = None,
         links: Links = None,
+        com_prefix: bytes = b"",
         com_id: Any = None,
         block_type: bytes = b"test",
     ):
@@ -79,6 +80,7 @@ class FakeBlock(BamiBlock):
                 pers_seq_num,
                 encode_links(previous),
                 encode_links(links),
+                com_prefix,
                 com_id,
                 com_seq_num,
                 EMPTY_SIG,

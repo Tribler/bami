@@ -117,7 +117,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         else:
             if not self.persistence.has_block(block.hash):
                 chain_id = block.com_id
-                prefix = b"w" if block.type == WITNESS_TYPE else b""
+                prefix = block.com_prefix
                 if (
                     self.persistence.get_chain(prefix + chain_id)
                     and self.persistence.get_chain(prefix + chain_id).versions.get(
@@ -133,7 +133,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
                         self.persistence.get_chain(prefix + chain_id).versions,
                         block.com_dot,
                     )
-                self.persistence.add_block(block_blob, block, prefix=prefix)
+                self.persistence.add_block(block_blob, block)
 
     def create_signed_block(
         self,
@@ -166,7 +166,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             com_id=com_id,
             com_links=links,
             pers_links=personal_links,
-            prefix=prefix,
+            com_prefix=prefix,
             use_consistent_links=use_consistent_links,
         )
         block.sign(self.my_peer_key)

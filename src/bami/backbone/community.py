@@ -2,21 +2,25 @@
 The Plexus backbone
 """
 from abc import ABCMeta, abstractmethod
+from asyncio import ensure_future, Queue
 from binascii import hexlify, unhexlify
 from enum import Enum
 import logging
 import random
-from typing import Any, Dict, Iterable, List, Optional, Type, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 from bami.backbone.block import BamiBlock
 from bami.backbone.block_sync import BlockSyncMixin
 from bami.backbone.community_routines import MessageStateMachine
 from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
-from bami.backbone.datastore.database import BaseDB, DBManager
+from bami.backbone.datastore.database import BaseDB, ChainTopic, DBManager
+from bami.backbone.datastore.frontiers import Frontier
 from bami.backbone.exceptions import (
+    DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
     SubCommunityEmptyException,
+    UnknownChainException,
 )
 from bami.backbone.gossip import SubComGossipMixin
 from bami.backbone.payload import SubscriptionsPayload
@@ -30,8 +34,11 @@ from bami.backbone.sub_community import (
 from bami.backbone.utils import (
     CONFIRM_TYPE,
     decode_raw,
+    Dot,
     EMPTY_PK,
     encode_raw,
+    Links,
+    Notifier,
     REJECT_TYPE,
     shorten,
     WITNESS_TYPE,
@@ -131,12 +138,71 @@ class BamiCommunity(
         )  # keeps track of which communities each peer is part of
         self.bootstrap_master = None
 
+        self.periodic_sync_lc = {}
+
+        self.incoming_queues = {}
+        self.processing_queue_tasks = {}
+
+        self.ordered_notifier = Notifier()
+        self.unordered_notifier = Notifier()
+
         # Setup and add message handlers
         for base in BamiCommunity.__bases__:
             if issubclass(base, MessageStateMachine):
                 base.setup_messages(self)
 
         self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
+
+    # ----- Update notifiers for new blocks ------------
+
+    def get_block_and_blob_by_dot(
+        self, chain_id: bytes, dot: Dot
+    ) -> Tuple[bytes, BamiBlock]:
+        """Get blob and serialized block and by the chain_id and dot.
+        Can raise DatabaseDesynchronizedException if no block found."""
+        blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
+        if not blk_blob:
+            raise DatabaseDesynchronizedException(
+                "Block is not found in db: {chain_id}, {dot}".format(
+                    chain_id=chain_id, dot=dot
+                )
+            )
+        block = BamiBlock.unpack(blk_blob, self.serializer)
+        return blk_blob, block
+
+    def get_block_by_dot(self, chain_id: bytes, dot: Dot) -> BamiBlock:
+        """Get block by the chain_id and dot. Can raise DatabaseDesynchronizedException"""
+        return self.get_block_and_blob_by_dot(chain_id, dot)[1]
+
+    def block_notify(self, chain_id: bytes, dots: List[Dot]):
+        for dot in dots:
+            block = self.get_block_by_dot(chain_id, dot)
+            self.ordered_notifier.notify(chain_id, block)
+
+    def subscribe_in_order_block(
+        self, topic: Union[bytes, ChainTopic], callback: Callable[[BamiBlock], None]
+    ):
+        """Subscribe on block updates received in-order. Callable will receive the block."""
+        self._persistence.add_observer(topic, self.block_notify)
+        self.ordered_notifier.add_observer(topic, callback)
+
+    def subscribe_out_order_block(
+        self, topic: Union[bytes, ChainTopic], callback: Callable[[BamiBlock], None]
+    ):
+        """Subscribe on block updates received in-order. Callable will receive the block."""
+        self._persistence.add_observer(topic, self.block_notify)
+        self.unordered_notifier.add_observer(topic, callback)
+
+    def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
+        self.unordered_notifier.notify(blk.com_prefix + blk.com_id, blk)
+        frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
+        subcom_id = blk.com_prefix + blk.com_id
+        processing_queue = self.incoming_frontier_queue(subcom_id)
+        if not processing_queue:
+            raise UnknownChainException(
+                "Cannot process block Received block with unknown chain."
+            )
+        processing_queue.put_nowait((peer, frontier))
 
     # ---- Introduction handshakes => Exchange your subscriptions ----------------
     def create_introduction_request(
@@ -184,6 +250,9 @@ class BamiCommunity(
         self.logger.debug("Unloading the Plexus Community.")
         self.shutting_down = True
 
+        for mid in self.processing_queue_tasks:
+            if not self.processing_queue_tasks[mid].done():
+                self.processing_queue_tasks[mid].cancel()
         for subcom_id in self.my_subscriptions:
             await self.my_subscriptions[subcom_id].unload()
         self.cancel_all_pending_tasks()
@@ -261,6 +330,29 @@ class BamiCommunity(
             )
 
     # -------- Community block sharing  -------------
+
+    def start_gossip_sync(
+        self, subcom_id: bytes, prefix: bytes = b"", interval: float = None
+    ) -> None:
+        if not interval:
+            interval = self.settings.gossip_sync_time
+        full_com_id = prefix + subcom_id
+        self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
+        self.periodic_sync_lc[full_com_id] = self.register_task(
+            "gossip_sync_" + str(full_com_id),
+            self.gossip_sync_task,
+            subcom_id,
+            prefix,
+            delay=random.random() * self._settings.gossip_sync_max_delay,
+            interval=interval,
+        )
+        self.incoming_queues[full_com_id] = Queue()
+        self.processing_queue_tasks[full_com_id] = ensure_future(
+            self.process_frontier_queue(full_com_id)
+        )
+
+    def incoming_frontier_queue(self, subcom_id: bytes) -> Optional[Queue]:
+        return self.incoming_queues.get(subcom_id)
 
     def get_peer_by_key(
         self, peer_key: bytes, subcom_id: bytes = None

@@ -82,7 +82,7 @@ async def test_send_receive_raw_block(monkeypatch, mocker, set_vals):
 
 
 def test_create_block(monkeypatch, mocker, set_vals):
-    monkeypatch.setattr(MockDBManager, "add_block", lambda _, __, ___, prefix: None)
+    monkeypatch.setattr(MockDBManager, "add_block", lambda _, __, ___: None)
     monkeypatch.setattr(MockDBManager, "has_block", lambda _, __: False)
     spy = mocker.spy(MockDBManager, "has_block")
     blk = set_vals.nodes[0].overlay.create_signed_block()

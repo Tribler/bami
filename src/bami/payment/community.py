@@ -1,36 +1,25 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from asyncio import ensure_future, PriorityQueue, Queue, sleep
+from asyncio import ensure_future, PriorityQueue, sleep
 from collections import defaultdict
 from decimal import Decimal
-from random import Random, random
-from typing import Any, Dict, List, Optional, Tuple
-
-from bami.backbone.datastore.frontiers import Frontier
-import cachetools
-from ipv8.peer import Peer
+from random import Random
+from typing import Any, Dict, Optional, Tuple
 
 from bami.backbone.block import BamiBlock
-from bami.backbone.community import (
-    BlockResponse,
-    BamiCommunity,
-)
+from bami.backbone.community import BamiCommunity, BlockResponse
+from bami.backbone.exceptions import InvalidTransactionFormatException
 from bami.backbone.utils import (
     CONFIRM_TYPE,
     decode_raw,
     Dot,
     encode_raw,
     hex_to_int,
-    Links,
     REJECT_TYPE,
     shorten,
     take_hash,
     WITNESS_TYPE,
-)
-from bami.backbone.exceptions import (
-    DatabaseDesynchronizedException,
-    InvalidTransactionFormatException,
 )
 from bami.payment.database import ChainState, PaymentState
 from bami.payment.exceptions import (
@@ -43,6 +32,7 @@ from bami.payment.exceptions import (
 )
 from bami.payment.settings import PaymentSettings
 from bami.payment.utils import MINT_TYPE, SPEND_TYPE
+import cachetools
 
 """
 Exchange of the value within one community, where value lives only in one community.
@@ -81,122 +71,83 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             self.evaluate_counter_signing_blocks()
         )
 
-        self.periodic_sync_lc = {}
-
-        self.incoming_queues = {}
-        self.processing_queue_tasks = {}
-
         self.witness_delta = kwargs.get("witness_delta")
         if not self.witness_delta:
             self.witness_delta = self.settings.witness_block_delta
 
-    def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
-        return self.incoming_queues[subcom_id]
+    @property
+    def settings(self) -> PaymentSettings:
+        return super().settings
 
-    def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
+    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+        # 0. Add master peer to the known minter group
+        self.state_db.add_known_minters(sub_com_id, {sub_com_id})
+
+        # 1. Main payment chain: spends and their confirmations
+        # - Start gossip sync task periodically on the chain updates
+        self.start_gossip_sync(sub_com_id)
+        # - Process incoming blocks on the chain in order for payments
+        self.subscribe_in_order_block(sub_com_id, self.receive_block_in_order)
+
+        # 2. Witness chain:
+        # - Gossip witness updates on the sub-chain
+        self.start_gossip_sync(sub_com_id, prefix=b"w")
+        # - Process witness block out of order
+        self.subscribe_out_order_block(b"w" + sub_com_id, self.process_witness_block)
+        # - Witness all updates on payment chain
+        self.should_witness_subcom[sub_com_id] = self.settings.should_witness_block
+
+    def receive_block_in_order(self, block: BamiBlock) -> None:
+        if block.com_dot in self.state_db.applied_dots:
+            raise Exception(
+                "Block already applied?",
+                block.com_dot,
+                self.state_db.vals_cache,
+                self.state_db.peer_mints,
+                self.state_db.applied_dots,
+            )
+        chain_id = block.com_id
+        dot = block.com_dot
+        self.state_db.applied_dots.add(dot)
+
+        # Check reachability for target block -> update risk
+        for blk_dot in self.tracked_blocks[chain_id]:
+            if self.dot_reachable(chain_id, blk_dot, dot):
+                self.update_risk(chain_id, block.public_key, blk_dot[0])
+
+        # Process blocks according to their type
+        self.logger.debug(
+            "Processing block %s, %s, %s", block.type, chain_id, block.hash
+        )
+        if block.type == MINT_TYPE:
+            self.process_mint(block)
+        elif block.type == SPEND_TYPE:
+            self.process_spend(block)
+        elif block.type == CONFIRM_TYPE:
+            self.process_confirm(block)
+        elif block.type == REJECT_TYPE:
+            self.process_reject(block)
+        elif block.type == WITNESS_TYPE:
+            raise Exception("Witness block received, while shouldn't")
+        # Witness block react on new block:
+        if (
+            self.should_witness_subcom.get(chain_id)
+            and block.type != WITNESS_TYPE
+            and self.should_witness_chain_point(
+                chain_id, self.my_pub_key_bin, block.com_seq_num
+            )
+        ):
+            self.schedule_witness_block(chain_id, block.com_seq_num)
+
+    def process_witness_block(self, blk: BamiBlock) -> None:
         """Process witness block out of order"""
         # No block is processed out of order in this community
         self.logger.debug(
             "Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id
         )
-        if blk.type == WITNESS_TYPE:
-            self.process_witness(blk)
-        frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
-        subcom_id = b"w" + blk.com_id if blk.type == WITNESS_TYPE else blk.com_id
-        self.incoming_frontier_queue(subcom_id).put_nowait((peer, frontier))
-
-    def start_gossip_sync(
-        self, subcom_id: bytes, prefix: bytes = b"", interval: float = None
-    ) -> None:
-        if not interval:
-            interval = self.settings.gossip_sync_time
-        full_com_id = prefix + subcom_id
-        self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
-        self.periodic_sync_lc[full_com_id] = self.register_task(
-            "gossip_sync_" + str(full_com_id),
-            self.gossip_sync_task,
-            subcom_id,
-            prefix,
-            delay=random() * self._settings.gossip_sync_max_delay,
-            interval=interval,
-        )
-        self.incoming_queues[full_com_id] = Queue()
-        self.processing_queue_tasks[full_com_id] = ensure_future(
-            self.process_frontier_queue(full_com_id)
-        )
-
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
-        # 1. Add master peer to the known minter group
-        self.state_db.add_known_minters(sub_com_id, {sub_com_id})
-        # 2. Start gossip sync task periodically on the chain updates
-        self.start_gossip_sync(sub_com_id)
-        # 3 Gossip witness updates on the sub-chain
-        self.start_gossip_sync(sub_com_id, prefix=b"w")
-        # 4. Process incoming blocks in order
-        self.persistence.add_observer(sub_com_id, self.receive_dots_ordered)
-        # 5. Witness all updates: on chain
-        self.should_witness_subcom[sub_com_id] = self.settings.should_witness_block
-
-    def get_block_and_blob_by_dot(
-        self, chain_id: bytes, dot: Dot
-    ) -> Tuple[bytes, BamiBlock]:
-        """Get blob and serialized block and by the chain_id and dot.
-        Can raise DatabaseDesynchronizedException if no block found."""
-        blk_blob = self.persistence.get_block_blob_by_dot(chain_id, dot)
-        if not blk_blob:
-            raise DatabaseDesynchronizedException(
-                "Block is not found in db: {chain_id}, {dot}".format(
-                    chain_id=chain_id, dot=dot
-                )
-            )
-        block = BamiBlock.unpack(blk_blob, self.serializer)
-        return blk_blob, block
-
-    def get_block_by_dot(self, chain_id: bytes, dot: Dot) -> BamiBlock:
-        """Get block by the chain_id and dot. Can raise DatabaseDesynchronizedException"""
-        return self.get_block_and_blob_by_dot(chain_id, dot)[1]
-
-    def receive_dots_ordered(self, chain_id: bytes, dots: List[Dot]) -> None:
-        for dot in dots:
-            blk_blob, block = self.get_block_and_blob_by_dot(chain_id, dot)
-            if block.com_dot in self.state_db.applied_dots:
-                raise Exception(
-                    "Block already applied?",
-                    block.com_dot,
-                    self.state_db.vals_cache,
-                    self.state_db.peer_mints,
-                    self.state_db.applied_dots,
-                )
-            self.state_db.applied_dots.add(block.com_dot)
-
-            # Check reachability for target block -> update risk
-            for blk_dot in self.tracked_blocks[chain_id]:
-                if self.dot_reachable(chain_id, blk_dot, dot):
-                    self.update_risk(chain_id, block.public_key, blk_dot[0])
-
-            # Process blocks according to their type
-            self.logger.debug(
-                "Processing block %s, %s, %s", block.type, chain_id, block.hash
-            )
-            if block.type == MINT_TYPE:
-                self.process_mint(block)
-            elif block.type == SPEND_TYPE:
-                self.process_spend(block)
-            elif block.type == CONFIRM_TYPE:
-                self.process_confirm(block)
-            elif block.type == REJECT_TYPE:
-                self.process_reject(block)
-            elif block.type == WITNESS_TYPE:
-                raise Exception("Witness block received, while shouldn't")
-            # Witness block react on new block:
-            if (
-                self.should_witness_subcom.get(chain_id)
-                and block.type != WITNESS_TYPE
-                and self.should_witness_chain_point(
-                    chain_id, self.my_pub_key_bin, block.com_seq_num
-                )
-            ):
-                self.schedule_witness_block(chain_id, block.com_seq_num)
+        if blk.type != WITNESS_TYPE:
+            raise Exception("Received not witness block on witness sub-chain!")
+        self.process_witness(blk)
 
     def should_store_store_update(self, chain_id: bytes, seq_num: int) -> bool:
         """Store the status of the chain at the seq_num for further witnessing or verification"""
@@ -599,9 +550,6 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         )
 
     async def unload(self):
-        for mid in self.processing_queue_tasks:
-            if not self.processing_queue_tasks[mid].done():
-                self.processing_queue_tasks[mid].cancel()
         if not self.block_sign_queue_task.done():
             self.block_sign_queue_task.cancel()
         await super().unload()
