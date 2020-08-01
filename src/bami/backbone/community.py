@@ -175,6 +175,7 @@ class BamiCommunity(
         return self.get_block_and_blob_by_dot(chain_id, dot)[1]
 
     def block_notify(self, chain_id: bytes, dots: List[Dot]):
+        self.logger.info('Processing dots %s on chain: %s', dots, chain_id)
         for dot in dots:
             block = self.get_block_by_dot(chain_id, dot)
             self.ordered_notifier.notify(chain_id, block)
