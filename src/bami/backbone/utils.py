@@ -1,7 +1,7 @@
 from binascii import hexlify
 from hashlib import sha256
 from itertools import chain
-from typing import Any, NewType, Set, Tuple
+from typing import Any, Callable, NewType, Set, Tuple
 
 from msgpack import dumps, loads
 
@@ -139,11 +139,14 @@ class Notifier(object):
     def __init__(self):
         self.observers = {}
 
-    def add_observer(self, subject: Any, callback):
+    def add_unique_observer(self, subject: Any, callback: Callable) -> None:
+        self.observers[subject] = [callback]
+
+    def add_observer(self, subject: Any, callback: Callable) -> None:
         self.observers[subject] = self.observers.get(subject, [])
         self.observers[subject].append(callback)
 
-    def notify(self, subject: Any, *args, **kwargs):
+    def notify(self, subject: Any, *args, **kwargs) -> None:
         if subject not in self.observers:
             return
         for callback in self.observers[subject]:
