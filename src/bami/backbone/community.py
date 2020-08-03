@@ -191,7 +191,6 @@ class BamiCommunity(
         self, topic: Union[bytes, ChainTopic], callback: Callable[[BamiBlock], None]
     ):
         """Subscribe on block updates received in-order. Callable will receive the block."""
-        self._persistence.add_observer(topic, self.block_notify)
         self.unordered_notifier.add_observer(topic, callback)
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
