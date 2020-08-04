@@ -121,7 +121,10 @@ class GossipFrontiersMixin(
         frontier = Frontier.from_bytes(payload.frontier)
         chain_id = payload.chain_id
         # Process frontier
-        self.incoming_frontier_queue(chain_id).put_nowait((peer, frontier))
+        if self.incoming_frontier_queue(chain_id):
+            self.incoming_frontier_queue(chain_id).put_nowait((peer, frontier))
+        else:
+            self.logger.error("Received unexpected frontier %s", chain_id)
 
     @lazy_wrapper(BlocksRequestPayload)
     def received_blocks_request(
