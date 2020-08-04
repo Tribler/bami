@@ -60,7 +60,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             "Received block from pull gossip %s from peer %s", block.com_dot, peer
         )
         self.validate_persist_block(block, peer)
-        self.process_block_unordered(block, peer)
 
     @lazy_wrapper(BlockPayload)
     def received_block(self, peer: Peer, payload: BlockPayload):
@@ -69,7 +68,6 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             "Received block from push gossip %s from peer %s", block.com_dot, peer
         )
         self.validate_persist_block(block, peer)
-        self.process_block_unordered(block, peer)
 
     @lazy_wrapper(RawBlockBroadcastPayload)
     def received_raw_block_broadcast(
@@ -77,14 +75,12 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     ) -> None:
         block = BamiBlock.unpack(payload.block_bytes, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
     @lazy_wrapper(BlockBroadcastPayload)
     def received_block_broadcast(self, peer: Peer, payload: BlockBroadcastPayload):
         block = BamiBlock.from_payload(payload, self.serializer)
         self.validate_persist_block(block, peer)
-        self.process_block_unordered(block, peer)
         self.process_broadcast_block(block, payload.ttl)
 
     def process_broadcast_block(self, block: BamiBlock, ttl: int):
@@ -116,6 +112,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             raise InvalidBlockException("Block invalid", str(block), peer)
         else:
             if not self.persistence.has_block(block.hash):
+                self.process_block_unordered(block, peer)
                 chain_id = block.com_id
                 prefix = block.com_prefix
                 if (

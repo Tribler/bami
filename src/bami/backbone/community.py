@@ -195,16 +195,17 @@ class BamiCommunity(
 
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         self.unordered_notifier.notify(blk.com_prefix + blk.com_id, blk)
-        frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
-        subcom_id = blk.com_prefix + blk.com_id
-        processing_queue = self.incoming_frontier_queue(subcom_id)
-        if not processing_queue:
-            raise UnknownChainException(
-                "Cannot process block received block with unknown chain. {subcom_id}".format(
-                    subcom_id=subcom_id
+        if peer != self.my_peer:
+            frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
+            subcom_id = blk.com_prefix + blk.com_id
+            processing_queue = self.incoming_frontier_queue(subcom_id)
+            if not processing_queue:
+                raise UnknownChainException(
+                    "Cannot process block received block with unknown chain. {subcom_id}".format(
+                        subcom_id=subcom_id
+                    )
                 )
-            )
-        processing_queue.put_nowait((peer, frontier))
+            processing_queue.put_nowait((peer, frontier))
 
     # ---- Introduction handshakes => Exchange your subscriptions ----------------
     def create_introduction_request(
