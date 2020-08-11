@@ -114,9 +114,9 @@ class BamiCommunity(
         if not delay:
             delay = interval
         task = task if iscoroutinefunction(task) else coroutine(task)
-        print('Starting flex runner with functions:', delay(), interval())
+        print('Starting flex runner with functions:', delay()(), interval()())
         return self.register_task(
-            name, ensure_future(self.flex_runner(delay, interval, task, *args))
+            name, ensure_future(self.flex_runner(delay(), interval(), task, *args))
         )
 
     def __init__(
