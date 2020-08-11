@@ -2,7 +2,14 @@
 The Plexus backbone
 """
 from abc import ABCMeta, abstractmethod
-from asyncio import ensure_future, Queue
+from asyncio import (
+    ensure_future,
+    Future,
+    iscoroutinefunction,
+    Queue,
+    sleep,
+    Task,
+)
 from binascii import hexlify, unhexlify
 from enum import Enum
 import logging
@@ -43,11 +50,12 @@ from bami.backbone.utils import (
     shorten,
     WITNESS_TYPE,
 )
-from ipv8.community import Community, DEFAULT_MAX_PEERS
+from ipv8.community import Community
 from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
+from ipv8.util import coroutine
 from ipv8_service import IPv8
 
 
@@ -77,6 +85,36 @@ class BamiCommunity(
         )
     )
     version = b"\x02"
+
+    async def flex_runner(
+        self,
+        delay: Callable[[], float],
+        interval: Callable[[], float],
+        task: Callable,
+        *args: List
+    ) -> None:
+        await sleep(delay())
+        while True:
+            await task(*args)
+            await sleep(interval())
+
+    def register_flexible_task(
+        self,
+        name: str,
+        task: Callable,
+        *args: List,
+        delay: Callable = None,
+        interval: Callable = None
+    ) -> Union[Future, Task]:
+        """
+        Register a Task/(coroutine)function so it can be canceled at shutdown time or by name.
+        """
+        if not delay:
+            delay = interval
+        task = task if iscoroutinefunction(task) else coroutine(task)
+        return self.register_task(
+            name, ensure_future(self.flex_runner(delay, interval, task, *args))
+        )
 
     def __init__(
         self,
@@ -252,13 +290,12 @@ class BamiCommunity(
     async def unload(self):
         self.logger.debug("Unloading the Plexus Community.")
         self.shutting_down = True
-
+        self.cancel_all_pending_tasks()
         for mid in self.processing_queue_tasks:
             if not self.processing_queue_tasks[mid].done():
                 self.processing_queue_tasks[mid].cancel()
         for subcom_id in self.my_subscriptions:
             await self.my_subscriptions[subcom_id].unload()
-        self.cancel_all_pending_tasks()
         await super(BamiCommunity, self).unload()
 
         # Close the persistence layer
@@ -335,19 +372,25 @@ class BamiCommunity(
     # -------- Community block sharing  -------------
 
     def start_gossip_sync(
-        self, subcom_id: bytes, prefix: bytes = b"", interval: float = None
+        self,
+        subcom_id: bytes,
+        prefix: bytes = b"",
+        delay: Callable[[], float] = None,
+        interval: Callable[[], float] = None,
     ) -> None:
-        if not interval:
-            interval = self.settings.gossip_sync_time
         full_com_id = prefix + subcom_id
         self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
-        self.periodic_sync_lc[full_com_id] = self.register_task(
+        self.periodic_sync_lc[full_com_id] = self.register_flexible_task(
             "gossip_sync_" + str(full_com_id),
             self.gossip_sync_task,
             subcom_id,
             prefix,
-            delay=random.random() * self._settings.gossip_sync_max_delay,
-            interval=interval,
+            delay=lambda: random.random() * self._settings.gossip_sync_max_delay
+            if not delay
+            else delay,
+            interval=lambda: self._settings.gossip_interval
+            if not interval
+            else interval,
         )
         self.incoming_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(

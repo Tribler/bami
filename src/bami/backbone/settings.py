@@ -44,7 +44,7 @@ class BamiSettings(object):
 
         # Time for one frontier gossip round
         self.gossip_sync_max_delay = 0.1
-        self.gossip_sync_time = 0.5
+        self.gossip_interval = 0.5
         self.gossip_collect_time = 0.2
         self.block_sign_delta = 0.3
         # Maximum wait time 100
