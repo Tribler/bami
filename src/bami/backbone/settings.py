@@ -58,8 +58,8 @@ class BamiSettings(object):
         self.gossip_fanout = 6
 
         # Community max peers
-        self.main_max_peers = -1
-        self.subcom_max_peers = -1
+        self.main_max_peers = 30
+        self.subcom_max_peers = 30
 
         # Whether we are a crawler (and fetching whole chains)
         self.crawler = False
