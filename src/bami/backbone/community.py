@@ -93,11 +93,11 @@ class BamiCommunity(
         task: Callable,
         *args: List
     ) -> None:
-        print('Initial wait time', delay())
+        print("Initial wait time", delay())
         await sleep(delay())
         while True:
             await task(*args)
-            print('Awaiting ', interval())
+            print("Awaiting ", interval())
             await sleep(interval())
 
     def register_flexible_task(
@@ -114,9 +114,9 @@ class BamiCommunity(
         if not delay:
             delay = interval
         task = task if iscoroutinefunction(task) else coroutine(task)
-        print('Starting flex runner with functions:', delay()(), interval()())
+        print("Starting flex runner with functions:", delay(), interval())
         return self.register_task(
-            name, ensure_future(self.flex_runner(delay(), interval(), task, *args))
+            name, ensure_future(self.flex_runner(delay, interval, task, *args))
         )
 
     def __init__(
