@@ -18,5 +18,9 @@ class SubCommunityEmptyException(Exception):
     pass
 
 
+class IPv8UnavailableException(Exception):
+    pass
+
+
 class UnknownChainException(Exception):
     pass

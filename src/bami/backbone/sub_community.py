@@ -1,5 +1,5 @@
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Iterable, Optional, Type, Union
+from typing import Any, Dict, Iterable, Optional, Type, Union
 
 from ipv8.community import Community
 from ipv8.peer import Peer
@@ -73,31 +73,61 @@ class LightSubCommunity(BaseSubCommunity):
 class SubCommunityDiscoveryStrategy(ABC):
     @abstractmethod
     def discover(
-        self, subcom: BaseSubCommunity, target_peers: int = -1, **kwargs
+        self,
+        subcom: BaseSubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
     ) -> None:
         """
         Discovery routine for the sub-community.
         Args:
             subcom: SubCommunity object or sub-community identifier.
             target_peers: target number for discovery
+            discovery_params: Dictionary with parameters for the discovery process
         """
         pass
 
 
 class RandomWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy, metaclass=ABCMeta):
     def discover(
-        self, subcom: IPv8SubCommunity, target_peers: int = -1, **kwargs
+        self,
+        subcom: IPv8SubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
     ) -> None:
-        self.ipv8.strategies.append((RandomWalk(subcom, **kwargs), target_peers))
+        discovery = (
+            (RandomWalk(subcom, **discovery_params), target_peers)
+            if discovery_params
+            else (RandomWalk(subcom), target_peers)
+        )
+        self.ipv8.strategies.append(discovery)
 
 
 class EdgeWalkDiscoveryStrategy(
     SubCommunityDiscoveryStrategy, CommunityRoutines, metaclass=ABCMeta
 ):
     def discover(
-        self, subcom: IPv8SubCommunity, target_peers: int = -1, **kwargs
+        self,
+        subcom: IPv8SubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
     ) -> None:
-        self.ipv8.strategies.append((EdgeWalk(subcom, **kwargs), target_peers))
+        discovery = (
+            (EdgeWalk(subcom, **discovery_params), target_peers)
+            if discovery_params
+            else (EdgeWalk(subcom), target_peers)
+        )
+        self.ipv8.strategies.append(discovery)
+
+
+class NoSubCommunityDiscovery(SubCommunityDiscoveryStrategy):
+    def discover(
+        self,
+        subcom: BaseSubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
+    ) -> None:
+        pass
 
 
 class BootstrapServersDiscoveryStrategy(SubCommunityDiscoveryStrategy):
@@ -106,7 +136,10 @@ class BootstrapServersDiscoveryStrategy(SubCommunityDiscoveryStrategy):
         pass
 
     def discover(
-        self, subcom: IPv8SubCommunity, target_peers: int = -1, **kwargs
+        self,
+        subcom: IPv8SubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
     ) -> None:
         for k in self.get_bootstrap_servers(subcom.subcom_id):
             subcom.walk_to(k)
@@ -218,7 +251,9 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
     def is_subscribed(self, community_id: bytes) -> bool:
         return community_id in self.my_subcoms
 
-    def join_subcom(self, subcom_id: bytes) -> None:
+    def join_subcom(
+        self, subcom_id: bytes, discovery_params: Dict[str, Any] = None
+    ) -> None:
         if subcom_id not in self.my_subcoms:
             # This sub-community is still not known
             # Set max peers setting
@@ -231,9 +266,15 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
             for p in self.discovered_peers_by_subcom(subcom_id):
                 subcom.add_peer(p)
             strategy = self.get_subcom_discovery_strategy(subcom_id)
-            strategy.discover(subcom)
+            strategy.discover(
+                subcom,
+                target_peers=self.settings.subcom_min_peers,
+                discovery_params=discovery_params,
+            )
 
-    def subscribe_to_subcoms(self, subcoms: Iterable[bytes]) -> None:
+    def subscribe_to_subcoms(
+        self, subcoms: Iterable[bytes], discovery_params: Dict[str, Any] = None
+    ) -> None:
         """
         Subscribe to the sub communities with given ids
 
@@ -241,27 +282,31 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
         Peer will be connect to maximum  `settings.max_peers_subtrust` peers.
         Args:
             subcoms: Iterable object with sub_community ids
+            discovery_params: Dict parameters for the discovery process
         """
         updated = False
         for c_id in subcoms:
             if c_id not in self.my_subcoms:
-                self.join_subcom(c_id)
+                self.join_subcom(c_id, discovery_params)
                 # Join the sub-community
                 self.join_subcommunity_gossip(c_id)
                 updated = True
         if updated:
             self.notify_peers_on_new_subcoms()
 
-    def subscribe_to_subcom(self, subcom_id: bytes) -> None:
+    def subscribe_to_subcom(
+        self, subcom_id: bytes, discovery_params: Dict[str, Any] = None
+    ) -> None:
         """
         Subscribe to the SubCommunity with the public key master peer.
         Community is identified with a community_id.
 
         Args:
             subcom_id: bytes identifier of the community
+            discovery_params: Dict parameters for the discovery process
         """
         if subcom_id not in self.my_subcoms:
-            self.join_subcom(subcom_id)
+            self.join_subcom(subcom_id, discovery_params)
 
             # Join the protocol audits/ updates
             self.join_subcommunity_gossip(subcom_id)

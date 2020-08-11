@@ -75,7 +75,12 @@ class MockSubCommuntiy(BaseSubCommunity):
 
 
 class MockSubCommunityDiscoveryStrategy(SubCommunityDiscoveryStrategy):
-    def discover(self, subcom: BaseSubCommunity) -> None:
+    def discover(
+        self,
+        subcom: BaseSubCommunity,
+        target_peers: int = 20,
+        discovery_params: Dict[str, Any] = None,
+    ) -> None:
         pass
 
 

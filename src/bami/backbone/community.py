@@ -26,6 +26,7 @@ from bami.backbone.datastore.frontiers import Frontier
 from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
+    IPv8UnavailableException,
     SubCommunityEmptyException,
     UnknownChainException,
 )
@@ -54,6 +55,7 @@ from ipv8.community import Community
 from ipv8.keyvault.keys import Key
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
+from ipv8.peerdiscovery.discovery import EdgeWalk, RandomWalk
 from ipv8.peerdiscovery.network import Network
 from ipv8.util import coroutine
 from ipv8_service import IPv8
@@ -198,6 +200,26 @@ class BamiCommunity(
                 base.setup_messages(self)
 
         self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
+
+    # ----- Discovery start -----
+    def start_discovery(
+        self,
+        target_peers: int = None,
+        discovery_algorithm: Union[Type[RandomWalk], Type[EdgeWalk]] = RandomWalk,
+        discovery_params: Dict[str, Any] = None,
+    ):
+
+        if not self._ipv8:
+            raise IPv8UnavailableException("Cannot start discovery at main community")
+
+        discovery = (
+            discovery_algorithm(self)
+            if not discovery_params
+            else discovery_algorithm(self, **discovery_params)
+        )
+        if not target_peers:
+            target_peers = self.settings.main_min_peers
+        self._ipv8.add_strategy(self, discovery, target_peers)
 
     # ----- Update notifiers for new blocks ------------
 
