@@ -93,11 +93,9 @@ class BamiCommunity(
         task: Callable,
         *args: List
     ) -> None:
-        print("Initial wait time", delay())
         await sleep(delay())
         while True:
             await task(*args)
-            print("Awaiting ", interval())
             await sleep(interval())
 
     def register_flexible_task(
@@ -111,11 +109,17 @@ class BamiCommunity(
         """
         Register a Task/(coroutine)function so it can be canceled at shutdown time or by name.
         """
-        print("Starting flex runner with functions:", interval())
         if not delay:
-            def delay(): return random.random()
+
+            def delay():
+                return random.random()
+
+        if not interval:
+
+            def interval():
+                return random.random()
+
         task = task if iscoroutinefunction(task) else coroutine(task)
-        print("Starting flex runner with functions:", delay(), interval())
         return self.register_task(
             name, ensure_future(self.flex_runner(delay, interval, task, *args))
         )
@@ -389,12 +393,10 @@ class BamiCommunity(
             self.gossip_sync_task,
             subcom_id,
             prefix,
-            delay=lambda: random.random() * self._settings.gossip_sync_max_delay
-            if not delay
-            else delay,
-            interval=lambda: self._settings.gossip_interval
-            if not interval
-            else interval,
+            delay=delay
+            if delay
+            else lambda: random.random() * self._settings.gossip_sync_max_delay,
+            interval=interval if interval else lambda: self._settings.gossip_interval,
         )
         self.incoming_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(
