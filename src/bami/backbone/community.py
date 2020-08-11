@@ -111,8 +111,9 @@ class BamiCommunity(
         """
         Register a Task/(coroutine)function so it can be canceled at shutdown time or by name.
         """
+        print("Starting flex runner with functions:", interval())
         if not delay:
-            delay = interval
+            def delay(): return random.random()
         task = task if iscoroutinefunction(task) else coroutine(task)
         print("Starting flex runner with functions:", delay(), interval())
         return self.register_task(
