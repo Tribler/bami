@@ -18,6 +18,7 @@ from bami.backbone.utils import (
     EMPTY_PK,
     encode_raw,
     expand_ranges,
+    GENESIS_LINK,
     Links,
     Notifier,
     ShortKey,
@@ -69,6 +70,16 @@ class BaseDB(ABC, Notifier):
     ) -> None:
         pass
 
+    @abstractmethod
+    def store_last_frontier(
+        self, chain_id: bytes, peer_id: bytes, frontier: Frontier
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def get_last_frontier(self, chain_id: bytes, peer_id: bytes) -> Frontier:
+        pass
+
     def reconcile(
         self, chain_id: bytes, frontier: Frontier, peer_id: bytes
     ) -> FrontierDiff:
@@ -109,6 +120,11 @@ class DBManager(BaseDB):
 
         self.chains = dict()
         self.last_reconcile_seq_num = defaultdict(lambda: defaultdict(int))
+        self.last_frontier = defaultdict(
+            lambda: defaultdict(
+                lambda: Frontier(terminal=GENESIS_LINK, holes=(), inconsistencies=())
+            )
+        )
 
     def get_last_reconcile_point(self, chain_id: bytes, peer_id: bytes) -> Links:
         return self.last_reconcile_seq_num[chain_id][peer_id]
@@ -117,6 +133,15 @@ class DBManager(BaseDB):
         self, chain_id: bytes, peer_id: bytes, last_point: int
     ) -> None:
         self.last_reconcile_seq_num[chain_id][peer_id] = last_point
+
+    def store_last_frontier(
+        self, chain_id: bytes, peer_id: bytes, frontier: Frontier
+    ) -> None:
+        if frontier > self.last_frontier[chain_id][peer_id]:
+            self.last_frontier[chain_id][peer_id] = frontier
+
+    def get_last_frontier(self, chain_id: bytes, peer_id: bytes) -> Frontier:
+        return self.last_frontier[chain_id][peer_id]
 
     def _process_missing_seq_num(
         self, chain: BaseChain, chain_id: bytes, missing_ranges: Set[int]

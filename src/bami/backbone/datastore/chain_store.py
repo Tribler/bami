@@ -384,7 +384,6 @@ class Chain(BaseChain):
         if not last_reconcile_point:
             last_reconcile_point = 0
         extra_dots = {}
-        # return FrontierDiff(missing, tuple(conflicts))
         # TODO: revisit this. How to choose the 'from' sequence number
         if conflicts:
             c = max(conflicts)

@@ -72,7 +72,9 @@ async def test_one_gossip_round(set_vals, monkeypatch, mocker):
     monkeypatch.setattr(
         MockNextPeerSelection,
         "get_next_gossip_peers",
-        lambda _, __, ___: [p.overlay.my_peer for p in set_vals.nodes],
+        lambda _, subcom, chain_id, frontier, fanout: [
+            p.overlay.my_peer for p in set_vals.nodes
+        ],
     )
     monkeypatch.setattr(
         MockDBManager,

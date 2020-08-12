@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta, abstractmethod
 from asyncio import Queue, sleep
-from random import sample
-from typing import Iterable
+from random import sample, shuffle
+from typing import Iterable, Union
 
 from bami.backbone.community_routines import (
     CommunityRoutines,
@@ -13,6 +13,7 @@ from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
 from bami.backbone.payload import (
     BlocksRequestPayload,
     FrontierPayload,
+    FrontierResponsePayload,
     RawBlockPayload,
 )
 from bami.backbone.sub_community import SubCommunityRoutines
@@ -22,11 +23,15 @@ from ipv8.peer import Peer
 
 class NextPeerSelectionStrategy(ABC):
     @abstractmethod
-    def get_next_gossip_peers(self, subcom_id: bytes, number: int) -> Iterable[Peer]:
+    def get_next_gossip_peers(
+        self, subcom_id: bytes, chain_id: bytes, my_frontier: Frontier, number: int
+    ) -> Iterable[Peer]:
         """
         Get peers for the next gossip round.
         Args:
             subcom_id: identifier for the sub-community
+            chain_id: identifier for the chain to gossip
+            my_frontier: Current local frontier to share
             number: Number of peers to request
 
         Returns:
@@ -42,12 +47,41 @@ class RandomPeerSelectionStrategy(
     metaclass=ABCMeta,
 ):
     def get_next_gossip_peers(
-        self, subcom_id: bytes, number_peers: int
+        self,
+        subcom_id: bytes,
+        chain_id: bytes,
+        my_frontier: Frontier,
+        number_peers: int,
     ) -> Iterable[Peer]:
         subcom = self.get_subcom(subcom_id)
         peer_set = subcom.get_known_peers() if subcom else []
         f = min(len(peer_set), number_peers)
         return sample(peer_set, f)
+
+
+class SmartPeerSelectionStrategy(
+    NextPeerSelectionStrategy,
+    SubCommunityRoutines,
+    CommunityRoutines,
+    metaclass=ABCMeta,
+):
+    def get_next_gossip_peers(
+        self, subcom_id: bytes, chain_id: bytes, my_frontier: Frontier, number: int
+    ) -> Iterable[Peer]:
+        subcom = self.get_subcom(subcom_id)
+        peer_set = subcom.get_known_peers() if subcom else []
+
+        selected_peers = []
+        for p in peer_set:
+            known_frontier = self.persistence.get_last_frontier(
+                chain_id, p.public_key.key_to_bin()
+            )
+            if my_frontier > known_frontier:
+                selected_peers.append(p)
+        shuffle(selected_peers)
+        return (
+            selected_peers[:number] if len(selected_peers) > number else selected_peers
+        )
 
 
 class GossipRoutines(ABC):
@@ -80,7 +114,7 @@ class GossipFrontiersMixin(
             frontier = chain.frontier
             # Select next peers for the gossip round
             next_peers = self.gossip_strategy.get_next_gossip_peers(
-                subcom_id, self.settings.gossip_fanout
+                subcom_id, prefix + subcom_id, frontier, self.settings.gossip_fanout
             )
             for peer in next_peers:
                 self.logger.debug(
@@ -93,10 +127,15 @@ class GossipFrontiersMixin(
                     peer, FrontierPayload(prefix + subcom_id, frontier.to_bytes())
                 )
 
-    async def process_frontier_queue(self, subcom_id: bytes):
+    async def process_frontier_queue(self, subcom_id: bytes) -> None:
         while True:
             _delta = self.settings.gossip_collect_time
-            peer, frontier = await self.incoming_frontier_queue(subcom_id).get()
+            peer, frontier, should_respond = await self.incoming_frontier_queue(
+                subcom_id
+            ).get()
+            self.persistence.store_last_frontier(
+                subcom_id, peer.public_key.key_to_bin(), frontier
+            )
             frontier_diff = self.persistence.reconcile(
                 subcom_id, frontier, peer.public_key.key_to_bin()
             )
@@ -115,16 +154,38 @@ class GossipFrontiersMixin(
                     peer, BlocksRequestPayload(subcom_id, frontier_diff.to_bytes())
                 )
                 await sleep(self.settings.gossip_collect_time)
+            # Send frontier response:
+            chain = self.persistence.get_chain(subcom_id)
+            if chain and should_respond:
+                self.send_packet(
+                    peer, FrontierResponsePayload(subcom_id, chain.frontier.to_bytes())
+                )
 
-    @lazy_wrapper(FrontierPayload)
-    def received_frontier(self, peer: Peer, payload: FrontierPayload) -> None:
+    def process_frontier_payload(
+        self,
+        peer: Peer,
+        payload: Union[FrontierPayload, FrontierResponsePayload],
+        should_respond: bool,
+    ) -> None:
         frontier = Frontier.from_bytes(payload.frontier)
         chain_id = payload.chain_id
         # Process frontier
         if self.incoming_frontier_queue(chain_id):
-            self.incoming_frontier_queue(chain_id).put_nowait((peer, frontier))
+            self.incoming_frontier_queue(chain_id).put_nowait(
+                (peer, frontier, should_respond)
+            )
         else:
             self.logger.error("Received unexpected frontier %s", chain_id)
+
+    @lazy_wrapper(FrontierPayload)
+    def received_frontier(self, peer: Peer, payload: FrontierPayload) -> None:
+        self.process_frontier_payload(peer, payload, should_respond=True)
+
+    @lazy_wrapper(FrontierResponsePayload)
+    def received_frontier_response(
+        self, peer: Peer, payload: FrontierResponsePayload
+    ) -> None:
+        self.process_frontier_payload(peer, payload, should_respond=False)
 
     @lazy_wrapper(BlocksRequestPayload)
     def received_blocks_request(
@@ -153,11 +214,14 @@ class GossipFrontiersMixin(
 
     def setup_messages(self) -> None:
         self.add_message_handler(FrontierPayload, self.received_frontier)
+        self.add_message_handler(
+            FrontierResponsePayload, self.received_frontier_response
+        )
         self.add_message_handler(BlocksRequestPayload, self.received_blocks_request)
 
 
 class SubComGossipMixin(
-    GossipFrontiersMixin, RandomPeerSelectionStrategy, metaclass=ABCMeta
+    GossipFrontiersMixin, SmartPeerSelectionStrategy, metaclass=ABCMeta
 ):
     @property
     def gossip_strategy(self) -> NextPeerSelectionStrategy:

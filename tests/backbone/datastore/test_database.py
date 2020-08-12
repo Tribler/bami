@@ -2,7 +2,7 @@ import pytest
 from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import ChainTopic, DBManager
-from bami.backbone.datastore.frontiers import FrontierDiff
+from bami.backbone.datastore.frontiers import Frontier, FrontierDiff
 from bami.backbone.utils import (
     Dot,
     encode_raw,
@@ -71,6 +71,13 @@ class TestDBManager:
             self.dbms.get_block_blob_by_dot(self.chain_id, self.block_dot)
             == self.block_blob
         )
+
+    def test_last_frontiers(self, monkeypatch, std_vals):
+
+        new_frontier = Frontier(terminal=((3, b"2123"),), holes=(), inconsistencies=())
+        self.dbms.store_last_frontier(self.chain_id, "peer_1", new_frontier)
+        front = self.dbms.get_last_frontier(self.chain_id, "peer_1")
+        assert front == new_frontier
 
     def test_add_notify_block(self, monkeypatch, std_vals):
         monkeypatch.setattr(

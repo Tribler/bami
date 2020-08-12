@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -5,6 +7,7 @@ from bami.backbone.utils import (
     decode_raw,
     Dot,
     encode_raw,
+    expand_ranges,
     Links,
     Ranges,
     ShortKey,
@@ -34,6 +37,30 @@ class Frontier:
     def from_bytes(cls, bytes_frontier: bytes):
         front_dict = decode_raw(bytes_frontier)
         return cls(front_dict.get(b"t"), front_dict.get(b"h"), front_dict.get(b"i"),)
+
+    def __gt__(self, other: Frontier) -> bool:
+        """Frontier is older if one of these holds:
+          - max terminal is bigger
+          - number of holes is less
+          - holds less inconsistencies
+          - has more terminal nodes
+          """
+        newer = max(self.terminal)[0] > max(other.terminal)[0]
+
+        not_more_holes = len(expand_ranges(self.holes)) <= len(
+            expand_ranges(other.holes)
+        )
+        less_holes = len(expand_ranges(self.holes)) < len(expand_ranges(other.holes))
+        less_inconsistent = len(self.inconsistencies) < len(other.inconsistencies)
+        not_more_inconsistent = len(self.inconsistencies) <= len(other.inconsistencies)
+        more_details_known = len(self.terminal) > len(other.terminal)
+
+        return (
+            newer
+            or less_holes
+            or (not_more_holes and less_inconsistent)
+            or (not_more_holes and not_more_inconsistent and more_details_known)
+        )
 
 
 @dataclass

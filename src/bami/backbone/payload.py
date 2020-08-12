@@ -100,3 +100,10 @@ class StateResponsePayload(ComparablePayload):
     msg_id = 10
     format_list = ["varlenH", "varlenH"]
     names = ["subcom_id", "frontier_diff"]
+
+
+@vp_compile
+class FrontierResponsePayload(ComparablePayload):
+    msg_id = 11
+    format_list = ["varlenH", "varlenH"]
+    names = ["chain_id", "frontier"]

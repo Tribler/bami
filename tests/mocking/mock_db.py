@@ -1,4 +1,4 @@
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Set
 
 from bami.backbone.block import BamiBlock
 from bami.backbone.datastore.block_store import BaseBlockStore
@@ -56,8 +56,16 @@ class MockDBManager(BaseDB):
     def has_block(self, block_hash: bytes) -> bool:
         return False
 
+    def store_last_frontier(
+        self, chain_id: bytes, peer_id: bytes, frontier: Frontier
+    ) -> None:
+        pass
+
+    def get_last_frontier(self, chain_id: bytes, peer_id: bytes) -> Frontier:
+        pass
+
     def get_block_blobs_by_frontier_diff(
-        self, chain_id: bytes, frontier_diff: FrontierDiff
+        self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
     ) -> Iterable[bytes]:
         pass
 

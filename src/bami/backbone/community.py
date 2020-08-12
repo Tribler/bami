@@ -273,7 +273,7 @@ class BamiCommunity(
                         subcom_id=subcom_id
                     )
                 )
-            processing_queue.put_nowait((peer, frontier))
+            processing_queue.put_nowait((peer, frontier, True))
 
     # ---- Introduction handshakes => Exchange your subscriptions ----------------
     def create_introduction_request(
