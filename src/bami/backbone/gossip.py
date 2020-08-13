@@ -109,7 +109,7 @@ class GossipFrontiersMixin(
         """Start of the gossip state machine"""
         chain = self.persistence.get_chain(prefix + subcom_id)
         if not chain:
-            self.logger.debug("No chain for %s", subcom_id)
+            self.logger.debug("No chain for %s. Skipping the gossip round.", prefix+subcom_id)
         if chain:
             frontier = chain.frontier
             # Select next peers for the gossip round

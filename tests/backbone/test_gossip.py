@@ -13,7 +13,6 @@ import pytest
 
 from tests.mocking.base import (
     create_and_connect_nodes,
-    deliver_messages,
     SetupValues,
     unload_nodes,
 )

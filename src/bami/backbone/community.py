@@ -320,7 +320,6 @@ class BamiCommunity(
     async def unload(self):
         self.logger.debug("Unloading the Plexus Community.")
         self.shutting_down = True
-        self.cancel_all_pending_tasks()
         for mid in self.processing_queue_tasks:
             if not self.processing_queue_tasks[mid].done():
                 self.processing_queue_tasks[mid].cancel()
