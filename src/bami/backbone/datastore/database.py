@@ -189,9 +189,8 @@ class DBManager(BaseDB):
         for conf_dot, conf_dict in conflict_dict.items():
             if not conf_dict:
                 val = self.get_block_blob_by_dot(chain_id, conf_dot)
-                if not val:
-                    raise Exception("No block", chain_id, conf_dot)
-                yield val
+                if val:
+                    yield val
                 continue
             current_point, to_request = self._find_first_conflicting_point(
                 conf_dict, chain
@@ -206,16 +205,15 @@ class DBManager(BaseDB):
                 for d in current_point:
                     val = self.get_block_blob_by_dot(chain_id, d)
                     if not val:
-                        raise ("Exeption no val", val, chain_id, d)
+                        continue
                     yield val
                     l = chain.get_next_links(d)
                     if l:
                         new_point.update(set(l))
                 current_point = new_point
             val = self.get_block_blob_by_dot(chain_id, conf_dot)
-            if not val:
-                raise Exception("Exception not val", chain_id, conf_dot)
-            yield val
+            if val:
+                yield val
 
     def get_block_blobs_by_frontier_diff(
         self, chain_id: bytes, frontier_diff: FrontierDiff, vals_to_request: Set
