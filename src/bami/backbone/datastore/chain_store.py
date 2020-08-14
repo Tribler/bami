@@ -367,7 +367,10 @@ class Chain(BaseChain):
         conflicts = {
             (s, h)
             for s, h in frontier.terminal
-            if s in self.versions and h not in self.versions[s]
+            if s in self.versions
+            and h not in self.versions[s]
+            and (s, h) not in frontier.inconsistencies
+            and s not in frontier.holes
         }
 
         # Check if peer has block that cover your inconsistencies
