@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from asyncio import ensure_future, PriorityQueue, sleep
+from binascii import hexlify
 from collections import defaultdict
 from decimal import Decimal
 from random import Random
@@ -117,7 +118,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
         # Process blocks according to their type
         self.logger.debug(
-            "Processing block %s, %s, %s", block.type, chain_id, block.hash
+            "Processing block (type: %s, chain ID: %s, hash: %s)", block.type, chain_id, hexlify(block.hash).decode()
         )
         if block.type == MINT_TYPE:
             self.process_mint(block)
