@@ -51,8 +51,8 @@ async def set_vals(tmpdir_factory, overlay_class):
 
 
 def test_init_setup(set_vals):
-    assert chr(RawBlockBroadcastPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
-    assert chr(BlockBroadcastPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
+    assert set_vals.nodes[0].overlay.decode_map[RawBlockBroadcastPayload.msg_id]
+    assert set_vals.nodes[0].overlay.decode_map[BlockBroadcastPayload.msg_id]
 
 
 @pytest.mark.asyncio

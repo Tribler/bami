@@ -75,8 +75,8 @@ class TestInitCommunity:
 
     def test_init_setup(self, set_vals):
         nodes = set_vals.nodes
-        assert chr(RawBlockBroadcastPayload.msg_id) in nodes[0].overlay.decode_map
-        assert chr(BlockBroadcastPayload.msg_id) in nodes[0].overlay.decode_map
+        assert nodes[0].overlay.decode_map[RawBlockBroadcastPayload.msg_id]
+        assert nodes[0].overlay.decode_map[BlockBroadcastPayload.msg_id]
 
     def test_subscribe(self, set_vals):
         nodes = set_vals.nodes
