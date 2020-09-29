@@ -80,8 +80,8 @@ async def test_reject_block(mocker, set_vals):
 
 
 def test_init_setup(set_vals):
-    assert chr(RawBlockBroadcastPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
-    assert chr(BlockBroadcastPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
+    assert set_vals.nodes[0].overlay.decode_map[RawBlockBroadcastPayload.msg_id]
+    assert set_vals.nodes[0].overlay.decode_map[BlockBroadcastPayload.msg_id]
 
 
 def test_subscribe(set_vals):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABCMeta
 from asyncio import ensure_future, PriorityQueue, sleep
+from binascii import hexlify
 from collections import defaultdict
 from decimal import Decimal
 from random import Random
@@ -87,7 +88,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # - Start gossip sync task periodically on the chain updates
         self.start_gossip_sync(sub_com_id)
         # - Process incoming blocks on the chain in order for payments
-        self.subscribe_in_order_block(sub_com_id, self.receive_block_in_order)
+        self.subscribe_in_order_block(sub_com_id, self.received_block_in_order)
 
         # 2. Witness chain:
         # - Gossip witness updates on the sub-chain
@@ -97,7 +98,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # - Witness all updates on payment chain
         self.should_witness_subcom[sub_com_id] = self.settings.should_witness_block
 
-    def receive_block_in_order(self, block: BamiBlock) -> None:
+    def received_block_in_order(self, block: BamiBlock) -> None:
         if block.com_dot in self.state_db.applied_dots:
             raise Exception(
                 "Block already applied?",
@@ -117,7 +118,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
         # Process blocks according to their type
         self.logger.debug(
-            "Processing block %s, %s, %s", block.type, chain_id, block.hash
+            "Processing block (type: %s, chain ID: %s, hash: %s)", block.type, chain_id, hexlify(block.hash).decode()
         )
         if block.type == MINT_TYPE:
             self.process_mint(block)

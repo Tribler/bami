@@ -59,8 +59,8 @@ async def set_vals(tmpdir_factory, overlay_class):
 
 
 def test_init_correctly(set_vals):
-    assert chr(FrontierPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
-    assert chr(BlocksRequestPayload.msg_id) in set_vals.nodes[0].overlay.decode_map
+    assert set_vals.nodes[0].overlay.decode_map[FrontierPayload.msg_id]
+    assert set_vals.nodes[0].overlay.decode_map[BlocksRequestPayload.msg_id]
 
 
 @pytest.mark.asyncio
