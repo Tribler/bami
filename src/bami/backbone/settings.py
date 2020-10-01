@@ -40,10 +40,12 @@ class BamiSettings(object):
         # Track chains of every overlay neighbour
         self.track_neighbours_chains = False
 
-        # Time for one frontier gossip round
-        self.gossip_sync_max_delay = 0.1
-        self.gossip_interval = 0.5
-        self.gossip_collect_time = 0.2
+        # Maximum delay before starting the frontier sync in the community
+        self.frontier_gossip_sync_max_delay = 0.1
+        # The interval at which we gossip the latest frontier in each community
+        self.frontier_gossip_interval = 0.5
+        # The waiting time between processing two collected frontiers
+        self.frontier_gossip_collect_time = 0.2
         self.block_sign_delta = 0.3
         # Maximum wait time 100
         # Maximum wait block 100
@@ -53,7 +55,7 @@ class BamiSettings(object):
         # working directory for the database
         self.work_directory = ".block_db"
         # Gossip fanout for frontiers exchange
-        self.gossip_fanout = 6
+        self.frontier_gossip_fanout = 6
 
         # Community max peers
         self.main_min_peers = 20

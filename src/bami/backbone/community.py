@@ -399,7 +399,7 @@ class BamiCommunity(
 
     # -------- Community block sharing  -------------
 
-    def start_gossip_sync(
+    def start_frontier_gossip_sync(
         self,
         subcom_id: bytes,
         prefix: bytes = b"",
@@ -410,13 +410,13 @@ class BamiCommunity(
         self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
         self.periodic_sync_lc[full_com_id] = self.register_flexible_task(
             "gossip_sync_" + str(full_com_id),
-            self.gossip_sync_task,
+            self.frontier_gossip_sync_task,
             subcom_id,
             prefix,
             delay=delay
             if delay
-            else lambda: random.random() * self._settings.gossip_sync_max_delay,
-            interval=interval if interval else lambda: self._settings.gossip_interval,
+            else lambda: random.random() * self._settings.frontier_gossip_sync_max_delay,
+            interval=interval if interval else lambda: self._settings.frontier_gossip_interval,
         )
         self.incoming_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(

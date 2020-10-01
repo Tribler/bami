@@ -91,7 +91,7 @@ class GossipRoutines(ABC):
         pass
 
     @abstractmethod
-    def gossip_sync_task(self, subcom_id: bytes) -> None:
+    def frontier_gossip_sync_task(self, subcom_id: bytes) -> None:
         """Start of the gossip state machine"""
         pass
 
@@ -105,7 +105,7 @@ class GossipFrontiersMixin(
 ):
     COMMUNITY_CACHE = u"gossip_cache"
 
-    def gossip_sync_task(self, subcom_id: bytes, prefix: bytes = b"") -> None:
+    def frontier_gossip_sync_task(self, subcom_id: bytes, prefix: bytes = b"") -> None:
         """Start of the gossip state machine"""
         chain = self.persistence.get_chain(prefix + subcom_id)
         if not chain:
@@ -116,7 +116,7 @@ class GossipFrontiersMixin(
             frontier = chain.frontier
             # Select next peers for the gossip round
             next_peers = self.gossip_strategy.get_next_gossip_peers(
-                subcom_id, prefix + subcom_id, frontier, self.settings.gossip_fanout
+                subcom_id, prefix + subcom_id, frontier, self.settings.frontier_gossip_fanout
             )
             for peer in next_peers:
                 self.logger.debug(
@@ -131,7 +131,6 @@ class GossipFrontiersMixin(
 
     async def process_frontier_queue(self, subcom_id: bytes) -> None:
         while True:
-            _delta = self.settings.gossip_collect_time
             peer, frontier, should_respond = await self.incoming_frontier_queue(
                 subcom_id
             ).get()
@@ -155,7 +154,7 @@ class GossipFrontiersMixin(
                 self.send_packet(
                     peer, BlocksRequestPayload(subcom_id, frontier_diff.to_bytes())
                 )
-                await sleep(self.settings.gossip_collect_time)
+                await sleep(self.settings.frontier_gossip_collect_time)
             # Send frontier response:
             chain = self.persistence.get_chain(subcom_id)
             if chain and should_respond:
