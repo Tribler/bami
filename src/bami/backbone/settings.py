@@ -1,7 +1,5 @@
 from enum import Enum
 
-from ipv8.community import DEFAULT_MAX_PEERS
-
 
 class SecurityMode(Enum):
     """

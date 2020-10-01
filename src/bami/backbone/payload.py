@@ -78,6 +78,10 @@ class ExtendedFrontierPayload(ComparablePayload):
 
 @vp_compile
 class SubscriptionsPayload(ComparablePayload):
+    """
+    Payload that contains a list of all communities that a specific peer is part of.
+    """
+
     msg_id = 7
     format_list = ["74s", "varlenH"]
     names = ["public_key", "subcoms"]

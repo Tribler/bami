@@ -454,13 +454,13 @@ class BamiCommunity(
         seed: Any = None,
     ) -> None:
         """
-        Share block in sub-community via push-based gossip.
+        Share a block with peers in a sub-community via push-based gossip.
         Args:
-            block: PlexusBlock to share
+            block: the BamiBlock to share, either as BamiBlock instance or in serialized form
             subcom_id: identity of the sub-community, if not specified the main community connections will be used.
-            ttl: ttl of the gossip, if not specified - default settings will be used
-            fanout: of the gossip, if not specified - default settings will be used
-            seed: seed for the peers selection, otherwise random value will be used
+            ttl: ttl of the gossip, if not specified the default settings will be used
+            fanout: of the gossip, if not specified the default settings will be used
+            seed: seed for the peers selection, if not specified a random value will be used
         """
         if not subcom_id or not self.get_subcom(subcom_id):
             subcom_peers = self.get_peers()
@@ -560,8 +560,11 @@ class BamiCommunity(
 
     # ------ Confirm and reject functions --------------
     def confirm(self, block: BamiBlock, extra_data: Dict = None) -> None:
-        """Create confirm block linked to block. Link will be in the transaction with block dot.
-           Add extra data to the transaction with a 'extra_data' dictionary.
+        """
+        Confirm the transaction in an incoming block. Link will be in the transaction with block dot.
+        Args:
+            block: The BamiBlock to confirm.
+            extra_data: An optional dictionary with extra data that is appended to the confirmation.
         """
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
         dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
@@ -590,6 +593,13 @@ class BamiCommunity(
         pass
 
     def reject(self, block: BamiBlock, extra_data: Dict = None) -> None:
+        """
+        Reject the transaction in an incoming block.
+
+        Args:
+            block: The BamiBlock to reject.
+            extra_data: Some additional data to append to the reject transaction, e.g., a reason.
+        """
         # change it to confirm
         # create claim block and share in the community
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key

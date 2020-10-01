@@ -276,10 +276,10 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
         self, subcoms: Iterable[bytes], discovery_params: Dict[str, Any] = None
     ) -> None:
         """
-        Subscribe to the sub communities with given ids
+        Subscribe to the sub communities with given ids.
 
-        If bootstrap_master is not specified will use RandomWalks to discover other peers for the same community.
-        Peer will be connect to maximum  `settings.max_peers_subtrust` peers.
+        If bootstrap_master is not specified, we will use RandomWalks to discover other peers within the same community.
+        A peer will connect to at most `settings.max_peers_subtrust` peers.
         Args:
             subcoms: Iterable object with sub_community ids
             discovery_params: Dict parameters for the discovery process
