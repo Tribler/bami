@@ -47,12 +47,6 @@ async def set_vals(tmpdir_factory, overlay_class):
 
 
 @pytest.mark.asyncio
-async def test_empty_setup(set_vals):
-    nodes = set_vals.nodes
-    assert len(nodes) == NUM_NODES
-
-
-@pytest.mark.asyncio
 async def test_share_in_community(mocker, set_vals):
     blk = FakeBlock(com_id=set_vals.community_id)
     set_vals.nodes[0].overlay.share_in_community(blk, set_vals.community_id)
