@@ -167,7 +167,6 @@ class BamiCommunity(
             my_peer, endpoint, network, max_peers, anonymize=anonymize
         )
 
-        self._logger = logging.getLogger(self.__class__.__name__)
         # Create DB Manager
 
         self.logger.debug(
