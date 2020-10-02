@@ -80,8 +80,8 @@ async def test_one_gossip_round(set_vals, monkeypatch, mocker):
         "reconcile",
         lambda _, c_id, frontier, pub_key: FrontierDiff(((1, 1),), {}),
     )
-    monkeypatch.setattr(MockSettings, "gossip_collect_time", 0.1)
-    monkeypatch.setattr(MockSettings, "gossip_fanout", 5)
+    monkeypatch.setattr(MockSettings, "frontier_gossip_collect_time", 0.1)
+    monkeypatch.setattr(MockSettings, "frontier_gossip_fanout", 5)
     monkeypatch.setattr(
         MockDBManager,
         "get_block_blobs_by_frontier_diff",
@@ -89,5 +89,5 @@ async def test_one_gossip_round(set_vals, monkeypatch, mocker):
     )
 
     spy = mocker.spy(set_vals.nodes[0].overlay, "send_packet")
-    set_vals.nodes[0].overlay.gossip_sync_task(set_vals.community_id)
+    set_vals.nodes[0].overlay.frontier_gossip_sync_task(set_vals.community_id)
     spy.assert_called()

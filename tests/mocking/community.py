@@ -123,11 +123,11 @@ class MockSubCommunityRoutines(SubCommunityRoutines):
 
 class MockSettings(object):
     @property
-    def gossip_collect_time(self):
+    def frontier_gossip_collect_time(self):
         return 0.2
 
     @property
-    def gossip_fanout(self):
+    def frontier_gossip_fanout(self):
         return 5
 
 

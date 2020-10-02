@@ -86,13 +86,13 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
         # 1. Main payment chain: spends and their confirmations
         # - Start gossip sync task periodically on the chain updates
-        self.start_gossip_sync(sub_com_id)
+        self.start_frontier_gossip_sync(sub_com_id)
         # - Process incoming blocks on the chain in order for payments
         self.subscribe_in_order_block(sub_com_id, self.received_block_in_order)
 
         # 2. Witness chain:
         # - Gossip witness updates on the sub-chain
-        self.start_gossip_sync(sub_com_id, prefix=b"w")
+        self.start_frontier_gossip_sync(sub_com_id, prefix=b"w")
         # - Process witness block out of order
         self.subscribe_out_order_block(b"w" + sub_com_id, self.process_witness_block)
         # - Witness all updates on payment chain

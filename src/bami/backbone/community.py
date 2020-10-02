@@ -167,7 +167,6 @@ class BamiCommunity(
             my_peer, endpoint, network, max_peers, anonymize=anonymize
         )
 
-        self._logger = logging.getLogger(self.__class__.__name__)
         # Create DB Manager
 
         self.logger.debug(
@@ -264,7 +263,7 @@ class BamiCommunity(
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         self.unordered_notifier.notify(blk.com_prefix + blk.com_id, blk)
         if peer != self.my_peer:
-            frontier = Frontier(Links((blk.com_dot,)), holes=(), inconsistencies=())
+            frontier = Frontier(terminal=Links((blk.com_dot,)), holes=(), inconsistencies=())
             subcom_id = blk.com_prefix + blk.com_id
             processing_queue = self.incoming_frontier_queue(subcom_id)
             if not processing_queue:
@@ -400,7 +399,7 @@ class BamiCommunity(
 
     # -------- Community block sharing  -------------
 
-    def start_gossip_sync(
+    def start_frontier_gossip_sync(
         self,
         subcom_id: bytes,
         prefix: bytes = b"",
@@ -411,13 +410,13 @@ class BamiCommunity(
         self.logger.debug("Starting gossip with frontiers on chain %s", full_com_id)
         self.periodic_sync_lc[full_com_id] = self.register_flexible_task(
             "gossip_sync_" + str(full_com_id),
-            self.gossip_sync_task,
+            self.frontier_gossip_sync_task,
             subcom_id,
             prefix,
             delay=delay
             if delay
-            else lambda: random.random() * self._settings.gossip_sync_max_delay,
-            interval=interval if interval else lambda: self._settings.gossip_interval,
+            else lambda: random.random() * self._settings.frontier_gossip_sync_max_delay,
+            interval=interval if interval else lambda: self._settings.frontier_gossip_interval,
         )
         self.incoming_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(
@@ -455,13 +454,13 @@ class BamiCommunity(
         seed: Any = None,
     ) -> None:
         """
-        Share block in sub-community via push-based gossip.
+        Share a block with peers in a sub-community via push-based gossip.
         Args:
-            block: PlexusBlock to share
+            block: the BamiBlock to share, either as BamiBlock instance or in serialized form
             subcom_id: identity of the sub-community, if not specified the main community connections will be used.
-            ttl: ttl of the gossip, if not specified - default settings will be used
-            fanout: of the gossip, if not specified - default settings will be used
-            seed: seed for the peers selection, otherwise random value will be used
+            ttl: ttl of the gossip, if not specified the default settings will be used
+            fanout: of the gossip, if not specified the default settings will be used
+            seed: seed for the peers selection, if not specified a random value will be used
         """
         if not subcom_id or not self.get_subcom(subcom_id):
             subcom_peers = self.get_peers()
@@ -561,8 +560,11 @@ class BamiCommunity(
 
     # ------ Confirm and reject functions --------------
     def confirm(self, block: BamiBlock, extra_data: Dict = None) -> None:
-        """Create confirm block linked to block. Link will be in the transaction with block dot.
-           Add extra data to the transaction with a 'extra_data' dictionary.
+        """
+        Confirm the transaction in an incoming block. Link will be in the transaction with block dot.
+        Args:
+            block: The BamiBlock to confirm.
+            extra_data: An optional dictionary with extra data that is appended to the confirmation.
         """
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
         dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
@@ -591,6 +593,13 @@ class BamiCommunity(
         pass
 
     def reject(self, block: BamiBlock, extra_data: Dict = None) -> None:
+        """
+        Reject the transaction in an incoming block.
+
+        Args:
+            block: The BamiBlock to reject.
+            extra_data: Some additional data to append to the reject transaction, e.g., a reason.
+        """
         # change it to confirm
         # create claim block and share in the community
         chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
