@@ -39,7 +39,7 @@ SKIP_ATTRIBUTES = {
 
 class BamiBlock(object):
     """
-    Container for Plexus block information
+    Container for Bami block information
     """
 
     Data = namedtuple(
@@ -62,7 +62,7 @@ class BamiBlock(object):
 
     def __init__(self, data: List = None, serializer=default_serializer) -> None:
         """
-        Create a new PlexusBlock or load from an existing database entry.
+        Create a new BamiBlock or load from an existing database entry.
 
         :param data: Optional data to initialize this block with.
         :type data: Block.Data or list
@@ -276,7 +276,7 @@ class BamiBlock(object):
         use_consistent_links: bool = True,
     ):
         """
-        Create PlexusBlock wrt local database knowledge.
+        Create BamiBlock wrt local database knowledge.
 
         Args:
             block_type: type of the block in bytes
@@ -290,10 +290,9 @@ class BamiBlock(object):
             use_consistent_links: Build on top of blocks that are known. By default: True
 
         Returns:
-            PlexusBlock
+            BamiBlock
 
         """
-
         if public_key == com_id:
             full_pers_chain_id = com_prefix + public_key
         else:
