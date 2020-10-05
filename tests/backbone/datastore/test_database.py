@@ -73,7 +73,6 @@ class TestDBManager:
         )
 
     def test_last_frontiers(self, monkeypatch, std_vals):
-
         new_frontier = Frontier(terminal=((3, b"2123"),), holes=(), inconsistencies=())
         self.dbms.store_last_frontier(self.chain_id, "peer_1", new_frontier)
         front = self.dbms.get_last_frontier(self.chain_id, "peer_1")
@@ -201,6 +200,41 @@ class TestDBManager:
         assert len(list(blobs)) == 0
 
 
+def test_hot_start_db(tmpdir):
+    tmp_val = tmpdir
+    block_store = LMDBLockStore(str(tmp_val))
+    chain_factory = ChainFactory()
+    dbms = DBManager(chain_factory, block_store)
+
+    test_block = FakeBlock()
+    packed_block = test_block.pack()
+    dbms.add_block(packed_block, test_block)
+    tx_blob = test_block.transaction
+
+    assert dbms.get_tx_blob_by_dot(test_block.com_id, test_block.com_dot) == tx_blob
+    assert (
+        dbms.get_block_blob_by_dot(test_block.com_id, test_block.com_dot)
+        == packed_block
+    )
+    front = dbms.get_chain(test_block.com_id).frontier
+    dbms.close()
+
+    block_store2 = LMDBLockStore(str(tmp_val))
+    chain_factory2 = ChainFactory()
+    dbms2 = DBManager(chain_factory2, block_store2)
+
+    assert dbms2.get_tx_blob_by_dot(test_block.com_id, test_block.com_dot) == tx_blob
+    assert (
+        dbms2.get_block_blob_by_dot(test_block.com_id, test_block.com_dot)
+        == packed_block
+    )
+
+    assert dbms2.get_chain(test_block.com_id).frontier == front
+
+    dbms2.close()
+    tmp_val.remove()
+
+
 class TestIntegrationDBManager:
     @pytest.fixture(autouse=True)
     def setUp(self, tmpdir) -> None:
@@ -247,7 +281,6 @@ class TestIntegrationDBManager:
         self.val_dots = []
 
         def chain_dots_tester(chain_id, dots):
-            print(dots)
             for dot in dots:
                 assert (len(self.val_dots) == 0 and dot[0] == 1) or dot[
                     0
@@ -290,7 +323,6 @@ class TestIntegrationDBManager:
 
         front = self.dbms.get_chain(com_id).frontier
         front_diff = self.dbms2.get_chain(com_id).reconcile(front)
-        print(front_diff)
         vals_request = set()
 
         blobs = self.dbms.get_block_blobs_by_frontier_diff(
@@ -301,7 +333,6 @@ class TestIntegrationDBManager:
     def reconcile_round(self, com_id):
         front = self.dbms.get_chain(com_id).frontier
         front_diff = self.dbms2.get_chain(com_id).reconcile(front)
-        print("Frontier diff", front_diff)
         vals_request = set()
         blobs = self.dbms.get_block_blobs_by_frontier_diff(
             com_id, front_diff, vals_request
@@ -332,7 +363,6 @@ class TestIntegrationDBManager:
             self.dbms2.add_block(b, FakeBlock.unpack(b, blks[0][0].serializer))
 
         assert len(self.val_dots) == 20
-        print("VAl dots", self.val_dots)
         blobs2 = self.reconcile_round(com_id)
         assert len(blobs2) == 8
         for b in blobs2:
@@ -344,4 +374,3 @@ class TestIntegrationDBManager:
         for b in blobs2:
             self.dbms2.add_block(b, FakeBlock.unpack(b, blks[0][0].serializer))
         assert len(self.val_dots) == 70
-        print(self.val_dots)

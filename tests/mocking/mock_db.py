@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, Set
+from typing import Iterator, Optional, Iterable, Set, Tuple
 
 from bami.backbone.block import BamiBlock
 from bami.backbone.datastore.block_store import BaseBlockStore
@@ -13,6 +13,9 @@ from bami.backbone.utils import Dot, Links, ShortKey
 
 
 class MockBlockStore(BaseBlockStore):
+    def iterate_blocks(self) -> Iterator[Tuple[bytes, bytes]]:
+        return []
+
     def add_extra(self, block_hash: bytes, extra: bytes) -> None:
         pass
 

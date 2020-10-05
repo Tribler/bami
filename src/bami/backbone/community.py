@@ -263,7 +263,9 @@ class BamiCommunity(
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         self.unordered_notifier.notify(blk.com_prefix + blk.com_id, blk)
         if peer != self.my_peer:
-            frontier = Frontier(terminal=Links((blk.com_dot,)), holes=(), inconsistencies=())
+            frontier = Frontier(
+                terminal=Links((blk.com_dot,)), holes=(), inconsistencies=()
+            )
             subcom_id = blk.com_prefix + blk.com_id
             processing_queue = self.incoming_frontier_queue(subcom_id)
             if not processing_queue:
@@ -415,8 +417,11 @@ class BamiCommunity(
             prefix,
             delay=delay
             if delay
-            else lambda: random.random() * self._settings.frontier_gossip_sync_max_delay,
-            interval=interval if interval else lambda: self._settings.frontier_gossip_interval,
+            else lambda: random.random()
+            * self._settings.frontier_gossip_sync_max_delay,
+            interval=interval
+            if interval
+            else lambda: self._settings.frontier_gossip_interval,
         )
         self.incoming_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(

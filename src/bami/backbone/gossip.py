@@ -116,7 +116,10 @@ class GossipFrontiersMixin(
             frontier = chain.frontier
             # Select next peers for the gossip round
             next_peers = self.gossip_strategy.get_next_gossip_peers(
-                subcom_id, prefix + subcom_id, frontier, self.settings.frontier_gossip_fanout
+                subcom_id,
+                prefix + subcom_id,
+                frontier,
+                self.settings.frontier_gossip_fanout,
             )
             for peer in next_peers:
                 self.logger.debug(
