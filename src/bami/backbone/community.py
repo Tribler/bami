@@ -187,7 +187,7 @@ class BamiCommunity(
 
         self.periodic_sync_lc = {}
 
-        self.incoming_queues = {}
+        self.incoming_frontier_queues = {}
         self.processing_queue_tasks = {}
 
         self.ordered_notifier = Notifier()
@@ -423,13 +423,13 @@ class BamiCommunity(
             if interval
             else lambda: self._settings.frontier_gossip_interval,
         )
-        self.incoming_queues[full_com_id] = Queue()
+        self.incoming_frontier_queues[full_com_id] = Queue()
         self.processing_queue_tasks[full_com_id] = ensure_future(
             self.process_frontier_queue(full_com_id)
         )
 
     def incoming_frontier_queue(self, subcom_id: bytes) -> Optional[Queue]:
-        return self.incoming_queues.get(subcom_id)
+        return self.incoming_frontier_queues.get(subcom_id)
 
     def get_peer_by_key(
         self, peer_key: bytes, subcom_id: bytes = None
