@@ -10,7 +10,6 @@ from typing import Any, List
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.messaging.serialization import default_serializer, PackError
 
-from bami.backbone.datastore.database import BaseDB
 from bami.backbone.utils import (
     BytesLinks,
     decode_links,
@@ -267,7 +266,7 @@ class BamiBlock(object):
         cls,
         block_type: bytes,
         transaction: bytes,
-        database: BaseDB,
+        database: "BaseDB",
         public_key: bytes,
         com_prefix: bytes = b"",
         com_id: bytes = None,

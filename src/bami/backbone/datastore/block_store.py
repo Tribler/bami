@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Iterator, Optional, Tuple
 
 import lmdb
 
@@ -9,6 +9,10 @@ class BaseBlockStore(ABC):
 
     @abstractmethod
     def add_block(self, block_hash: bytes, block_blob: bytes) -> None:
+        pass
+
+    @abstractmethod
+    def iterate_blocks(self) -> Iterator[Tuple[bytes, bytes]]:
         pass
 
     @abstractmethod
@@ -56,7 +60,7 @@ class LMDBLockStore(BaseBlockStore):
         self.extra = self.env.open_db(key=b"extra")
         # add sub dbs if required
 
-    def iterate_blocks(self):
+    def iterate_blocks(self) -> Iterator[Tuple[bytes, bytes]]:
         with self.env.begin() as txn:
             for k, v in txn.cursor(db=self.blocks):
                 yield k, v

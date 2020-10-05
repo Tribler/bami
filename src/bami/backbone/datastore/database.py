@@ -6,6 +6,7 @@ from collections import defaultdict
 from enum import Enum
 from typing import Dict, Iterable, Optional, Set, Tuple
 
+from bami.backbone.block import BamiBlock
 from bami.backbone.datastore.block_store import BaseBlockStore
 from bami.backbone.datastore.chain_store import (
     BaseChain,
@@ -31,7 +32,7 @@ class BaseDB(ABC, Notifier):
         pass
 
     @abstractmethod
-    def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
+    def add_block(self, block_blob: bytes, block: BamiBlock) -> None:
         pass
 
     @abstractmethod
@@ -125,6 +126,10 @@ class DBManager(BaseDB):
                 lambda: Frontier(terminal=GENESIS_LINK, holes=(), inconsistencies=())
             )
         )
+
+        # Sync chains with block store
+        for block_blob in self._block_store.iterate_blocks():
+            self.add_block(block_blob[1], BamiBlock.unpack(block_blob[1]))
 
     def get_last_reconcile_point(self, chain_id: bytes, peer_id: bytes) -> Links:
         return self.last_reconcile_seq_num[chain_id][peer_id]
@@ -277,7 +282,7 @@ class DBManager(BaseDB):
     def has_block(self, block_hash: bytes) -> bool:
         return self.block_store.get_block_by_hash(block_hash) is not None
 
-    def add_block(self, block_blob: bytes, block: "PlexusBlock") -> None:
+    def add_block(self, block_blob: bytes, block: BamiBlock) -> None:
 
         block_hash = block.hash
         block_tx = block.transaction

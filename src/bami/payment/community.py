@@ -118,7 +118,10 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
 
         # Process blocks according to their type
         self.logger.debug(
-            "Processing block (type: %s, chain ID: %s, hash: %s)", block.type, chain_id, hexlify(block.hash).decode()
+            "Processing block (type: %s, chain ID: %s, hash: %s)",
+            block.type,
+            chain_id,
+            hexlify(block.hash).decode(),
         )
         if block.type == MINT_TYPE:
             self.process_mint(block)
