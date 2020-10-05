@@ -75,11 +75,11 @@ class BaseChainFactory(ABC):
 
 
 class Chain(BaseChain):
-    def __init__(self, cache_num=10_000, max_extra_dots=5):
+    def __init__(self, terminal_cache_size=10_000, max_extra_dots=5):
         """DAG-Chain of one community based on in-memory dicts.
 
         Args:
-            cache_num: to store and support terminal calculation. Default= 100`000
+            terminal_cache_size: The maximum amount of terminal nodes stored in the cache.
         """
         # Internal chain store of short hashes
         self.versions = dict()
@@ -103,7 +103,7 @@ class Chain(BaseChain):
         self.max_extra_dots = max_extra_dots
 
         # Cache to speed up bfs on links
-        self.term_cache = cachetools.LRUCache(cache_num)
+        self.term_cache = cachetools.LRUCache(terminal_cache_size)
 
         self.lock = threading.Lock()
 
@@ -406,7 +406,4 @@ class Chain(BaseChain):
 
 class ChainFactory(BaseChainFactory):
     def create_chain(self, **kwargs) -> BaseChain:
-        """ Args:
-            cache_num: specify the cache number used in the chain
-        """
         return Chain(**kwargs)

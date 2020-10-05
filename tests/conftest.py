@@ -1,14 +1,14 @@
 # tests/conftest.py
 from typing import Any, List, Union
-from unittest.mock import Mock
 
+import pytest
 from _pytest.config import Config
+
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
-import pytest
-from pytest_mock import MockFixture
+
 from bami.backbone.block import EMPTY_SIG, BamiBlock
-from bami.backbone.datastore.chain_store import BaseChain
+from bami.backbone.datastore.chain_store import BaseChain, Chain
 from bami.backbone.datastore.database import BaseDB
 from bami.backbone.utils import (
     encode_links,
@@ -20,16 +20,6 @@ from bami.backbone.utils import (
 
 def pytest_configure(config: Config) -> None:
     config.addinivalue_line("markers", "e2e: mark as end-to-end test.")
-
-
-@pytest.fixture
-def mock_requests_get(mocker: MockFixture) -> Mock:
-    mock = mocker.patch("requests.get")
-    mock.return_value.__enter__.return_value.json.return_value = {
-        "title": "Lorem Ipsum",
-        "extract": "Lorem ipsum dolor sit amet",
-    }
-    return mock
 
 
 # Fixtures
@@ -91,12 +81,21 @@ class FakeBlock(BamiBlock):
         self.sign(self.key)
 
 
-def create_block_batch(com_id, num_blocks=100, txs=None):
+def create_block_batch(com_id, num_blocks=100):
+    """
+    Create a given amount of blocks. Each block points to the previous one.
+
+    Args:
+        com_id: The community identifier of the block batch.
+        num_blocks: The number of blocks to create.
+
+    Returns: A list with blocks.
+
+    """
     blocks = []
     last_block_point = GENESIS_LINK
     for k in range(num_blocks):
-        tx = txs[k] if txs else None
-        blk = FakeBlock(com_id=com_id, links=last_block_point, transaction=tx)
+        blk = FakeBlock(com_id=com_id, links=last_block_point, transaction=None)
         blocks.append(blk)
         last_block_point = Links(((blk.com_seq_num, blk.short_hash),))
     return blocks
@@ -104,12 +103,22 @@ def create_block_batch(com_id, num_blocks=100, txs=None):
 
 @pytest.fixture
 def create_batches():
-    def _create_batches(num_batches=2, num_blocks=100, txs=None):
-        key = default_eccrypto.generate_key(u"curve25519")
+    def _create_batches(num_batches=2, num_blocks=100):
+        """
+        Creates batches of blocks within a random community.
+
+        Args:
+            num_batches: The number of batches to consider.
+            num_blocks: The number of blocks in each batch.
+
+        Returns: A list of batches where each batch represents a chain of blocks.
+
+        """
+        key = default_eccrypto.generate_key("curve25519")
         com_id = key.pub().key_to_bin()
         return [
-            create_block_batch(com_id, num_blocks, txs[i] if txs else None)
-            for i in range(num_batches)
+            create_block_batch(com_id, num_blocks)
+            for _ in range(num_batches)
         ]
 
     return _create_batches
@@ -167,6 +176,11 @@ batch_insert_functions = [insert_batch_seq, insert_batch_random, insert_batch_re
 def insert_function(request):
     param = request.param
     return param
+
+
+@pytest.fixture
+def chain():
+    return Chain()
 
 
 insert_function_copy = insert_function
