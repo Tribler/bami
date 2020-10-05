@@ -1,14 +1,14 @@
 # tests/conftest.py
 from typing import Any, List, Union
-from unittest.mock import Mock
 
+import pytest
 from _pytest.config import Config
+
 from ipv8.keyvault.crypto import default_eccrypto
 from ipv8.keyvault.private.libnaclkey import LibNaCLSK
-import pytest
-from pytest_mock import MockFixture
+
 from bami.backbone.block import EMPTY_SIG, BamiBlock
-from bami.backbone.datastore.chain_store import BaseChain
+from bami.backbone.datastore.chain_store import BaseChain, Chain
 from bami.backbone.datastore.database import BaseDB
 from bami.backbone.utils import (
     encode_links,
@@ -176,6 +176,11 @@ batch_insert_functions = [insert_batch_seq, insert_batch_random, insert_batch_re
 def insert_function(request):
     param = request.param
     return param
+
+
+@pytest.fixture
+def chain():
+    return Chain()
 
 
 insert_function_copy = insert_function
