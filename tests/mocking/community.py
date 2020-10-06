@@ -106,7 +106,7 @@ class MockSubCommunityRoutines(SubCommunityRoutines):
     def notify_peers_on_new_subcoms(self) -> None:
         pass
 
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+    def on_join_subcommunity(self, sub_com_id: bytes) -> None:
         pass
 
     @property
@@ -189,7 +189,7 @@ class FakeBackCommunity(BamiCommunity):
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         pass
 
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+    def received_block_in_order(self, block: BamiBlock) -> None:
         pass
 
 

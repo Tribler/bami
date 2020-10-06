@@ -25,6 +25,9 @@ class BlockSyncCommunity(MockedCommunity, BlockSyncMixin):
     def process_block_unordered(self, blk: BamiBlock, peer: Peer) -> None:
         pass
 
+    def received_block_in_order(self, block: BamiBlock) -> None:
+        pass
+
 
 NUM_NODES = 2
 

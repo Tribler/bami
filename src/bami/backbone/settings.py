@@ -40,6 +40,8 @@ class BamiSettings(object):
         # Track chains of every overlay neighbour
         self.track_neighbours_chains = False
 
+        # Whether frontier gossip is enabled
+        self.frontier_gossip_enabled = True
         # Maximum delay before starting the frontier sync in the community
         self.frontier_gossip_sync_max_delay = 0.1
         # The interval at which we gossip the latest frontier in each community
