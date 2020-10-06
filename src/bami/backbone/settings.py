@@ -46,32 +46,16 @@ class BamiSettings(object):
         self.frontier_gossip_interval = 0.5
         # The waiting time between processing two collected frontiers
         self.frontier_gossip_collect_time = 0.2
-        self.block_sign_delta = 0.3
-        # Maximum wait time 100
-        # Maximum wait block 100
-        self.max_wait_time = 100
-        self.max_wait_block = 100
-
-        # working directory for the database
-        self.work_directory = ".block_db"
         # Gossip fanout for frontiers exchange
         self.frontier_gossip_fanout = 6
 
-        # Community max peers
+        # working directory for the database
+        self.work_directory = ".block_db"
+
+        # The maximum and minimum number of peers in the main communities
         self.main_min_peers = 20
         self.main_max_peers = 30
 
+        # The maximum and minimum number of peers in sub-communities
         self.subcom_min_peers = 20
         self.subcom_max_peers = 30
-
-        # Whether we are a crawler (and fetching whole chains)
-        self.crawler = False
-
-        # Is the node hiding own blocks?
-        self.is_hiding = False
-
-        # Crawling identities
-        self.crawlers = [
-            b"4c69624e61434c504b3a60001170dcec5f4774e3ea8d5d6b89c98e5b18f10adb3e02b27137d965f1e4188d872bf6a30b6516b98fdb9839f2920ccf42a30a723ab07de7011bbbb245b20b",
-            b"4c69624e61434c504b3ad87cdb35fb1025904627aa84483a19e5640a1bebb2f6081e87cd635d22bbbe7cc8467a252d9f5343e10e182939225fea982192396837e9fb4d81fb4f26b74af3",
-        ]
