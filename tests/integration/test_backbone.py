@@ -34,10 +34,10 @@ class SimpleCommunity(BamiCommunity):
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         return LightSubCommunity(*args, **kwargs)
 
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+    def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
         pass
 
-    def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
+    def received_block_in_order(self, block: BamiBlock) -> None:
         pass
 
 
@@ -69,9 +69,6 @@ async def test_simple_frontier_reconciliation_after_partition(set_vals):
     """
     Test whether missing blocks are synchronized after a network partition.
     """
-    set_vals.nodes[0].overlay.start_frontier_gossip_sync(set_vals.community_id)
-    set_vals.nodes[1].overlay.start_frontier_gossip_sync(set_vals.community_id)
-
     for _ in range(3):
         # Note that we do not broadcast the block to the other node
         set_vals.nodes[0].overlay.create_signed_block(com_id=set_vals.community_id)
