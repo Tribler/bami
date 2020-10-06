@@ -1,9 +1,9 @@
 from ipv8.keyvault.crypto import default_eccrypto
 import pytest
 from bami.backbone.sub_community import IPv8SubCommunity, SubCommunityMixin
+from ipv8.test.mocking.ipv8 import MockIPv8
 
-from tests.mocking.community import FakeRoutines, MockSubCommunityRoutines
-from tests.mocking.ipv8 import FakeIPv8
+from tests.mocking.community import FakeRoutines, MockSubCommunityRoutines, MockSubCommunityDiscoveryStrategy
 
 
 class FakeSubCommunity(SubCommunityMixin, MockSubCommunityRoutines, FakeRoutines):
@@ -35,6 +35,7 @@ class TestSub:
             MockSubCommunityRoutines, "discovered_peers_by_subcom", lambda _, __: []
         )
         f = FakeSubCommunity()
+        f.discovery_strategy = MockSubCommunityDiscoveryStrategy(None)
         f.subscribe_to_subcom(b"test1")
 
     def test_one_sub(self, monkeypatch):
@@ -46,7 +47,8 @@ class TestSub:
         monkeypatch.setattr(
             FakeRoutines,
             "ipv8",
-            FakeIPv8(u"curve25519", IPv8SubCommunity, subcom_id=key),
+            MockIPv8(u"curve25519", IPv8SubCommunity, subcom_id=key),
         )
         f = FakeSubCommunity()
+        f.discovery_strategy = MockSubCommunityDiscoveryStrategy(None)
         f.subscribe_to_subcom(b"test1")

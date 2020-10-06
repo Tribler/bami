@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from bami.backbone.discovery import RandomWalkDiscoveryStrategy
 from bami.backbone.exceptions import InvalidTransactionFormatException
 from bami.backbone.payload import (
     BlockBroadcastPayload,
@@ -7,7 +8,6 @@ from bami.backbone.payload import (
 )
 from bami.backbone.sub_community import (
     IPv8SubCommunityFactory,
-    RandomWalkDiscoveryStrategy,
 )
 from bami.backbone.utils import Dot, GENESIS_LINK
 from bami.payment.community import PaymentCommunity
@@ -30,9 +30,7 @@ from tests.mocking.base import (
 )
 
 
-class FakePaymentCommunity(
-    IPv8SubCommunityFactory, RandomWalkDiscoveryStrategy, PaymentCommunity
-):
+class FakePaymentCommunity(IPv8SubCommunityFactory, PaymentCommunity):
     pass
 
 

@@ -22,6 +22,7 @@ from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import BaseDB, ChainTopic, DBManager
 from bami.backbone.datastore.frontiers import Frontier
+from bami.backbone.discovery import SubCommunityDiscoveryStrategy, RandomWalkDiscoveryStrategy
 from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
@@ -36,7 +37,6 @@ from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
     IPv8SubCommunity,
-    SubCommunityDiscoveryStrategy,
     SubCommunityMixin)
 from bami.backbone.utils import (
     CONFIRM_TYPE,
@@ -72,7 +72,6 @@ class BamiCommunity(
     SubComGossipMixin,
     SubCommunityMixin,
     BaseSubCommunityFactory,
-    SubCommunityDiscoveryStrategy,
     metaclass=ABCMeta,
 ):
     """
@@ -135,6 +134,7 @@ class BamiCommunity(
         anonymize: bool = False,
         db: BaseDB = None,
         work_dir: str = None,
+        discovery_strategy: SubCommunityDiscoveryStrategy = None,
         settings: BamiSettings = None,
         **kwargs
     ):
@@ -162,6 +162,11 @@ class BamiCommunity(
         if not max_peers:
             max_peers = self.settings.main_max_peers
         self._ipv8 = ipv8
+
+        self.discovery_strategy = discovery_strategy
+        if not self.discovery_strategy:
+            self.discovery_strategy = RandomWalkDiscoveryStrategy(self._ipv8)
+
         super(BamiCommunity, self).__init__(
             my_peer, endpoint, network, max_peers, anonymize=anonymize
         )
@@ -357,10 +362,6 @@ class BamiCommunity(
         return self.my_peer.key
 
     # ----- SubCommunity routines ------
-    def get_subcom_discovery_strategy(
-        self, subcom_id: bytes
-    ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
-        return self
 
     @property
     def subcom_factory(

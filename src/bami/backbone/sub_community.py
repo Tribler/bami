@@ -3,9 +3,9 @@ from typing import Any, Dict, Iterable, Optional, Type, Union
 
 from ipv8.community import Community
 from ipv8.peer import Peer
-from ipv8.peerdiscovery.discovery import EdgeWalk, RandomWalk
 
 from bami.backbone.community_routines import CommunityRoutines
+from bami.backbone.discovery import SubCommunityDiscoveryStrategy
 from bami.backbone.exceptions import UnavailableIPv8Exception
 
 
@@ -68,81 +68,6 @@ class LightSubCommunity(BaseSubCommunity):
 
     def add_peer(self, peer: Peer):
         self.peers.add(peer)
-
-
-class SubCommunityDiscoveryStrategy(ABC):
-    @abstractmethod
-    def discover(
-        self,
-        subcom: BaseSubCommunity,
-        target_peers: int = 20,
-        discovery_params: Dict[str, Any] = None,
-    ) -> None:
-        """
-        Discovery routine for the sub-community.
-        Args:
-            subcom: SubCommunity object or sub-community identifier.
-            target_peers: target number for discovery
-            discovery_params: Dictionary with parameters for the discovery process
-        """
-        pass
-
-
-class RandomWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy, metaclass=ABCMeta):
-    def discover(
-        self,
-        subcom: IPv8SubCommunity,
-        target_peers: int = 20,
-        discovery_params: Dict[str, Any] = None,
-    ) -> None:
-        discovery = (
-            (RandomWalk(subcom, **discovery_params), target_peers)
-            if discovery_params
-            else (RandomWalk(subcom), target_peers)
-        )
-        self.ipv8.strategies.append(discovery)
-
-
-class EdgeWalkDiscoveryStrategy(
-    SubCommunityDiscoveryStrategy, CommunityRoutines, metaclass=ABCMeta
-):
-    def discover(
-        self,
-        subcom: IPv8SubCommunity,
-        target_peers: int = 20,
-        discovery_params: Dict[str, Any] = None,
-    ) -> None:
-        discovery = (
-            (EdgeWalk(subcom, **discovery_params), target_peers)
-            if discovery_params
-            else (EdgeWalk(subcom), target_peers)
-        )
-        self.ipv8.strategies.append(discovery)
-
-
-class NoSubCommunityDiscovery(SubCommunityDiscoveryStrategy):
-    def discover(
-        self,
-        subcom: BaseSubCommunity,
-        target_peers: int = 20,
-        discovery_params: Dict[str, Any] = None,
-    ) -> None:
-        pass
-
-
-class BootstrapServersDiscoveryStrategy(SubCommunityDiscoveryStrategy):
-    @abstractmethod
-    def get_bootstrap_servers(self, subcom_id: bytes) -> Iterable[Peer]:
-        pass
-
-    def discover(
-        self,
-        subcom: IPv8SubCommunity,
-        target_peers: int = 20,
-        discovery_params: Dict[str, Any] = None,
-    ) -> None:
-        for k in self.get_bootstrap_servers(subcom.subcom_id):
-            subcom.walk_to(k)
 
 
 class BaseSubCommunityFactory(ABC):
@@ -215,20 +140,6 @@ class SubCommunityRoutines(ABC):
         """Notify other peers on updates of the sub-communities"""
         pass
 
-    @abstractmethod
-    def get_subcom_discovery_strategy(
-        self, subcom_id: bytes
-    ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
-        """
-        Discovery strategy for the sub-community
-        Args:
-            subcom_id: sub-community identifier
-
-        Returns:
-            Object or class with discover implementation
-        """
-        pass
-
     @property
     @abstractmethod
     def subcom_factory(
@@ -265,8 +176,7 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
             # Call discovery routine for this sub-community
             for p in self.discovered_peers_by_subcom(subcom_id):
                 subcom.add_peer(p)
-            strategy = self.get_subcom_discovery_strategy(subcom_id)
-            strategy.discover(
+            self.discovery_strategy.discover(
                 subcom,
                 target_peers=self.settings.subcom_min_peers,
                 discovery_params=discovery_params,
