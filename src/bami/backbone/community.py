@@ -12,7 +12,6 @@ from asyncio import (
 )
 from binascii import hexlify, unhexlify
 from enum import Enum
-import logging
 import random
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 
@@ -36,9 +35,9 @@ from bami.backbone.settings import BamiSettings
 from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
+    IPv8SubCommunity,
     SubCommunityDiscoveryStrategy,
-    SubCommunityMixin,
-)
+    SubCommunityMixin)
 from bami.backbone.utils import (
     CONFIRM_TYPE,
     decode_raw,
@@ -199,6 +198,13 @@ class BamiCommunity(
                 base.setup_messages(self)
 
         self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
+
+    def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
+        """
+        By default, the BackboneCommunity will start additional IPv8 sub-communities.
+        This behaviour can be changed by subclasses.
+        """
+        return IPv8SubCommunity(*args, **kwargs)
 
     # ----- Discovery start -----
     def start_discovery(
