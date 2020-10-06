@@ -22,6 +22,7 @@ from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import BaseDB, ChainTopic, DBManager
 from bami.backbone.datastore.frontiers import Frontier
+from bami.backbone.discovery import SubCommunityDiscoveryStrategy
 from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
@@ -36,7 +37,6 @@ from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
     IPv8SubCommunity,
-    SubCommunityDiscoveryStrategy,
     SubCommunityMixin)
 from bami.backbone.utils import (
     CONFIRM_TYPE,

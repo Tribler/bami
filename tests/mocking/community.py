@@ -8,13 +8,13 @@ from bami.backbone.community_routines import (
     MessageStateMachine,
 )
 from bami.backbone.datastore.database import BaseDB
+from bami.backbone.discovery import SubCommunityDiscoveryStrategy
 from bami.backbone.settings import BamiSettings
 from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
     IPv8SubCommunityFactory,
     LightSubCommunityFactory,
-    SubCommunityDiscoveryStrategy,
     SubCommunityRoutines,
 )
 from ipv8.community import Community
