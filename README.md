@@ -20,4 +20,4 @@ The informaiton in BAMI is organised in two types of chains:
  
 ## BAMI science
 
-ToDo: describe how this is ongoing research. We aim to provide a toolbox for addressing Tragedy of the Commons problem in the digital realm. Our unique feature is that we evaluate our work within Tribler with real users, real scarce resource to manage, and real cheaters (whitewashing,Sybil). Viciously tested code, with a theoretical grounding.
+ToDo: describe how this is ongoing research. We aim to provide a toolbox for addressing Tragedy of the Commons problem in the digital realm. Our unique feature is that we evaluate our work within Tribler with real users, real scarce resource to manage, and real cheaters (whitewashing,Sybil). Viciously tested code, with a theoretical grounding. Garbage collection, conflict resolution repair, forgiveness-by-design, etc.
