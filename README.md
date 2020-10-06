@@ -18,3 +18,6 @@ The informaiton in BAMI is organised in two types of chains:
  - *Personal chain*: the information created by one peer is kept in the chain, linked with each other. This imposes a sequential order of information by a single writer (see [PRAM](https://jepsen.io/consistency/models/pram)). This is a convenient way to verify and synchronize related data.
  - *DAG representation of a chain*: if a fork is detected in sequential chain we stop interacting with the malicious peer and provide opportunity to fix this inconsistency. Chain as a DAG follows [Causal Consistency](https://jepsen.io/consistency/models/causal).
  
+## BAMI science
+
+ToDo: describe how this is ongoing research. We aim to provide a toolbox for addressing Tragedy of the Commons problem in the digital realm. Our unique feature is that we evaluate our work within Tribler with real users, real scarse resource to manage, and real cheaters (whitewashing,Sybil).
