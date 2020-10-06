@@ -1,11 +1,11 @@
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Dict, Iterable, Optional, Type, Union
 
-from bami.backbone.discovery import SubCommunityDiscoveryStrategy
 from ipv8.community import Community
 from ipv8.peer import Peer
 
 from bami.backbone.community_routines import CommunityRoutines
+from bami.backbone.discovery import SubCommunityDiscoveryStrategy
 from bami.backbone.exceptions import UnavailableIPv8Exception
 
 
@@ -140,20 +140,6 @@ class SubCommunityRoutines(ABC):
         """Notify other peers on updates of the sub-communities"""
         pass
 
-    @abstractmethod
-    def get_subcom_discovery_strategy(
-        self, subcom_id: bytes
-    ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
-        """
-        Discovery strategy for the sub-community
-        Args:
-            subcom_id: sub-community identifier
-
-        Returns:
-            Object or class with discover implementation
-        """
-        pass
-
     @property
     @abstractmethod
     def subcom_factory(
@@ -190,8 +176,7 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
             # Call discovery routine for this sub-community
             for p in self.discovered_peers_by_subcom(subcom_id):
                 subcom.add_peer(p)
-            strategy = self.get_subcom_discovery_strategy(subcom_id)
-            strategy.discover(
+            self.discovery_strategy.discover(
                 subcom,
                 target_peers=self.settings.subcom_min_peers,
                 discovery_params=discovery_params,
