@@ -96,6 +96,17 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         """
         pass
 
+    @abstractmethod
+    def received_block_in_order(self, block: BamiBlock) -> None:
+        """
+        Process a block that we have received.
+
+        Args:
+            block: The received block.
+
+        """
+        pass
+
     def validate_persist_block(self, block: BamiBlock, peer: Peer = None) -> bool:
         """
         Validate a block and if it's valid, persist it.

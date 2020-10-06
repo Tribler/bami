@@ -80,17 +80,13 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
     def settings(self) -> PaymentSettings:
         return super().settings
 
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
-        # 0. Add master peer to the known minter group
+    def on_join_subcommunity(self, sub_com_id: bytes) -> None:
+        super(PaymentCommunity, self).on_join_subcommunity(sub_com_id)
+
+        # Add master peer to the known minter group
         self.state_db.add_known_minters(sub_com_id, {sub_com_id})
 
-        # 1. Main payment chain: spends and their confirmations
-        # - Start gossip sync task periodically on the chain updates
-        self.start_frontier_gossip_sync(sub_com_id)
-        # - Process incoming blocks on the chain in order for payments
-        self.subscribe_in_order_block(sub_com_id, self.received_block_in_order)
-
-        # 2. Witness chain:
+        # Witness chain:
         # - Gossip witness updates on the sub-chain
         self.start_frontier_gossip_sync(sub_com_id, prefix=b"w")
         # - Process witness block out of order

@@ -149,7 +149,7 @@ class SubCommunityRoutines(ABC):
         pass
 
     @abstractmethod
-    def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
+    def on_join_subcommunity(self, sub_com_id: bytes) -> None:
         """
         Join to the gossip process for the sub-community
         Args:
@@ -199,7 +199,7 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
             if c_id not in self.my_subcoms:
                 self.join_subcom(c_id, discovery_params)
                 # Join the sub-community
-                self.join_subcommunity_gossip(c_id)
+                self.on_join_subcommunity(c_id)
                 updated = True
         if updated:
             self.notify_peers_on_new_subcoms()
@@ -219,7 +219,7 @@ class SubCommunityMixin(SubCommunityRoutines, CommunityRoutines, metaclass=ABCMe
             self.join_subcom(subcom_id, discovery_params)
 
             # Join the protocol audits/ updates
-            self.join_subcommunity_gossip(subcom_id)
+            self.on_join_subcommunity(subcom_id)
 
             # Notify other peers that you are part of the new community
             self.notify_peers_on_new_subcoms()

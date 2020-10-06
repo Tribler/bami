@@ -211,6 +211,22 @@ class BamiCommunity(
         """
         return IPv8SubCommunity(*args, **kwargs)
 
+    def on_join_subcommunity(self, sub_com_id: bytes) -> None:
+        """
+        This method is called when BAMI joins a new sub-community.
+        We enable some functionality by default, but custom behaviour can be added by overriding this method.
+
+        Args:
+            sub_com_id: The ID of the sub-community we just joined.
+
+        """
+        if self.settings.frontier_gossip_enabled:
+            # Start exchanging frontiers
+            self.start_frontier_gossip_sync(sub_com_id)
+
+        # By default, add a handler that is called with subsequent blocks
+        self.subscribe_in_order_block(sub_com_id, self.received_block_in_order)
+
     # ----- Discovery start -----
     def start_discovery(
         self,
