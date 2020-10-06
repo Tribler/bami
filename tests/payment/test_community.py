@@ -30,9 +30,7 @@ from tests.mocking.base import (
 )
 
 
-class FakePaymentCommunity(
-    IPv8SubCommunityFactory, RandomWalkDiscoveryStrategy, PaymentCommunity
-):
+class FakePaymentCommunity(IPv8SubCommunityFactory, PaymentCommunity):
     pass
 
 

@@ -34,11 +34,6 @@ class SimpleCommunity(BamiCommunity):
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         return LightSubCommunity(*args, **kwargs)
 
-    def discover(
-        self, subcom: BaseSubCommunity, target_peers: int = -1, **kwargs
-    ) -> None:
-        pass
-
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         pass
 

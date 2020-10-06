@@ -109,11 +109,6 @@ class MockSubCommunityRoutines(SubCommunityRoutines):
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
         pass
 
-    def get_subcom_discovery_strategy(
-        self, subcom_id: bytes
-    ) -> Union[SubCommunityDiscoveryStrategy, Type[SubCommunityDiscoveryStrategy]]:
-        return MockSubCommunityDiscoveryStrategy()
-
     @property
     def subcom_factory(
         self,
@@ -195,11 +190,6 @@ class FakeBackCommunity(BamiCommunity):
         pass
 
     def join_subcommunity_gossip(self, sub_com_id: bytes) -> None:
-        pass
-
-    def discover(
-        self, subcom: BaseSubCommunity, target_peers: int = -1, **kwargs
-    ) -> None:
         pass
 
 

@@ -1,18 +1,19 @@
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from typing import Dict, Any, Iterable
-
-from bami.backbone.community_routines import CommunityRoutines
-from bami.backbone.sub_community import BaseSubCommunity, IPv8SubCommunity
 
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.discovery import RandomWalk, EdgeWalk
 
 
 class SubCommunityDiscoveryStrategy(ABC):
+
+    def __init__(self, ipv8):
+        self.ipv8 = ipv8
+
     @abstractmethod
     def discover(
         self,
-        subcom: BaseSubCommunity,
+        subcom: "BaseSubCommunity",
         target_peers: int = 20,
         discovery_params: Dict[str, Any] = None,
     ) -> None:
@@ -26,27 +27,26 @@ class SubCommunityDiscoveryStrategy(ABC):
         pass
 
 
-class RandomWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy, metaclass=ABCMeta):
+class RandomWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy):
     def discover(
         self,
-        subcom: IPv8SubCommunity,
+        subcom: "IPv8SubCommunity",
         target_peers: int = 20,
         discovery_params: Dict[str, Any] = None,
     ) -> None:
-        discovery = (
-            (RandomWalk(subcom, **discovery_params), target_peers)
-            if discovery_params
-            else (RandomWalk(subcom), target_peers)
-        )
-        self.ipv8.strategies.append(discovery)
+        if self.ipv8:
+            discovery = (
+                (RandomWalk(subcom, **discovery_params), target_peers)
+                if discovery_params
+                else (RandomWalk(subcom), target_peers)
+            )
+            self.ipv8.strategies.append(discovery)
 
 
-class EdgeWalkDiscoveryStrategy(
-    SubCommunityDiscoveryStrategy, CommunityRoutines, metaclass=ABCMeta
-):
+class EdgeWalkDiscoveryStrategy(SubCommunityDiscoveryStrategy):
     def discover(
         self,
-        subcom: IPv8SubCommunity,
+        subcom: "IPv8SubCommunity",
         target_peers: int = 20,
         discovery_params: Dict[str, Any] = None,
     ) -> None:
@@ -61,7 +61,7 @@ class EdgeWalkDiscoveryStrategy(
 class NoSubCommunityDiscovery(SubCommunityDiscoveryStrategy):
     def discover(
         self,
-        subcom: BaseSubCommunity,
+        subcom: "BaseSubCommunity",
         target_peers: int = 20,
         discovery_params: Dict[str, Any] = None,
     ) -> None:
@@ -75,7 +75,7 @@ class BootstrapServersDiscoveryStrategy(SubCommunityDiscoveryStrategy):
 
     def discover(
         self,
-        subcom: IPv8SubCommunity,
+        subcom: "IPv8SubCommunity",
         target_peers: int = 20,
         discovery_params: Dict[str, Any] = None,
     ) -> None:
