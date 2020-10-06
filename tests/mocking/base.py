@@ -1,20 +1,12 @@
-import os
-import shutil
-import string
-import sys
-import threading
-import time
-from asyncio import all_tasks, get_event_loop, sleep, Task
-from random import choice
+from asyncio import all_tasks, sleep, Task
 
 from ipv8.peer import Peer
 from ipv8.test.mocking.endpoint import internet
-
-from tests.mocking.ipv8 import FakeIPv8
+from ipv8.test.mocking.ipv8 import MockIPv8
 
 
 def create_node(overlay_class, work_dir=".", **kwargs):
-    ipv8 = FakeIPv8("curve25519", overlay_class, work_dir=work_dir, **kwargs)
+    ipv8 = MockIPv8("curve25519", overlay_class, work_dir=work_dir, **kwargs)
     ipv8.overlay.ipv8 = ipv8
     return ipv8
 
