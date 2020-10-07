@@ -22,7 +22,10 @@ from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import BaseDB, ChainTopic, DBManager
 from bami.backbone.datastore.frontiers import Frontier
-from bami.backbone.discovery import SubCommunityDiscoveryStrategy, RandomWalkDiscoveryStrategy
+from bami.backbone.discovery import (
+    RandomWalkDiscoveryStrategy,
+    SubCommunityDiscoveryStrategy,
+)
 from bami.backbone.exceptions import (
     DatabaseDesynchronizedException,
     InvalidTransactionFormatException,
@@ -37,7 +40,8 @@ from bami.backbone.sub_community import (
     BaseSubCommunity,
     BaseSubCommunityFactory,
     IPv8SubCommunity,
-    SubCommunityMixin)
+    SubCommunityMixin,
+)
 from bami.backbone.utils import (
     CONFIRM_TYPE,
     decode_raw,
@@ -47,8 +51,6 @@ from bami.backbone.utils import (
     Links,
     Notifier,
     REJECT_TYPE,
-    shorten,
-    WITNESS_TYPE,
 )
 from ipv8.community import Community
 from ipv8.keyvault.keys import Key
@@ -504,8 +506,6 @@ class BamiCommunity(
             selected_peers = self.choose_community_peers(subcom_peers, seed, fanout)
             self.send_block(block, selected_peers, ttl)
 
-    # ------ Audits for the chain wrp to invariants -----
-
     # ------ Confirm and reject functions --------------
     def confirm(self, block: BamiBlock, extra_data: Dict = None) -> None:
         """
@@ -594,8 +594,6 @@ class BamiCommunity(
     # ----- Request state accumulation for the chain -----
 
     # ----- When receive block - analyze if you need to respond for the block. ----
-
-    # ----------- Auditing chain state wrp invariants ----------------
 
 
 class BamiTestnetCommunity(BamiCommunity, metaclass=ABCMeta):

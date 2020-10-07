@@ -166,15 +166,6 @@ class FakeBackCommunity(BamiCommunity):
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         pass
 
-    def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
-        pass
-
-    def build_witness_blob(self, chain_id: bytes, seq_num: int) -> Optional[bytes]:
-        pass
-
-    def apply_witness_tx(self, block: BamiBlock, witness_tx: Any) -> None:
-        pass
-
     def apply_confirm_tx(self, block: BamiBlock, confirm_tx: Dict) -> None:
         pass
 

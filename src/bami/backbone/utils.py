@@ -20,7 +20,7 @@ EMPTY_SIG = b"0" * 64
 EMPTY_PK = b"0" * 74
 ANY_COUNTERPARTY_PK = EMPTY_PK
 
-WITNESS_TYPE = b"witness"
+AUDIT_TYPE = b"audit"
 CONFIRM_TYPE = b"confirm"
 REJECT_TYPE = b"reject"
 

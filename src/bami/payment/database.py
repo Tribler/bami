@@ -62,7 +62,7 @@ class PaymentState(object):
         # Chain_id: seq_num: hash: set of voters
         self.prefered_statuses = defaultdict(lambda: cachetools.LRUCache(100))
         self.peer_statuses = defaultdict(lambda: cachetools.LRUCache(100))
-        self.witness_votes = defaultdict(lambda: cachetools.LRUCache(100))
+        self.audit_votes = defaultdict(lambda: cachetools.LRUCache(100))
 
         self.applied_dots = set()
         self.balance_invariants = defaultdict(lambda: True)
@@ -288,7 +288,7 @@ class PaymentState(object):
     def was_chain_forked(self, chain_id: bytes, peer_id: bytes) -> bool:
         return len(self.fork_attempts[chain_id][peer_id]) >= 1
 
-    # ----- For auditing and witnessing ---------
+    # ----- For auditing ---------
     def get_last_peer_status(self, chain_id: bytes) -> ChainState:
         """Get last balance of peers in the community"""
         v = dict()
@@ -299,16 +299,16 @@ class PaymentState(object):
             )
         return ChainState(v)
 
-    def add_witness_vote(
+    def add_audit_vote(
         self, chain_id: bytes, seq_num: int, state_hash: bytes, witness_id: bytes
     ) -> None:
-        prev_values = self.witness_votes[chain_id].get(seq_num)
+        prev_values = self.audit_votes[chain_id].get(seq_num)
         if not prev_values:
-            self.witness_votes[chain_id][seq_num] = defaultdict(lambda: set())
-        self.witness_votes[chain_id][seq_num][state_hash].add(witness_id)
+            self.audit_votes[chain_id][seq_num] = defaultdict(lambda: set())
+        self.audit_votes[chain_id][seq_num][state_hash].add(witness_id)
         # TODO: add reaction if there is inconsistency
         state_hash = max(
-            self.witness_votes[chain_id][seq_num].items(), key=lambda x: len(x[1])
+            self.audit_votes[chain_id][seq_num].items(), key=lambda x: len(x[1])
         )[0]
         self.prefered_statuses[chain_id][seq_num] = state_hash
 

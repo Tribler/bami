@@ -3,7 +3,11 @@ import pytest
 from bami.backbone.sub_community import IPv8SubCommunity, SubCommunityMixin
 from ipv8.test.mocking.ipv8 import MockIPv8
 
-from tests.mocking.community import FakeRoutines, MockSubCommunityRoutines, MockSubCommunityDiscoveryStrategy
+from tests.mocking.community import (
+    FakeRoutines,
+    MockSubCommunityRoutines,
+    MockSubCommunityDiscoveryStrategy,
+)
 
 
 class FakeSubCommunity(SubCommunityMixin, MockSubCommunityRoutines, FakeRoutines):

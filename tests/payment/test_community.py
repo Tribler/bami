@@ -1,21 +1,18 @@
 from decimal import Decimal
 
-from bami.backbone.discovery import RandomWalkDiscoveryStrategy
 from bami.backbone.exceptions import InvalidTransactionFormatException
 from bami.backbone.payload import (
     BlockBroadcastPayload,
     RawBlockBroadcastPayload,
 )
-from bami.backbone.sub_community import (
-    IPv8SubCommunityFactory,
-)
+from bami.backbone.sub_community import IPv8SubCommunityFactory
 from bami.backbone.utils import Dot, GENESIS_LINK
 from bami.payment.community import PaymentCommunity
 from bami.payment.exceptions import (
     InsufficientBalanceException,
     InvalidMintRangeException,
     InvalidSpendRangeException,
-    InvalidWitnessTransactionException,
+    InvalidAuditTransactionException,
     UnboundedMintException,
     UnknownMinterException,
 )
@@ -218,16 +215,16 @@ class TestSpend:
             assert vals.nodes[i].overlay.state_db.was_balance_negative(spender)
 
 
-class TestWitness:
+class TestAudit:
     # Test witness transaction
-    def test_apply_invalid_witness_tx(self, set_vals):
+    def test_apply_invalid_audit_tx(self, set_vals):
         blk = FakeBlock(com_id=set_vals.community_id)
         i = 1
-        set_vals.nodes[0].overlay.witness_delta = 100
-        while set_vals.nodes[0].overlay.should_witness_chain_point(
+        set_vals.nodes[0].overlay.audit_delta = 100
+        while set_vals.nodes[0].overlay.should_audit_chain_point(
             blk.com_id, blk.public_key, i
         ):
             i += 1
         tx = (i, {b"t": (True, True)})
-        with pytest.raises(InvalidWitnessTransactionException):
-            set_vals.nodes[0].overlay.apply_witness_tx(blk, tx)
+        with pytest.raises(InvalidAuditTransactionException):
+            set_vals.nodes[0].overlay.apply_audit_tx(blk, tx)

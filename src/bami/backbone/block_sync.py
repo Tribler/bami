@@ -8,7 +8,7 @@ from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from bami.backbone.utils import Links, WITNESS_TYPE
+from bami.backbone.utils import Links, AUDIT_TYPE
 from bami.backbone.exceptions import InvalidBlockException
 from bami.backbone.payload import (
     RawBlockBroadcastPayload,
