@@ -2,7 +2,8 @@ from asyncio.queues import Queue
 from typing import Any, Dict, Iterable, Optional, Type, Union
 
 from bami.backbone.block import BamiBlock
-from bami.backbone.community import BamiCommunity, BlockResponse
+from bami.backbone.blockresponse import BlockResponseMixin, BlockResponse
+from bami.backbone.community import BamiCommunity
 from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
@@ -159,7 +160,7 @@ class MockedCommunity(Community, CommunityRoutines):
         return await super().unload()
 
 
-class FakeBackCommunity(BamiCommunity):
+class FakeBackCommunity(BamiCommunity, BlockResponseMixin):
     def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
         pass
 

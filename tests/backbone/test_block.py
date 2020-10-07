@@ -11,7 +11,8 @@ from bami.backbone.utils import (
     GENESIS_DOT,
     Links,
     shorten,
-    ShortKey, decode_raw,
+    ShortKey,
+    decode_raw,
 )
 from bami.backbone.payload import BlockPayload
 

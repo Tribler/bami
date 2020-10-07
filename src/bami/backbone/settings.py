@@ -46,6 +46,8 @@ class BamiSettings(object):
         # Gossip fanout for frontiers exchange
         self.frontier_gossip_fanout = 6
 
+        self.block_sign_delta = 0.3
+
         # working directory for the database
         self.work_directory = ".block_db"
 
