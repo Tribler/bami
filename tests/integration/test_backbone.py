@@ -6,7 +6,12 @@ from bami.backbone.block import BamiBlock
 from bami.backbone.community import BlockResponse, BamiCommunity
 from bami.backbone.sub_community import BaseSubCommunity, LightSubCommunity
 from ipv8.keyvault.crypto import default_eccrypto
-from tests.mocking.base import SetupValues, unload_nodes, create_and_connect_nodes, deliver_messages
+from tests.mocking.base import (
+    SetupValues,
+    unload_nodes,
+    create_and_connect_nodes,
+    deliver_messages,
+)
 
 
 class SimpleCommunity(BamiCommunity):
@@ -20,22 +25,13 @@ class SimpleCommunity(BamiCommunity):
     def apply_reject_tx(self, block: BamiBlock, reject_tx: Dict) -> None:
         pass
 
-    def apply_witness_tx(self, block: BamiBlock, witness_tx: Any) -> None:
-        pass
-
     def block_response(
         self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
     ) -> BlockResponse:
         return BlockResponse.DELAY
 
-    def build_witness_blob(self, chain_id: bytes, seq_num: int) -> Optional[bytes]:
-        pass
-
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
         return LightSubCommunity(*args, **kwargs)
-
-    def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
-        pass
 
     def received_block_in_order(self, block: BamiBlock) -> None:
         pass
@@ -79,8 +75,12 @@ async def test_simple_frontier_reconciliation_after_partition(set_vals):
 
     await deliver_messages()
 
-    frontier1 = set_vals.nodes[0].overlay.persistence.get_chain(set_vals.community_id).frontier
-    frontier2 = set_vals.nodes[1].overlay.persistence.get_chain(set_vals.community_id).frontier
+    frontier1 = (
+        set_vals.nodes[0].overlay.persistence.get_chain(set_vals.community_id).frontier
+    )
+    frontier2 = (
+        set_vals.nodes[1].overlay.persistence.get_chain(set_vals.community_id).frontier
+    )
     assert len(frontier2.terminal) == 1
     assert frontier2.terminal[0][0] == 3
     assert frontier1 == frontier2

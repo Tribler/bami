@@ -116,10 +116,7 @@ def create_batches():
         """
         key = default_eccrypto.generate_key("curve25519")
         com_id = key.pub().key_to_bin()
-        return [
-            create_block_batch(com_id, num_blocks)
-            for _ in range(num_batches)
-        ]
+        return [create_block_batch(com_id, num_blocks) for _ in range(num_batches)]
 
     return _create_batches
 

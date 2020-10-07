@@ -6,7 +6,6 @@ from ipv8.peerdiscovery.discovery import RandomWalk, EdgeWalk
 
 
 class SubCommunityDiscoveryStrategy(ABC):
-
     def __init__(self, ipv8):
         self.ipv8 = ipv8
 
