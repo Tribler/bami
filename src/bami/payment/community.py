@@ -20,14 +20,15 @@ from bami.backbone.utils import (
     REJECT_TYPE,
     shorten,
     take_hash,
-    WITNESS_TYPE,
+    AUDIT_TYPE,
 )
+from bami.backbone.audit import AuditMixin
 from bami.payment.database import ChainState, PaymentState
 from bami.payment.exceptions import (
     InsufficientBalanceException,
     InvalidMintRangeException,
     InvalidSpendRangeException,
-    InvalidWitnessTransactionException,
+    InvalidAuditTransactionException,
     UnboundedMintException,
     UnknownMinterException,
 )
@@ -46,7 +47,7 @@ Exchange of the value within one community, where value lives only in one commun
 """
 
 
-class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
+class PaymentCommunity(BamiCommunity, AuditMixin, metaclass=ABCMeta):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -65,16 +66,16 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # Dictionary chain_id: block_dot -> block
         self.tracked_blocks = defaultdict(lambda: {})
         self.peer_conf = defaultdict(lambda: defaultdict(int))
-        self.should_witness_subcom = {}
+        self.should_audit_subcom = {}
 
         self.counter_signing_block_queue = PriorityQueue()
         self.block_sign_queue_task = ensure_future(
             self.evaluate_counter_signing_blocks()
         )
 
-        self.witness_delta = kwargs.get("witness_delta")
-        if not self.witness_delta:
-            self.witness_delta = self.settings.witness_block_delta
+        self.audit_delta = kwargs.get("audit_delta")
+        if not self.audit_delta:
+            self.audit_delta = self.settings.audit_block_delta
 
     @property
     def settings(self) -> PaymentSettings:
@@ -92,7 +93,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # - Process witness block out of order
         self.subscribe_out_order_block(b"w" + sub_com_id, self.process_witness_block)
         # - Witness all updates on payment chain
-        self.should_witness_subcom[sub_com_id] = self.settings.should_witness_block
+        self.should_audit_subcom[sub_com_id] = self.settings.should_audit_block
 
     def received_block_in_order(self, block: BamiBlock) -> None:
         if block.com_dot in self.state_db.applied_dots:
@@ -127,13 +128,13 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
             self.process_confirm(block)
         elif block.type == REJECT_TYPE:
             self.process_reject(block)
-        elif block.type == WITNESS_TYPE:
-            raise Exception("Witness block received, while shouldn't")
+        elif block.type == AUDIT_TYPE:
+            raise Exception("Audit block received, while shouldn't")
         # Witness block react on new block:
         if (
-            self.should_witness_subcom.get(chain_id)
-            and block.type != WITNESS_TYPE
-            and self.should_witness_chain_point(
+            self.should_audit_subcom.get(chain_id)
+            and block.type != AUDIT_TYPE
+            and self.should_audit_chain_point(
                 chain_id, self.my_pub_key_bin, block.com_seq_num
             )
         ):
@@ -145,9 +146,9 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         self.logger.debug(
             "Processing block %s, %s, %s", blk.type, blk.com_dot, blk.com_id
         )
-        if blk.type != WITNESS_TYPE:
+        if blk.type != AUDIT_TYPE:
             raise Exception("Received not witness block on witness sub-chain!")
-        self.process_witness(blk)
+        self.process_audit(blk)
 
     def should_store_store_update(self, chain_id: bytes, seq_num: int) -> bool:
         """Store the status of the chain at the seq_num for further witnessing or verification"""
@@ -155,7 +156,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         return True
         # return self.should_witness_chain_point(chain_id, self.my_pub_key_bin, seq_num)
 
-    def should_witness_chain_point(
+    def should_audit_chain_point(
         self, chain_id: bytes, peer_id: bytes, seq_num: int
     ) -> bool:
         """
@@ -169,7 +170,7 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         # Every peer should witness every K blocks?
         # TODO: that should depend on the number of peers in the community - change that
         # + account for the fault tolerance
-        if ran.random() < 1 / self.witness_delta:
+        if ran.random() < 1 / self.audit_delta:
             return True
         return False
 
@@ -466,45 +467,45 @@ class PaymentCommunity(BamiCommunity, metaclass=ABCMeta):
         if self.is_pending_task_active(name_prefix):
             self.replace_task(
                 name_prefix,
-                self.witness,
+                self.audit,
                 chain_id,
                 seq_num,
-                delay=self.settings.witness_delta_time,
+                delay=self.settings.audit_delta_time,
             )
         else:
             self.register_task(
                 name_prefix,
-                self.witness,
+                self.audit,
                 chain_id,
                 seq_num,
-                delay=self.settings.witness_delta_time,
+                delay=self.settings.audit_delta_time,
             )
 
-    def witness_tx_well_formatted(self, witness_tx: Any) -> bool:
+    def audit_tx_well_formatted(self, witness_tx: Any) -> bool:
         return len(witness_tx) == 2 and witness_tx[0] > 0 and len(witness_tx[1]) > 0
 
-    def build_witness_blob(self, chain_id: bytes, seq_num: int) -> Optional[bytes]:
+    def build_audit_blob(self, chain_id: bytes, seq_num: int) -> Optional[bytes]:
         chain_state = self.state_db.get_closest_peers_status(chain_id, seq_num)
         if not chain_state:
             return None
         return encode_raw(chain_state)
 
-    def apply_witness_tx(
+    def apply_audit_tx(
         self, block: BamiBlock, witness_tx: Tuple[int, ChainState]
     ) -> None:
         state = witness_tx[1]
         state_hash = take_hash(state)
         seq_num = witness_tx[0]
 
-        if not self.should_witness_chain_point(block.com_id, block.public_key, seq_num):
+        if not self.should_audit_chain_point(block.com_id, block.public_key, seq_num):
             # This is invalid witnessing - react
-            raise InvalidWitnessTransactionException(
+            raise InvalidAuditTransactionException(
                 "Received invalid witness transaction",
                 block.com_id,
                 block.public_key,
                 seq_num,
             )
-        self.state_db.add_witness_vote(
+        self.state_db.add_audit_vote(
             block.com_id, seq_num, state_hash, block.public_key
         )
         self.state_db.add_chain_state(block.com_id, seq_num, state_hash, state)

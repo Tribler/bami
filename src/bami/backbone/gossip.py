@@ -123,7 +123,7 @@ class GossipFrontiersMixin(
             )
             for peer in next_peers:
                 self.logger.debug(
-                    "Sending frontier %s to peer %s. Witness chain: %s",
+                    "Sending frontier %s to peer %s. Audit chain: %s",
                     frontier,
                     peer,
                     prefix.startswith(b"w"),
@@ -149,7 +149,7 @@ class GossipFrontiersMixin(
             else:
                 # Request blocks and wait for some time
                 self.logger.debug(
-                    "Sending frontier diff %s to peer %s. Witness chain: %s",
+                    "Sending frontier diff %s to peer %s. Audit chain: %s",
                     frontier_diff,
                     peer,
                     subcom_id.startswith(b"w"),
@@ -199,7 +199,7 @@ class GossipFrontiersMixin(
         chain_id = payload.subcom_id
         vals_to_request = set()
         self.logger.debug(
-            "Received block request %s from peer %s. Witness chain: %s",
+            "Received block request %s from peer %s. Audit chain: %s",
             f_diff,
             peer,
             chain_id.startswith(b"w"),
@@ -208,7 +208,7 @@ class GossipFrontiersMixin(
             chain_id, f_diff, vals_to_request
         )
         self.logger.debug(
-            "Sending %s blocks to peer %s. Witness chain %s",
+            "Sending %s blocks to peer %s. Audit chain %s",
             len(blocks),
             peer,
             chain_id.startswith(b"w"),

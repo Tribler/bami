@@ -50,5 +50,5 @@ class InvalidSpendRangeException(Exception):
     pass
 
 
-class InvalidWitnessTransactionException(Exception):
+class InvalidAuditTransactionException(Exception):
     pass

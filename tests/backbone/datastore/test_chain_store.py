@@ -27,7 +27,9 @@ class TestBatchInsert:
 
 
 class TestConflictsInsert:
-    def test_two_conflict_seq_insert(self, insert_function, insert_function_copy, create_batches, chain):
+    def test_two_conflict_seq_insert(
+        self, insert_function, insert_function_copy, create_batches, chain
+    ):
         batches = create_batches(num_batches=2, num_blocks=200)
 
         # Insert first batch sequentially
@@ -45,7 +47,9 @@ class TestConflictsInsert:
         assert last_blk_link in chain.terminal
 
     @pytest.mark.parametrize("num_batches", [2 ** i for i in range(4, 10, 2)])
-    def test_insert_many_conflicts(self, create_batches, num_batches, insert_function, chain):
+    def test_insert_many_conflicts(
+        self, create_batches, num_batches, insert_function, chain
+    ):
         batches = create_batches(num_batches=num_batches, num_blocks=5)
         # Insert first batch sequentially
         i = 1
@@ -132,7 +136,10 @@ class TestFrontiers:
         assert frontier.holes[0] == (11, 15) and frontier.holes[1] == (21, 25)
 
         assert len(frontier.inconsistencies) == 2
-        assert frontier.inconsistencies[0][0] == 15 and frontier.inconsistencies[1][0] == 25
+        assert (
+            frontier.inconsistencies[0][0] == 15
+            and frontier.inconsistencies[1][0] == 25
+        )
 
         assert len(frontier.terminal) == 3
         assert (
@@ -154,7 +161,9 @@ class TestFrontiers:
         assert len(frontier.terminal) == 2
         assert frontier.terminal[0][0] == 10 and frontier.terminal[1][0] == 10
 
-    def test_insert_conflicts_with_inconsistency(self, create_batches, insert_function, chain):
+    def test_insert_conflicts_with_inconsistency(
+        self, create_batches, insert_function, chain
+    ):
         batches = create_batches(num_batches=2, num_blocks=10)
 
         # insert both batches
