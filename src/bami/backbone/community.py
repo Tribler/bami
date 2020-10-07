@@ -9,10 +9,11 @@ from asyncio import (
     Queue,
     sleep,
     Task,
+    PriorityQueue,
 )
 from binascii import hexlify, unhexlify
-from enum import Enum
 import random
+from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 from bami.backbone.block import BamiBlock
@@ -43,14 +44,11 @@ from bami.backbone.sub_community import (
     SubCommunityMixin,
 )
 from bami.backbone.utils import (
-    CONFIRM_TYPE,
     decode_raw,
     Dot,
-    EMPTY_PK,
     encode_raw,
     Links,
     Notifier,
-    REJECT_TYPE,
 )
 from ipv8.community import Community
 from ipv8.keyvault.keys import Key
@@ -60,12 +58,6 @@ from ipv8.peerdiscovery.discovery import EdgeWalk, RandomWalk
 from ipv8.peerdiscovery.network import Network
 from ipv8.util import coroutine
 from ipv8_service import IPv8
-
-
-class BlockResponse(Enum):
-    CONFIRM = 1
-    REJECT = 2
-    DELAY = 3
 
 
 class BamiCommunity(
@@ -514,91 +506,6 @@ class BamiCommunity(
         if subcom_peers:
             selected_peers = self.choose_community_peers(subcom_peers, seed, fanout)
             self.send_block(block, selected_peers, ttl)
-
-    # ------ Confirm and reject functions --------------
-    def confirm(self, block: BamiBlock, extra_data: Dict = None) -> None:
-        """
-        Confirm the transaction in an incoming block. Link will be in the transaction with block dot.
-        Args:
-            block: The BamiBlock to confirm.
-            extra_data: An optional dictionary with extra data that is appended to the confirmation.
-        """
-        chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
-        dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
-        confirm_tx = {b"initiator": block.public_key, b"dot": dot}
-        if extra_data:
-            confirm_tx.update(extra_data)
-        block = self.create_signed_block(
-            block_type=CONFIRM_TYPE, transaction=encode_raw(confirm_tx), com_id=chain_id
-        )
-        self.share_in_community(block, chain_id)
-
-    def verify_confirm_tx(self, claimer: bytes, confirm_tx: Dict) -> None:
-        # 1. verify claim format
-        if not confirm_tx.get(b"initiator") or not confirm_tx.get(b"dot"):
-            raise InvalidTransactionFormatException(
-                "Invalid claim ", claimer, confirm_tx
-            )
-
-    def process_confirm(self, block: BamiBlock) -> None:
-        confirm_tx = decode_raw(block.transaction)
-        self.verify_confirm_tx(block.public_key, confirm_tx)
-        self.apply_confirm_tx(block, confirm_tx)
-
-    @abstractmethod
-    def apply_confirm_tx(self, block: BamiBlock, confirm_tx: Dict) -> None:
-        pass
-
-    def reject(self, block: BamiBlock, extra_data: Dict = None) -> None:
-        """
-        Reject the transaction in an incoming block.
-
-        Args:
-            block: The BamiBlock to reject.
-            extra_data: Some additional data to append to the reject transaction, e.g., a reason.
-        """
-        # change it to confirm
-        # create claim block and share in the community
-        chain_id = block.com_id if block.com_id != EMPTY_PK else block.public_key
-        dot = block.com_dot if block.com_id != EMPTY_PK else block.pers_dot
-        reject_tx = {b"initiator": block.public_key, b"dot": dot}
-        if extra_data:
-            reject_tx.update(extra_data)
-        block = self.create_signed_block(
-            block_type=REJECT_TYPE, transaction=encode_raw(reject_tx), com_id=chain_id
-        )
-        self.share_in_community(block, chain_id)
-
-    def verify_reject_tx(self, rejector: bytes, confirm_tx: Dict) -> None:
-        # 1. verify reject format
-        if not confirm_tx.get(b"initiator") or not confirm_tx.get(b"dot"):
-            raise InvalidTransactionFormatException(
-                "Invalid reject ", rejector, confirm_tx
-            )
-
-    def process_reject(self, block: BamiBlock) -> None:
-        reject_tx = decode_raw(block.transaction)
-        self.verify_reject_tx(block.public_key, reject_tx)
-        self.apply_reject_tx(block, reject_tx)
-
-    @abstractmethod
-    def apply_reject_tx(self, block: BamiBlock, reject_tx: Dict) -> None:
-        pass
-
-    @abstractmethod
-    def block_response(
-        self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
-    ) -> BlockResponse:
-        """
-        Respond to block BlockResponse: Reject, Confirm, Delay
-        Args:
-            block: to respond to
-            wait_time: time that passed since first block process initiated
-            wait_blocks: number of blocks passed since the block
-        Returns:
-            BlockResponse: Confirm, Reject or Delay
-        """
-        pass
 
     # ----- Request state accumulation for the chain -----
 

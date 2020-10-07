@@ -15,7 +15,6 @@ class PaymentSettings(BamiSettings):
         self.diversity_confirm = 0
         self.should_audit_block = False
 
-        self.block_sign_delta = 0.3
         # Maximum wait time 100
         # Maximum wait block 100
         self.max_wait_time = 100

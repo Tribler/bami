@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABCMeta
-from asyncio import ensure_future, PriorityQueue, sleep
+from asyncio import ensure_future
 from binascii import hexlify
 from collections import defaultdict
 from decimal import Decimal
@@ -9,7 +9,8 @@ from random import Random
 from typing import Any, Dict, Optional, Tuple
 
 from bami.backbone.block import BamiBlock
-from bami.backbone.community import BamiCommunity, BlockResponse
+from bami.backbone.blockresponse import BlockResponseMixin, BlockResponse
+from bami.backbone.community import BamiCommunity
 from bami.backbone.exceptions import InvalidTransactionFormatException
 from bami.backbone.utils import (
     CONFIRM_TYPE,
@@ -47,12 +48,11 @@ Exchange of the value within one community, where value lives only in one commun
 """
 
 
-class PaymentCommunity(BamiCommunity, AuditMixin, metaclass=ABCMeta):
+class PaymentCommunity(
+    BamiCommunity, AuditMixin, BlockResponseMixin, metaclass=ABCMeta
+):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # self.transfer_queue = Queue()
-        # self.transfer_queue_task = ensure_future(self.evaluate_transfer_queue())
 
         # Add state db
         if not kwargs.get("settings"):
@@ -63,15 +63,8 @@ class PaymentCommunity(BamiCommunity, AuditMixin, metaclass=ABCMeta):
 
         self.reachability_cache = defaultdict(lambda: cachetools.LRUCache(100))
 
-        # Dictionary chain_id: block_dot -> block
-        self.tracked_blocks = defaultdict(lambda: {})
         self.peer_conf = defaultdict(lambda: defaultdict(int))
         self.should_audit_subcom = {}
-
-        self.counter_signing_block_queue = PriorityQueue()
-        self.block_sign_queue_task = ensure_future(
-            self.evaluate_counter_signing_blocks()
-        )
 
         self.audit_delta = kwargs.get("audit_delta")
         if not self.audit_delta:
@@ -352,56 +345,8 @@ class PaymentCommunity(BamiCommunity, AuditMixin, metaclass=ABCMeta):
 
         # Is this block related to my peer?
         if to_peer == self.my_pub_key_bin:
+            self.tracked_blocks[spend_block.com_id][spend_block.com_dot] = spend_block
             self.add_block_to_response_processing(spend_block)
-
-    # ------------ Block Response processing ---------
-
-    def add_block_to_response_processing(self, block: BamiBlock) -> None:
-        self.tracked_blocks[block.com_id][block.com_dot] = block
-
-        self.counter_signing_block_queue.put_nowait((block.com_seq_num, (0, block)))
-
-    def process_counter_signing_block(
-        self, block: BamiBlock, time_passed: float = None, num_block_passed: int = None,
-    ) -> bool:
-        """
-        Process block that should be counter-signed and return True if the block should be delayed more.
-        Args:
-            block: Processed block
-            time_passed: time passed since first added
-            num_block_passed: number of blocks passed since first added
-        Returns:
-            Should add to queue again.
-        """
-        res = self.block_response(block, time_passed, num_block_passed)
-        if res == BlockResponse.CONFIRM:
-            self.confirm(
-                block,
-                extra_data={b"value": decode_raw(block.transaction).get(b"value")},
-            )
-            return False
-        elif res == BlockResponse.REJECT:
-            self.reject(block)
-            return False
-        return True
-
-    async def evaluate_counter_signing_blocks(self, delta: float = None):
-        while True:
-            _delta = delta if delta else self.settings.block_sign_delta
-            priority, block_info = await self.counter_signing_block_queue.get()
-            process_time, block = block_info
-            should_delay = self.process_counter_signing_block(block, process_time)
-            self.logger.debug(
-                "Processing counter signing block. Delayed: %s", should_delay
-            )
-            if should_delay:
-                self.counter_signing_block_queue.put_nowait(
-                    (priority, (process_time + _delta, block))
-                )
-                await sleep(_delta)
-            else:
-                self.tracked_blocks[block.com_id].pop(block.com_dot)
-                await sleep(0.001)
 
     def block_response(
         self, block: BamiBlock, wait_time: float = None, wait_blocks: int = None
@@ -550,13 +495,5 @@ class PaymentCommunity(BamiCommunity, AuditMixin, metaclass=ABCMeta):
             self.should_store_store_update(block.com_id, block.com_seq_num),
         )
 
-    async def unload(self):
-        if not self.block_sign_queue_task.done():
-            self.block_sign_queue_task.cancel()
-        await super().unload()
-
-
-# class PaymentIPv8Community(
-#    IPv8SubCommunityFactory, RandomWalkDiscoveryStrategy, PaymentCommunity
-# ):
-#    pass
+    def confirm_tx_extra_data(self, block: BamiBlock) -> Dict:
+        return {b"value": decode_raw(block.transaction).get(b"value")}
