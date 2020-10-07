@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Union, Iterable
+from typing import Union, Iterable, Optional
 
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.peer import Peer
@@ -8,7 +8,7 @@ from bami.backbone.community_routines import (
     CommunityRoutines,
     MessageStateMachine,
 )
-from bami.backbone.utils import Links, AUDIT_TYPE
+from bami.backbone.utils import Links, AUDIT_TYPE, encode_raw
 from bami.backbone.exceptions import InvalidBlockException
 from bami.backbone.payload import (
     RawBlockBroadcastPayload,
@@ -146,7 +146,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
     def create_signed_block(
         self,
         block_type: bytes = b"unknown",
-        transaction: bytes = b"",
+        transaction: Optional[bytes] = None,
         prefix: bytes = b"",
         com_id: bytes = None,
         links: Links = None,
@@ -157,7 +157,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         This function will create, sign, persist block with given parameters.
         Args:
             block_type: bytes of the block
-            transaction: bytes blob of the transaction
+            transaction: bytes blob of the transaction, or None to indicate an empty transaction payload
             prefix: prefix for the community id. For example b'w' - for witnessing transactions
             com_id: sub-community id if applicable
             links: explicitly link to certain links in the sub-community. Warning - may lead to forks!
@@ -166,6 +166,9 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
         Returns:
             signed block
         """
+        if not transaction:
+            transaction = encode_raw(b'')
+
         block = BamiBlock.create(
             block_type,
             transaction,
