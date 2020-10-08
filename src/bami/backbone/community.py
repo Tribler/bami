@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, U
 
 from bami.backbone.block import BamiBlock
 from bami.backbone.block_sync import BlockSyncMixin
-from bami.backbone.community_routines import MessageStateMachine
+from bami.backbone.community_routines import MessageStateMachine, StatedMixin
 from bami.backbone.datastore.block_store import LMDBLockStore
 from bami.backbone.datastore.chain_store import ChainFactory
 from bami.backbone.datastore.database import BaseDB, ChainTopic, DBManager
@@ -203,6 +203,8 @@ class BamiCommunity(
         for base in BamiCommunity.__bases__:
             if issubclass(base, MessageStateMachine):
                 base.setup_messages(self)
+            if issubclass(base, StatedMixin):
+                base.setup(self)
 
         self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
 
@@ -355,6 +357,11 @@ class BamiCommunity(
                 self.processing_queue_tasks[mid].cancel()
         for subcom_id in self.my_subscriptions:
             await self.my_subscriptions[subcom_id].unload()
+
+        for base in BamiCommunity.__bases__:
+            if issubclass(base, StatedMixin):
+                base.unload(self)
+
         await super(BamiCommunity, self).unload()
 
         # Close the persistence layer

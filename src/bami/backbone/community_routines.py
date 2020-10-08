@@ -41,3 +41,17 @@ class MessageStateMachine(ABC):
     @abstractmethod
     def setup_messages(self) -> None:
         pass
+
+
+class StatedMixin(ABC):
+    """
+    This mixin describes a mixin that is stated, in other words, requires setup and unloading.
+    """
+
+    @abstractmethod
+    def setup(self) -> None:
+        pass
+
+    @abstractmethod
+    def unload(self) -> None:
+        pass
