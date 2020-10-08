@@ -204,6 +204,10 @@ class BamiCommunity(
             if issubclass(base, MessageStateMachine):
                 base.setup_messages(self)
 
+        for base in self.__class__.__mro__:
+            if "setup_mixin" in base.__dict__.keys():
+                base.setup_mixin(self)
+
         self.add_message_handler(SubscriptionsPayload, self.received_peer_subs)
 
     def create_subcom(self, *args, **kwargs) -> BaseSubCommunity:
@@ -350,6 +354,11 @@ class BamiCommunity(
     async def unload(self):
         self.logger.debug("Unloading the Plexus Community.")
         self.shutting_down = True
+
+        for base in self.__class__.__mro__:
+            if "unload_mixin" in base.__dict__.keys():
+                base.unload_mixin(self)
+
         for mid in self.processing_queue_tasks:
             if not self.processing_queue_tasks[mid].done():
                 self.processing_queue_tasks[mid].cancel()
