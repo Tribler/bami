@@ -167,7 +167,7 @@ class BlockSyncMixin(MessageStateMachine, CommunityRoutines, metaclass=ABCMeta):
             signed block
         """
         if not transaction:
-            transaction = encode_raw(b'')
+            transaction = encode_raw(b"")
 
         block = BamiBlock.create(
             block_type,
