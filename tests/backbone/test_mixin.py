@@ -2,7 +2,7 @@ from typing import Any, Optional
 
 from bami.backbone.datastore.database import BaseDB
 from bami.backbone.discovery import SubCommunityDiscoveryStrategy
-from bami.backbone.mixins import MixinRoutines
+from bami.backbone.mixins import StatedMixin
 from bami.backbone.settings import BamiSettings
 from ipv8.peer import Peer
 from ipv8.peerdiscovery.network import Network
@@ -13,7 +13,7 @@ from tests.mocking.base import create_node
 from tests.mocking.community import FakeBackCommunity
 
 
-class FakeMixin(MixinRoutines):
+class FakeStatedMixin(StatedMixin):
     def setup_mixin(self) -> None:
         self.inited = True
 
@@ -21,7 +21,7 @@ class FakeMixin(MixinRoutines):
         self.unloaded = True
 
 
-class MixinedBackCommunity(FakeBackCommunity, FakeMixin):
+class MixinedBackCommunity(FakeBackCommunity, FakeStatedMixin):
     def __init__(
         self,
         my_peer: Peer,

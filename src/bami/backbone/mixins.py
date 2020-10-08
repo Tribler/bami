@@ -1,4 +1,4 @@
-class MixinRoutines:
+class StatedMixin:
     def setup_mixin(self) -> None:
         pass
 
