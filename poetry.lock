@@ -690,7 +690,7 @@ python-versions = ">=3.5"
 
 [[package]]
 name = "pyipv8"
-version = "2.5.0"
+version = "2.3.0"
 description = "The Python implementation of the IPV8 library"
 category = "main"
 optional = false
@@ -1199,7 +1199,7 @@ testing = ["pytest (>=3.5,!=3.7.3)", "pytest-checkdocs (>=1.2.3)", "pytest-flake
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "5af820d53d7786a73b2e16bedb3f195b056f37a224ccc4b22e13cd80c3294e81"
+content-hash = "cacb5d1af9aecf47448c38481520cf591a6c922421b99272b3fb253b689593d7"
 
 [metadata.files]
 aiohttp = [
@@ -1733,8 +1733,8 @@ pygments = [
     {file = "Pygments-2.8.0.tar.gz", hash = "sha256:37a13ba168a02ac54cc5891a42b1caec333e59b66addb7fa633ea8a6d73445c0"},
 ]
 pyipv8 = [
-    {file = "pyipv8-2.5.0-py3-none-any.whl", hash = "sha256:2d2de14f8b123fd9b4706d7a42b051c31b48bc3fdeae29117b48a2d63ab527a1"},
-    {file = "pyipv8-2.5.0.tar.gz", hash = "sha256:f4dd20193641c2b0e6a39eca09e83f1f0140c848a1b849dfa66cefdb2505210d"},
+    {file = "pyipv8-2.3.0-py3-none-any.whl", hash = "sha256:72bde464195e530b4e4effd2a312c6bc6fb5220105570ff947dc3f8c208ef880"},
+    {file = "pyipv8-2.3.0.tar.gz", hash = "sha256:e51f0baf54308e0844c47dde6c2b3d095217d38cc110d95f7b4d70aabcebd628"},
 ]
 pyopenssl = [
     {file = "pyOpenSSL-20.0.1-py2.py3-none-any.whl", hash = "sha256:818ae18e06922c066f777a33f1fca45786d85edfe71cd043de6379337a7f274b"},
