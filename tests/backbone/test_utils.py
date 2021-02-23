@@ -1,6 +1,6 @@
-from unittest.mock import Mock
-
 import pytest
+
+from unittest.mock import Mock
 from bami.backbone.utils import (
     decode_links,
     decode_raw,

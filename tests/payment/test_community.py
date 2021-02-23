@@ -19,12 +19,7 @@ from bami.payment.exceptions import (
 import pytest
 
 from tests.conftest import FakeBlock
-from tests.mocking.base import (
-    create_and_connect_nodes,
-    deliver_messages,
-    SetupValues,
-    unload_nodes,
-)
+from tests.mocking.base import deliver_messages
 
 
 class FakePaymentCommunity(IPv8SubCommunityFactory, PaymentCommunity):
@@ -40,104 +35,91 @@ def num_nodes(request):
     return request.param
 
 
-@pytest.fixture()
+@pytest.fixture
 def overlay_class():
     return FakePaymentCommunity
 
 
-@pytest.fixture()
-async def set_vals(tmpdir_factory, overlay_class, num_nodes):
-    dirs = [
-        tmpdir_factory.mktemp(str(overlay_class.__name__), numbered=True)
-        for _ in range(num_nodes)
-    ]
-    nodes = create_and_connect_nodes(num_nodes, work_dirs=dirs, ov_class=overlay_class)
-    # Make sure every node has a community to listen to
-    community_id = nodes[0].overlay.my_pub_key_bin
-    context = nodes[0].overlay.state_db.context
-    for node in nodes:
-        node.overlay.subscribe_to_subcom(community_id)
-    yield SetupValues(nodes=nodes, community_id=community_id, context=context)
-    await unload_nodes(nodes)
-    for k in dirs:
-        k.remove(ignore_errors=True)
+@pytest.fixture
+def init_nodes():
+    return True
 
 
 class TestInitCommunity:
-    def test_empty(self, set_vals, num_nodes):
-        nodes = set_vals.nodes
+    def test_empty(self, set_vals_by_nodes, num_nodes):
+        nodes = set_vals_by_nodes.nodes
         assert len(nodes) == num_nodes
 
-    def test_init_setup(self, set_vals):
-        nodes = set_vals.nodes
+    def test_init_setup(self, set_vals_by_nodes):
+        nodes = set_vals_by_nodes.nodes
         assert nodes[0].overlay.decode_map[RawBlockBroadcastPayload.msg_id]
         assert nodes[0].overlay.decode_map[BlockBroadcastPayload.msg_id]
 
-    def test_subscribe(self, set_vals):
-        nodes = set_vals.nodes
-        assert nodes[0].overlay.is_subscribed(set_vals.community_id)
-        assert nodes[1].overlay.is_subscribed(set_vals.community_id)
+    def test_subscribe(self, set_vals_by_nodes):
+        nodes = set_vals_by_nodes.nodes
+        assert nodes[0].overlay.is_subscribed(set_vals_by_nodes.community_id)
+        assert nodes[1].overlay.is_subscribed(set_vals_by_nodes.community_id)
 
 
 class TestMint:
-    def test_invalid_mint_tx_bad_format(self, set_vals):
+    def test_invalid_mint_tx_bad_format(self, set_vals_by_nodes):
         mint_tx = {}
-        chain_id = set_vals.community_id
-        minter = set_vals.nodes[0].overlay.my_pub_key_bin
+        chain_id = set_vals_by_nodes.community_id
+        minter = set_vals_by_nodes.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidTransactionFormatException):
-            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+            set_vals_by_nodes.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
-    def test_invalid_mint_tx_value_out_of_range(self, set_vals):
+    def test_invalid_mint_tx_value_out_of_range(self, set_vals_by_nodes):
         mint_tx = {b"value": 10 ** 7}
-        chain_id = set_vals.community_id
-        minter = set_vals.nodes[0].overlay.my_pub_key_bin
+        chain_id = set_vals_by_nodes.community_id
+        minter = set_vals_by_nodes.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidMintRangeException):
-            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
+            set_vals_by_nodes.nodes[0].overlay.verify_mint(chain_id, minter, mint_tx)
 
-    def test_mint_value_unbound_value(self, set_vals):
+    def test_mint_value_unbound_value(self, set_vals_by_nodes):
         mint_tx = {b"value": 10 ** 7 - 1}
-        chain_id = set_vals.community_id
-        minter = set_vals.nodes[0].overlay.my_pub_key_bin
-        set_vals.nodes[0].overlay.state_db.apply_mint(
+        chain_id = set_vals_by_nodes.community_id
+        minter = set_vals_by_nodes.nodes[0].overlay.my_pub_key_bin
+        set_vals_by_nodes.nodes[0].overlay.state_db.apply_mint(
             chain_id,
             Dot((1, "123123")),
             GENESIS_LINK,
             minter,
-            Decimal(mint_tx.get(b"value"), set_vals.context),
+            Decimal(mint_tx.get(b"value"), set_vals_by_nodes.context),
             True,
         )
         next_mint = {b"value": 1}
         with pytest.raises(UnboundedMintException):
-            set_vals.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
+            set_vals_by_nodes.nodes[0].overlay.verify_mint(chain_id, minter, next_mint)
 
     @pytest.mark.asyncio
-    async def test_invalid_mint(self, set_vals):
-        nodes = set_vals.nodes
-        context = set_vals.context
+    async def test_invalid_mint(self, set_vals_by_nodes):
+        nodes = set_vals_by_nodes.nodes
+        context = set_vals_by_nodes.context
         minter = nodes[1].overlay.my_pub_key_bin
         with pytest.raises(UnknownMinterException):
             nodes[1].overlay.mint(value=Decimal(10, context))
         await deliver_messages()
-        n_nodes = len(set_vals.nodes)
+        n_nodes = len(set_vals_by_nodes.nodes)
         for i in range(n_nodes):
             assert nodes[i].overlay.state_db.get_balance(minter) == 0
 
     @pytest.mark.asyncio
-    async def test_valid_mint(self, set_vals):
-        nodes = set_vals.nodes
-        context = set_vals.context
+    async def test_valid_mint(self, set_vals_by_nodes):
+        nodes = set_vals_by_nodes.nodes
+        context = set_vals_by_nodes.context
         minter = nodes[0].overlay.my_pub_key_bin
         nodes[0].overlay.mint(value=Decimal(10, context))
         await deliver_messages(0.5)
-        n_nodes = len(set_vals.nodes)
+        n_nodes = len(set_vals_by_nodes.nodes)
         for i in range(n_nodes):
             assert nodes[i].overlay.state_db.get_balance(minter) > 0
 
 
 class TestSpend:
     @pytest.mark.asyncio
-    async def test_invalid_spend(self, set_vals):
-        vals = set_vals
+    async def test_invalid_spend(self, set_vals_by_nodes):
+        vals = set_vals_by_nodes
         spender = vals.nodes[1].overlay.my_pub_key_bin
         with pytest.raises(InsufficientBalanceException):
             vals.nodes[1].overlay.spend(
@@ -148,30 +130,30 @@ class TestSpend:
 
         await deliver_messages()
         # Should throw invalid mint exception
-        n_nodes = len(set_vals.nodes)
+        n_nodes = len(set_vals_by_nodes.nodes)
         for i in range(n_nodes):
             assert vals.nodes[i].overlay.state_db.get_balance(spender) == 0
 
-    def test_invalid_spend_bad_format(self, set_vals):
+    def test_invalid_spend_bad_format(self, set_vals_by_nodes):
         spend_tx = {}
-        minter = set_vals.nodes[0].overlay.my_pub_key_bin
+        minter = set_vals_by_nodes.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidTransactionFormatException):
-            set_vals.nodes[0].overlay.verify_spend(minter, spend_tx)
+            set_vals_by_nodes.nodes[0].overlay.verify_spend(minter, spend_tx)
 
-    def test_invalid_spend_value_out_of_range(self, set_vals):
+    def test_invalid_spend_value_out_of_range(self, set_vals_by_nodes):
         spend_tx = {
             b"value": 10 ** 7,
-            b"to_peer": set_vals.nodes[1].overlay.my_pub_key_bin,
+            b"to_peer": set_vals_by_nodes.nodes[1].overlay.my_pub_key_bin,
             b"prev_pairwise_link": GENESIS_LINK,
         }
-        spender = set_vals.nodes[0].overlay.my_pub_key_bin
+        spender = set_vals_by_nodes.nodes[0].overlay.my_pub_key_bin
         with pytest.raises(InvalidSpendRangeException):
-            set_vals.nodes[0].overlay.verify_spend(spender, spend_tx)
+            set_vals_by_nodes.nodes[0].overlay.verify_spend(spender, spend_tx)
 
     @pytest.mark.asyncio
-    async def test_valid_spend(self, set_vals):
-        vals = set_vals
-        n_nodes = len(set_vals.nodes)
+    async def test_valid_spend(self, set_vals_by_nodes):
+        vals = set_vals_by_nodes
+        n_nodes = len(set_vals_by_nodes.nodes)
         minter = vals.nodes[0].overlay.my_pub_key_bin
         vals.nodes[0].overlay.mint(value=Decimal(10, vals.context))
         spender = minter
@@ -196,8 +178,8 @@ class TestSpend:
             assert not vals.nodes[i].overlay.state_db.was_balance_negative(spender)
 
     @pytest.mark.asyncio
-    async def test_invalid_spend_ignore_validation(self, set_vals):
-        vals = set_vals
+    async def test_invalid_spend_ignore_validation(self, set_vals_by_nodes):
+        vals = set_vals_by_nodes
         spender = vals.nodes[1].overlay.my_pub_key_bin
         vals.nodes[1].overlay.spend(
             chain_id=vals.community_id,
@@ -217,14 +199,14 @@ class TestSpend:
 
 class TestAudit:
     # Test witness transaction
-    def test_apply_invalid_audit_tx(self, set_vals):
-        blk = FakeBlock(com_id=set_vals.community_id)
+    def test_apply_invalid_audit_tx(self, set_vals_by_nodes):
+        blk = FakeBlock(com_id=set_vals_by_nodes.community_id)
         i = 1
-        set_vals.nodes[0].overlay.audit_delta = 100
-        while set_vals.nodes[0].overlay.should_audit_chain_point(
+        set_vals_by_nodes.nodes[0].overlay.audit_delta = 100
+        while set_vals_by_nodes.nodes[0].overlay.should_audit_chain_point(
             blk.com_id, blk.public_key, i
         ):
             i += 1
         tx = (i, {b"t": (True, True)})
         with pytest.raises(InvalidAuditTransactionException):
-            set_vals.nodes[0].overlay.apply_audit_tx(blk, tx)
+            set_vals_by_nodes.nodes[0].overlay.apply_audit_tx(blk, tx)
