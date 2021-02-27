@@ -1,4 +1,5 @@
 # tests/conftest.py
+import collections
 from typing import Any, List, Union
 
 import pytest
@@ -15,6 +16,11 @@ from bami.backbone.utils import (
     encode_raw,
     GENESIS_LINK,
     Links,
+)
+from tests.mocking.base import (
+    create_and_connect_nodes,
+    SetupValues,
+    unload_nodes,
 )
 
 
@@ -51,12 +57,12 @@ class FakeBlock(BamiBlock):
         pers_seq_num = max(previous)[0] + 1
 
         if not com_id:
-            com_id = crypto.generate_key(u"curve25519").pub().key_to_bin()
+            com_id = crypto.generate_key("curve25519").pub().key_to_bin()
 
         if key:
             self.key = key
         else:
-            self.key = crypto.generate_key(u"curve25519")
+            self.key = crypto.generate_key("curve25519")
 
         if not transaction:
             transaction = encode_raw({"id": 42})
@@ -181,3 +187,55 @@ def chain():
 
 
 insert_function_copy = insert_function
+
+_DirsNodes = collections.namedtuple("DirNodes", ("dirs", "nodes"))
+
+
+def _set_vals_init(tmpdir_factory, overlay_class, num_nodes) -> _DirsNodes:
+    dirs = [
+        tmpdir_factory.mktemp(str(overlay_class.__name__), numbered=True)
+        for _ in range(num_nodes)
+    ]
+    nodes = create_and_connect_nodes(num_nodes, work_dirs=dirs, ov_class=overlay_class)
+
+    return _DirsNodes(dirs, nodes)
+
+
+def _set_vals_teardown(dirs) -> None:
+    for k in dirs:
+        k.remove(ignore_errors=True)
+
+
+def _init_nodes(nodes, community_id) -> None:
+    for node in nodes:
+        node.overlay.subscribe_to_subcom(community_id)
+
+
+@pytest.fixture
+async def set_vals_by_key(
+    tmpdir_factory, overlay_class, num_nodes: int, init_nodes: bool
+):
+    dirs, nodes = _set_vals_init(tmpdir_factory, overlay_class, num_nodes)
+    # Make sure every node has a community to listen to
+    community_key = default_eccrypto.generate_key("curve25519").pub()
+    community_id = community_key.key_to_bin()
+    if init_nodes:
+        _init_nodes(nodes, community_id)
+    yield SetupValues(nodes=nodes, community_id=community_id)
+    await unload_nodes(nodes)
+    _set_vals_teardown(dirs)
+
+
+@pytest.fixture
+async def set_vals_by_nodes(
+    tmpdir_factory, overlay_class, num_nodes: int, init_nodes: bool
+):
+    dirs, nodes = _set_vals_init(tmpdir_factory, overlay_class, num_nodes)
+    # Make sure every node has a community to listen to
+    community_id = nodes[0].overlay.my_pub_key_bin
+    context = nodes[0].overlay.state_db.context
+    if init_nodes:
+        _init_nodes(nodes, community_id)
+    yield SetupValues(nodes=nodes, community_id=community_id, context=context)
+    await unload_nodes(nodes)
+    _set_vals_teardown(dirs)
