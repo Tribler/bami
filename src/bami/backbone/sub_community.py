@@ -42,13 +42,13 @@ class IPv8SubCommunity(Community, BaseSubCommunity):
 
     def __init__(self, *args, **kwargs):
         self._subcom_id = kwargs.pop("subcom_id")
-        self.master_peer = Peer(self.subcom_id)
-        self._prefix = b"\x00" + self.version + self.master_peer.mid
+        peer = Peer(self.subcom_id)
+        self.community_id = peer.mid
         super().__init__(*args, **kwargs)
 
     def add_peer(self, peer: Peer):
         self.network.add_verified_peer(peer)
-        self.network.discover_services(peer, [self.master_peer.mid])
+        self.network.discover_services(peer, [self.community_id])
 
 
 class LightSubCommunity(BaseSubCommunity):

@@ -128,7 +128,7 @@ class MockSettings(object):
 
 
 class MockedCommunity(Community, CommunityRoutines):
-    master_peer = Peer(default_eccrypto.generate_key(u"very-low"))
+    community_id = Peer(default_eccrypto.generate_key(u"very-low")).mid
 
     def __init__(self, *args, **kwargs):
         if kwargs.get("work_dir"):
@@ -161,6 +161,8 @@ class MockedCommunity(Community, CommunityRoutines):
 
 
 class FakeBackCommunity(BamiCommunity, BlockResponseMixin):
+    community_id = b'\x00' * 20
+
     def incoming_frontier_queue(self, subcom_id: bytes) -> Queue:
         pass
 

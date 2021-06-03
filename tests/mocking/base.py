@@ -20,7 +20,7 @@ def connect_nodes(nodes, overlay_class):
             private_peer = other.my_peer
             public_peer = Peer(private_peer.public_key, private_peer.address)
             node.network.add_verified_peer(public_peer)
-            node.network.discover_services(public_peer, [overlay_class.master_peer.mid])
+            node.network.discover_services(public_peer, [overlay_class.community_id])
 
 
 def create_and_connect_nodes(num_nodes, work_dirs, ov_class):
@@ -33,7 +33,7 @@ def create_and_connect_nodes(num_nodes, work_dirs, ov_class):
 
 async def unload_nodes(nodes):
     for node in nodes:
-        await node.unload()
+        await node.stop()
     internet.clear()
 
 

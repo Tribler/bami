@@ -202,8 +202,8 @@ class TestChainBlock:
     def test_block_payload(self):
         blk = FakeBlock()
         blk_bytes = blk.pack()
-        unpacked = blk.serializer.ez_unpack_serializables([BlockPayload], blk_bytes)
-        blk2 = BamiBlock.from_payload(unpacked[0])
+        payload = blk.serializer.unpack_serializable(BlockPayload, blk_bytes)
+        blk2 = BamiBlock.from_payload(payload[0])
         assert blk2 == blk
 
     def test_pack_unpack(self):

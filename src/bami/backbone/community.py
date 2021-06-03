@@ -71,14 +71,7 @@ class BamiCommunity(
     """
     Community for secure backbone.
     """
-
-    master_peer = Peer(
-        unhexlify(
-            "4c69624e61434c504b3a062780beaeb40e70fca4cfc1b7751d734f361cf8d815db24dbb8a99fc98af4"
-            "39fc977d84f71a431f8825ba885a5cf86b2498c6b473f33dd20dbdcffd199048fc"
-        )
-    )
-    version = b"\x02"
+    community_id = unhexlify("5789fd5555d60c425694ac139d1d8d7ea37d009e")
 
     async def flex_runner(
         self,
@@ -303,10 +296,10 @@ class BamiCommunity(
 
     # ---- Introduction handshakes => Exchange your subscriptions ----------------
     def create_introduction_request(
-        self, socket_address: Any, extra_bytes: bytes = b""
+        self, socket_address: Any, extra_bytes: bytes = b"", new_style: bool = False
     ):
         extra_bytes = encode_raw(self.my_subcoms)
-        return super().create_introduction_request(socket_address, extra_bytes)
+        return super().create_introduction_request(socket_address, extra_bytes, new_style)
 
     def create_introduction_response(
         self,
@@ -316,6 +309,7 @@ class BamiCommunity(
         introduction=None,
         extra_bytes=b"",
         prefix=None,
+        new_style: bool = False
     ):
         extra_bytes = encode_raw(self.my_subcoms)
         return super().create_introduction_response(
@@ -325,6 +319,7 @@ class BamiCommunity(
             introduction,
             extra_bytes,
             prefix,
+            new_style
         )
 
     def introduction_response_callback(self, peer, dist, payload):
@@ -518,10 +513,4 @@ class BamiTestnetCommunity(BamiCommunity, metaclass=ABCMeta):
     """
 
     DB_NAME = "plexus_testnet"
-
-    master_peer = Peer(
-        unhexlify(
-            "4c69624e61434c504b3abaa09505b032231182217276fc355dc38fb8e4998a02f91d3ba00f6fbf648"
-            "5116b8c8c212be783fc3171a529f50ce25feb6c4dcc8106f468e5401bf37e8129e2"
-        )
-    )
+    community_id = unhexlify("4dcfcf5bacc89aa5af93ef8a695580c9ddf1f1a0")
