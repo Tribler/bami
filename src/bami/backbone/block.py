@@ -216,16 +216,14 @@ class BamiBlock(object):
         Returns:
             Block bytes
         """
-        return self.serializer.pack_multiple(
-            self.to_block_payload(signature).to_pack_list()
-        )[0]
+        return self.serializer.pack_serializable(self.to_block_payload(signature))
 
     @classmethod
     def unpack(
         cls, block_blob: bytes, serializer: Any = default_serializer
     ) -> BamiBlock:
-        payload = serializer.ez_unpack_serializables([BlockPayload], block_blob)
-        return BamiBlock.from_payload(payload[0], serializer)
+        payload = serializer.unpack_serializable(BlockPayload, block_blob)
+        return BamiBlock.from_payload(payload[0])
 
     @classmethod
     def from_payload(

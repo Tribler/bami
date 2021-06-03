@@ -58,6 +58,6 @@ async def test_mixin_logic(tmpdir_factory):
     dir = tmpdir_factory.mktemp(str(MixinedBackCommunity.__name__), numbered=True)
     node = create_node(MixinedBackCommunity, work_dir=str(dir))
     assert node.overlay.inited
-    await node.unload()
+    await node.stop()
     assert node.overlay.unloaded
     dir.remove(ignore_errors=True)
