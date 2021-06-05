@@ -11,7 +11,6 @@ BytesLinks = NewType("BytesLinks", bytes)
 Dot = NewType("Dot", Tuple[int, ShortKey])
 Links = NewType("Links", Tuple[Tuple[int, ShortKey]])
 Ranges = NewType("Ranges", Tuple[Tuple[int, int]])
-StateVote = NewType("StateVote", Tuple[bytes, bytes, bytes])
 
 GENESIS_HASH = b"0" * 32  # ID of the first block of the chain.
 GENESIS_SEQ = 1
