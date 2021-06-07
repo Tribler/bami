@@ -82,6 +82,14 @@ def black(session: Session) -> None:
 
 
 @nox.session(python="3.9")
+def black_check(session: Session) -> None:
+    """Run black code formatter checker."""
+    args = session.posargs or ["--check", *locations]
+    install_with_constraints(session, "black")
+    session.run("black", *args)
+
+
+@nox.session(python="3.9")
 def mypy(session: Session) -> None:
     """Type-check using mypy."""
     args = session.posargs or locations
