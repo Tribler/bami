@@ -12,7 +12,7 @@ nox.options.sessions = (
     "black",
     "tests",
 )
-# Additional options "safety", "lint", "lint", "mypy", "pytype"
+# Additional options "safety", "lint", "mypy", "pytype"
 package = "bami"
 
 
@@ -39,7 +39,6 @@ def lint(session: Session) -> None:
         session,
         "flake8",
         "flake8-black",
-        "flake8-bandit",
         "flake8-bandit",
         "flake8-import-order",
         "flake8-annotations",
