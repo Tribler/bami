@@ -136,5 +136,6 @@ def tests(session: Session) -> None:
         "pytest-mock",
         "pytest-asyncio",
         "pytest-xdist",
+        "asynctest",
     )
     session.run("pytest", *args)
