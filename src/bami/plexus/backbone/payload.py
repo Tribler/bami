@@ -94,18 +94,6 @@ class BlocksRequestPayload(ComparablePayload):
     names = ["subcom_id", "frontier_diff"]
 
 
-class StateRequestPayload(ComparablePayload):
-    msg_id = 9
-    format_list = ["varlenH", "varlenH"]
-    names = ["chain_id", "state_request"]
-
-
-class StateResponsePayload(ComparablePayload):
-    msg_id = 10
-    format_list = ["varlenH", "varlenH"]
-    names = ["subcom_id", "frontier_diff"]
-
-
 @vp_compile
 class FrontierResponsePayload(ComparablePayload):
     msg_id = 11
