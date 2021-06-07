@@ -8,7 +8,7 @@ authors = ["grimadas <bulat.nasrulin@gmail.com>"]
 python = "^3.7"
 pyipv8 = "2.6.0"
 msgpack = "^1.0.0"
-lmdb = "^0.98"
+lmdb = "^1.2.1"
 cachetools = "^4.1.0"
 
 [tool.poetry.scripts]
