@@ -12,7 +12,7 @@ nox.options.sessions = (
     "black",
     "tests",
 )
-# Additional options "safety", "lint", "lint", "mypy", "pytype"
+# Additional options "safety", "lint", "mypy", "pytype"
 package = "bami"
 
 
@@ -39,7 +39,6 @@ def lint(session: Session) -> None:
         session,
         "flake8",
         "flake8-black",
-        "flake8-bandit",
         "flake8-bandit",
         "flake8-import-order",
         "flake8-annotations",
@@ -78,6 +77,14 @@ def safety(session: Session) -> None:
 def black(session: Session) -> None:
     """Run black code formatter."""
     args = session.posargs or locations
+    install_with_constraints(session, "black")
+    session.run("black", *args)
+
+
+@nox.session(python="3.9")
+def black_check(session: Session) -> None:
+    """Run black code formatter checker."""
+    args = session.posargs or ["--check", *locations]
     install_with_constraints(session, "black")
     session.run("black", *args)
 

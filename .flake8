@@ -1,9 +1,9 @@
 # .flake8
 [flake8]
 select = ANN,B,B9,BLK,C,DAR,E,F,W,I,S
-ignore = E203,W503,E501
+ignore = E203,W503,E501,ANN101,ANN102
 max-line-length = 88
-application-import-names = python_project,tests
-import-order-style = google
+application-import-names = python_project,tests,bami
+import-order-style = cryptography
 per-file-ignores = tests/*:S101,ANN
                    noxfile.py:ANN
