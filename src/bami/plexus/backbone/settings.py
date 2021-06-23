@@ -1,27 +1,3 @@
-from enum import Enum
-
-
-class SecurityMode(Enum):
-    """
-    Implementations of security implementations of Trustchain.
-    """
-
-    VANILLA = 1
-    AUDIT = 2
-    BOTH = 3
-
-
-class SyncMode(Enum):
-    """
-    Gossip synchronization modes
-    """
-
-    BLOCK_SYNC = 1
-    STATE_SYNC = 2
-    FULL_SYNC = 3
-    PASSIVE = 4
-
-
 class BamiSettings(object):
     """
     This class holds various settings regarding TrustChain.
