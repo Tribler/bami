@@ -5,7 +5,7 @@ from ipv8.community import Community
 from ipv8.peer import Peer
 
 from bami.plexus.backbone.community_routines import CommunityRoutines
-from bami.plexus.backbone.exceptions import UnavailableIPv8Exception
+from bami.plexus.backbone.exceptions import IPv8UnavailableException
 
 
 class BaseSubCommunity(ABC):
@@ -85,7 +85,7 @@ class IPv8SubCommunityFactory(BaseSubCommunityFactory, metaclass=ABCMeta):
             SubCommunity as an IPv8 community
         """
         if not self.ipv8:
-            raise UnavailableIPv8Exception("Cannot create subcommunity without IPv8")
+            raise IPv8UnavailableException("Cannot create subcommunity without IPv8")
         else:
             subcom = IPv8SubCommunity(
                 self.my_peer, self.ipv8.endpoint, self.network, *args, **kwargs
