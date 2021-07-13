@@ -1,5 +1,4 @@
 from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
-from ipv8.messaging.serialization import Payload
 
 
 @vp_compile
@@ -21,20 +20,12 @@ class PeerPayload(VariablePayload):
     names = ["address", "public_key"]
 
 
-class PushPayload(Payload):
+@vp_compile
+class PushPayload(VariablePayload):
     """
     Nested payload that contains multiple PeerPayload.
     """
 
     msg_id = 2
     format_list = [[PeerPayload]]
-
-    def __init__(self, peers):
-        self.peers = peers
-
-    def to_pack_list(self):
-        return [("payload-list", self.peers)]
-
-    @classmethod
-    def from_unpack_list(cls, *args):
-        return PushPayload(*args)
+    names = ["peers"]
