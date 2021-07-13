@@ -138,3 +138,6 @@ dmypy.json
 
 # IDE files
 .idea
+
+# simulation data file
+simulations/**/data
