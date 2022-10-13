@@ -1,3 +1,4 @@
+from asyncio import get_event_loop
 import random
 import sys
 from binascii import unhexlify
@@ -50,9 +51,8 @@ class BasaltCommunity(Community):
         """
         known_peers = self.get_peers()
         if len(known_peers) >= self.settings.min_bootstrap_peers:
-            self._logger.info(
-                "Basalt bootstrapping finished, found %d peers", len(self.get_peers())
-            )
+            self.logger.info("🕸️ <t=%.2f> Basalt bootstrapping finished, found %d peers",
+                             get_event_loop().time(), len(self.get_peers()))
             self.cancel_pending_task("check_sufficient_peers")
 
             # Convert IPv8 peers to Basalt peers
@@ -115,9 +115,8 @@ class BasaltCommunity(Community):
         We received a push message from another peer, so we update our samples.
         """
         peers = []
-        self.logger.info(
-            "Received push message with %d peer from peer %s", len(payload.peers), peer
-        )
+        self.logger.info("✉️ <t=%.2f> Received push message with %d peer from peer %s",
+                         get_event_loop().time(), len(payload.peers), peer)
         for peer_payload in payload.peers:
             peers.append(
                 BasaltPeer(peer_payload.public_key, address=peer_payload.address)
