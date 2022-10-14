@@ -82,6 +82,20 @@ class DistAttr(Dist):
 
 
 class Config:
+    """A boilerplate class for dynamic configuration.
+    The configuration is defined as a dataclass.
+    For example:
+
+    >>> class TestConfig(Config):
+    >>>     a = 10
+    >>>     b = Dist('norm', [100, 10])
+    >>>     c = Func(lambda x: x)
+    >>>     d = [Dist('sample', [1, 2, 3, 4]), 2, 1]
+    >>>     e = {'test': Dist('norm', [50, 10])}
+    >>> TestConfig.get()
+    {'a': 10, 'b': 82.53996650533743, 'c': <function TestConfig.<lambda> at 0x7ffa14acd5a0>, 'd': [4, 2, 1], 'e': {'test': 49.25074280219384}}
+
+    """
     @classmethod
     def save_to_yaml(cls, yaml_file):
         with open(yaml_file, 'w') as s:

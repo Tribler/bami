@@ -34,7 +34,7 @@ class BamiSimulation:
     """
     MAIN_OVERLAY: Optional[str] = None
 
-    def __init__(self, settings: SimulationSettings, community_map: Dict[str, Type[Community]] = None) -> None:
+    def __init__(self, settings: SimulationSettings) -> None:
         super().__init__()
         self.settings = settings
         self.nodes = {}
@@ -47,8 +47,8 @@ class BamiSimulation:
         self.address_to_location = {}
         self.network = SimulatedNetwork(settings.location_latency_generator)
 
-        if community_map:
-            self.communities = community_map
+        if settings.community_map:
+            self.communities = settings.community_map
         else:
             self.communities = {}
 

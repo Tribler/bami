@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, Type
 
 import networkx as nx
+from ipv8.types import Community
 
 from common.utils import random_topology
 from common.config import Config, Dist
@@ -58,6 +59,9 @@ class SimulationSettings:
     # The IPv8 ticker is responsible for community walking and discovering other peers, but can significantly limit
     # performance. Setting this option to False cancels the IPv8 ticker, improving performance.
     enable_ipv8_ticker: bool = True
+
+    # A map for community_name: community class implementation to be used in simulation
+    community_map: Optional[Dict[str, Type[Community]]] = None
 
     def __post_init__(self):
         if not self.topology:
