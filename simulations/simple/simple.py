@@ -1,5 +1,5 @@
-from asyncio import ensure_future, get_event_loop, set_event_loop, sleep
 import os
+from asyncio import ensure_future, get_event_loop, set_event_loop, sleep
 
 from ipv8.community import Community
 from ipv8.configuration import ConfigBuilder
@@ -10,7 +10,9 @@ from ipv8_service import IPv8
 from common.discrete_loop import DiscreteLoop
 from common.network import SimulatedNetwork
 from common.simulation_endpoint import SimulationEndpoint
-from settings import DefaultLocations
+from common.utils import time_mark
+from settings import LocalLocations
+from simulation import SimulatedCommunityMixin
 
 
 @vp_compile
@@ -53,17 +55,22 @@ class PingPongCommunity(Community):
         self.logger.info("🧊 <t=%.1f> peer %s received pong", get_event_loop().time(), self.my_peer.address)
 
 
+class SimulatedPingPong(SimulatedCommunityMixin, PingPongCommunity):
+    send_ping = time_mark(PingPongCommunity.send_ping)
+    on_ping_message = time_mark(PingPongCommunity.on_ping_message)
+
+
 async def start_communities():
     instances = []
-    network = SimulatedNetwork(DefaultLocations)
-    for i in range(1, 10):
+    network = SimulatedNetwork(LocalLocations)
+    for i in range(1, 6):
         builder = ConfigBuilder().clear_keys().clear_overlays()
         builder.add_key("my peer", "medium", f"ec{i}.pem")
-        # builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
-        builder.add_overlay("BasaltCommunity", "my peer", [], [], {}, [('started',)])
+        builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
         endpoint = SimulationEndpoint(network)
+
         instance = IPv8(builder.finalize(), endpoint_override=endpoint,
-                        extra_communities={'BasaltCommunity': PingPongCommunity})
+                        extra_communities={'PingPongCommunity': SimulatedPingPong})
         await instance.start()
         instances.append(instance)
 
@@ -79,6 +86,7 @@ async def run_simulation():
     await start_communities()
     await sleep(10)
     get_event_loop().stop()
+
 
 if __name__ == "__main__":
     # We use a discrete event loop to enable quick simulations.

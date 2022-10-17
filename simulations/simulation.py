@@ -1,22 +1,35 @@
 import asyncio
-from asyncio import sleep
 import logging
 import os
 import shutil
 import time
-from typing import Dict, Optional, Type
+from asyncio import sleep, get_event_loop
+from typing import Optional
 
+import yappi
 from ipv8.configuration import ConfigBuilder
 from ipv8.messaging.interfaces.statistics_endpoint import StatisticsEndpoint
-from ipv8.taskmanager import TaskManager
-from ipv8.types import Community
+from ipv8.types import Peer, AnyPayload
 from ipv8_service import IPv8
-import yappi
 
 from common.discrete_loop import DiscreteLoop
 from common.network import SimulatedNetwork
 from common.simulation_endpoint import SimulationEndpoint
 from simulations.settings import SimulationSettings
+
+
+class SimulatedCommunityMixin:
+    """Mixin to replace the message send with a delay from previous marker.
+    This also requires to assign _start_time in the start of critical zone using `set_time_mark`, or `time_mark`.
+    """
+
+    def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
+        end_time = time.perf_counter()
+        delta = end_time - self._start_time
+        get_event_loop().call_later(
+            delta,
+            super().ez_send,
+            peer, *payloads)
 
 
 class BamiSimulation:
