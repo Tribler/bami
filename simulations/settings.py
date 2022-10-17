@@ -1,5 +1,30 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict, Type
+
+import networkx as nx
+from ipv8.types import Community
+
+from common.utils import random_topology
+from common.config import Config, Dist
+
+
+class DefaultLocations(Config):
+    locations = Dist('sample', {'weight': [0.6, 0.2, 0.2], 'values': ['Tokyo', 'Ireland', 'Ohio']})
+    latencies = {
+        'Ohio': {'Ohio': Dist('invgamma', (5.54090, 0.333305, 0.987249)),
+                 'Ireland': Dist('norm', (73.6995, 1.19583092197097127)),
+                 'Tokyo': Dist('norm', (156.00904977375566, 0.09469886668079797))
+                 },
+        'Ireland': {'Ireland': Dist('invgamma', (6.4360455224301525, 0.8312748033308526, 1.086191852963273)),
+                    'Tokyo': Dist('norm', (131.0275, 0.25834811785650774))
+                    },
+        'Tokyo': {'Tokyo': Dist('invgamma', (11.104508341331055, 0.3371934865734555, 2.0258998705983737))}
+    }
+
+
+class LocalLocations(Config):
+    locations = Dist('sample', ['local'])
+    latencies = {'local': {'local': 0}}
 
 
 @dataclass
@@ -25,9 +50,19 @@ class SimulationSettings:
     # Whether we enable statistics like message sizes and frequencies.
     enable_community_statistics: bool = False
 
-    # Optional CSV file with a latency matrix (space-separated).
-    latencies_file: Optional[str] = None
+    # Config class for latency specification, as latency distribution matrix
+    location_latency_generator: Config = DefaultLocations
+
+    # Optional topology for the overlay network
+    topology: Optional[nx.DiGraph] = None
 
     # The IPv8 ticker is responsible for community walking and discovering other peers, but can significantly limit
     # performance. Setting this option to False cancels the IPv8 ticker, improving performance.
     enable_ipv8_ticker: bool = True
+
+    # A map for community_name: community class implementation to be used in simulation
+    community_map: Optional[Dict[str, Type[Community]]] = None
+
+    def __post_init__(self):
+        if not self.topology:
+            self.topology = random_topology(self.peers)
