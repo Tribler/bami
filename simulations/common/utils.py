@@ -1,9 +1,25 @@
+import time
 from copy import deepcopy
-from functools import reduce
+from functools import reduce, wraps
 from itertools import product
 from operator import getitem
 
 import networkx as nx
+
+
+def time_mark(func):
+    @wraps(func)
+    def timeit_wrapper(self, *args, **kwargs):
+        start_time = time.perf_counter()
+        self._start_time = start_time
+        result = func(self, *args, **kwargs)
+        return result
+
+    return timeit_wrapper
+
+
+def set_time_mark(self):
+    self._start_time = time.perf_counter()
 
 
 def set_nested_value(dd, *keys):
@@ -57,7 +73,7 @@ def connected_topology(num_peers):
 
 
 class Cache:
-    """Utility class to work with Dist, DistAttr"""
+    """Utility class to work with Dist, DistAttr to fetch a batch of values and store it."""
 
     def __init__(self, generator, cache_num=20, symmetric=True):
         self.gen = generator
