@@ -15,14 +15,16 @@ class TransactionPayload(VariablePayload):
     names = ["script"]
 
 
+# LogEntryPayload(self.my_id, sn + 1, entry_type, message_hash, prev_hash, cp_id, cp_seq_num)
+
 @vp_compile
 class LogEntryPayload(VariablePayload):
     """
     Log entry in tamper-evident log of a peer
     """
     msg_id = 2
-    format_list = ["I", "?", "74s", "I", "64s", "64s"]
-    names = ["sn", "is_send", "cp_pk", "cp_sn", "m_hash", "p_hash"]
+    format_list = ["74s", "I", "?", "64s", "74s", "I", "varlenH"]
+    names = ["pk", "sn", "is_send", "p_hash", "cp_pk", "cp_sn", "msg"]
 
 
 @dataclass
