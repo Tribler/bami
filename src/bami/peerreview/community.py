@@ -1,17 +1,21 @@
+import random
 from asyncio import get_event_loop
 from binascii import unhexlify
-import random
 from collections import defaultdict
+from typing import Tuple, NewType
 
 from ipv8.community import Community
-from ipv8.lazy_community import lazy_wrapper
+from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.types import Payload, Peer
 
-from bami.peerreview.database import EntryType, TamperEvidentLog, PeerTxDB
+from bami.peerreview.database import TamperEvidentLog, PeerTxDB, EntryType
 from bami.peerreview.payload import LogEntryPayload, TransactionPayload, TxsChallengePayload, TxId, TxsRequestPayload, \
-    TxsProofPayload
+    TxsProofPayload, LoggedMessagePayload, LoggedAuthPayload
 from bami.peerreview.settings import PeerReviewSettings
 from bami.peerreview.utils import get_random_string, payload_hash
+
+EntryHash = NewType('EntryHash', bytes)
+EntrySignature = NewType('EntrySignature', bytes)
 
 
 class PeerReviewCommunity(Community):
@@ -25,24 +29,62 @@ class PeerReviewCommunity(Community):
         super().__init__(*args, **kwargs)
 
         self.pr_logs = defaultdict(lambda: TamperEvidentLog())
+        self.log_auth = defaultdict(lambda: {})
+
         self.known_peer_txs = PeerTxDB()
 
         # Message state machine
+        # Gossip messages
         self.add_message_handler(TransactionPayload, self.received_transaction)
         self.add_message_handler(TxsChallengePayload, self.received_txs_challenge)
         self.add_message_handler(TxsProofPayload, self.received_txs_proof)
         self.add_message_handler(TxsRequestPayload, self.received_tx_request)
+
+        # PeerReview messages
+        self.add_message_handler(LogEntryPayload, self.received_log_entry)
+        self.add_message_handler(LoggedMessagePayload, self.received_logged_message)
+        self.add_message_handler(LoggedAuthPayload, self.received_log_authenticator)
 
         self.my_peer_id = self.my_peer.public_key.key_to_bin()
 
         self.start_reconciliation()
         self.start_tx_creation()
 
+    def create_new_log_entry(self, entry_type: EntryType, cp_pk: bytes, cp_sn: int, msg_hash: bytes) -> \
+            Tuple[LogEntryPayload, EntryHash, EntrySignature]:
+        new_entry = self.pr_logs[self.my_peer_id].create_new_entry(self.my_peer_id,
+                                                                   entry_type,
+                                                                   cp_pk,
+                                                                   cp_sn,
+                                                                   msg_hash)
+        entry_hash = payload_hash(new_entry)
+        signature = self.crypto.create_signature(self.my_peer.key, entry_hash)
+
+        auth_payload = LoggedAuthPayload(new_entry.pk, new_entry.sn, entry_hash, signature)
+        self.log_auth[self.my_peer_id][new_entry.sn] = auth_payload
+
+        return new_entry, entry_hash, signature
+
     def random_push(self, payload: Payload):
         f = min(self.settings.fanout, len(self.get_peers()))
         selected = random.sample(self.get_peers(), f)
+        msg_hash = payload_hash(payload)
         for p in selected:
-            self.ez_send(p, payload)
+            new_entry, entry_hash, signature = self.create_new_log_entry(EntryType.SEND,
+                                                                         p.public_key.key_to_bin(),
+                                                                         0,
+                                                                         msg_hash
+                                                                         )
+            # names = ["pk", "sn", "p_hash", "sign", "msg"]
+            # format_list = ["74s", "I", "64s", "64s", TransactionPayload, "64s"]
+            # names = ["pk", "sn", "p_hash", "sign", "msg", "lh"]
+
+            # print(len(self.my_peer_id), len(signature), len(entry_hash))
+            # names = ["pk", "sn", "p_hash", "sign", "msg", "lh"]
+            logged_msg_payload = LoggedMessagePayload(self.my_peer_id, new_entry.sn, new_entry.p_hash,
+                                                      signature, payload, entry_hash
+                                                      )
+            self.ez_send(p, logged_msg_payload, sign=False)
 
     # Client routines
     def create_transaction(self):
@@ -83,7 +125,7 @@ class PeerReviewCommunity(Community):
             set_diff = my_state - peer_state
 
             request = TxsChallengePayload([TxId(s) for s in set_diff])
-            self.ez_send(p, request)
+            self.ez_send(p, request, sign=False)
 
     @lazy_wrapper(TxsChallengePayload)
     def received_txs_challenge(self, p: Peer, payload: TxsChallengePayload):
@@ -114,20 +156,10 @@ class PeerReviewCommunity(Community):
         for t in payload.tx_ids:
             tx_payload = self.known_peer_txs.get_tx_payload(t.tx_id)
             self.ez_send(p, tx_payload)
-            
+
     @lazy_wrapper(LogEntryPayload)
     def received_log_entry(self, p: Peer, payload: LogEntryPayload):
         self.logger.debug("{} Received log entry from peer {}".format(get_event_loop().time(), p))
-
-        # names = ["pk", "sn", "is_send", "p_hash", "cp_pk", "cp_sn", "varlenH"]
-        # payload.pk - public key of the logger
-        # payload.sn - seq number of the logger
-        # payload.is_send - send or receive entry
-        # payload.p_hash  - previous hash of the log entry
-        # payload.cp_pk  - counter-party public key
-        # payload.cp_sn - counter-party sequence number
-        # payload.msg - the message recorded at the log entry.
-        pass
 
     @lazy_wrapper(TransactionPayload)
     def received_transaction(self, p: Peer, payload: TransactionPayload):
@@ -146,3 +178,26 @@ class PeerReviewCommunity(Community):
         p_id = p.public_key.key_to_bin()
         for t in payload.tx_ids:
             self.known_peer_txs.add_peer_tx(p_id, t.tx_id)
+
+    @lazy_wrapper_unsigned(LoggedMessagePayload)
+    def received_logged_message(self, p: Peer, payload: LoggedMessagePayload):
+        self.logger.debug("{} Received logged message from {}".format(get_event_loop().time(), p))
+        auth_payload = LoggedAuthPayload(payload.pk, payload.sn, payload.lh, payload.sign)
+        self.log_auth[payload.pk][payload.sn] = auth_payload
+
+        # Respond with acknowledgement
+        self.acknowledge_message(p, payload)
+
+    def acknowledge_message(self, p: Peer, payload: LoggedMessagePayload):
+
+        new_entry, entry_hash, entry_sign = self.create_new_log_entry(EntryType.RECEIVE, payload.pk, payload.sn,
+                                                                      payload_hash(payload.msg))
+        # Respond with auth for the log
+        auth_payload = self.log_auth[self.my_peer_id][new_entry.sn]
+
+        self.ez_send(p, auth_payload, sign=False)
+
+    @lazy_wrapper_unsigned(LoggedAuthPayload)
+    def received_log_authenticator(self, p: Peer, payload: LoggedAuthPayload):
+
+        self.log_auth[payload.pk][payload.sn] = payload

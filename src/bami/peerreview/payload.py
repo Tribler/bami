@@ -15,8 +15,6 @@ class TransactionPayload(VariablePayload):
     names = ["script"]
 
 
-# LogEntryPayload(self.my_id, sn + 1, entry_type, message_hash, prev_hash, cp_id, cp_seq_num)
-
 @vp_compile
 class LogEntryPayload(VariablePayload):
     """
@@ -45,3 +43,29 @@ class TxsRequestPayload:
 @dataclass(msg_id=5)
 class TxsProofPayload:
     tx_ids: [TxId]
+
+
+@dataclass(msg_id=6)
+class LoggedMessagePayload:
+    pk: bytes
+    sn: int
+    p_hash: bytes
+    sign: bytes
+    msg: TransactionPayload
+
+
+@vp_compile
+class LoggedMessagePayload(VariablePayload):
+    """
+    Log entry in tamper-evident log of a peer
+    """
+    msg_id = 6
+    format_list = ["74s", "I", "32s", "64s", TransactionPayload, "32s"]
+    names = ["pk", "sn", "p_hash", "sign", "msg", "lh"]
+
+
+@vp_compile
+class LoggedAuthPayload(VariablePayload):
+    msg_id = 7
+    format_list = ["74s", "I", "64s", "64s"]
+    names = ["pk", "sn", "lh", "sign"]

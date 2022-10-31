@@ -17,6 +17,7 @@ class EntryType(Enum):
     SEND = True
     RECEIVE = False
 
+
 class PeerTxDB:
 
     def __init__(self):
@@ -38,7 +39,7 @@ class PeerTxDB:
 
 class TamperEvidentLog:
 
-    def __init__(self, my_id: bytes):
+    def __init__(self):
         # PeerId -> Message Auth?
 
         self.peer_log = defaultdict(lambda: {})
@@ -51,18 +52,19 @@ class TamperEvidentLog:
         self.log_hashes = defaultdict(lambda: {})
         self.pending_hashes = defaultdict(lambda: {})
 
-        self.my_id = my_id
-
     # def add_entry(self, p_pk: Any, sn: int, is_send: bool, cp_pk: Any, cp_sn: int, m_id: bytes, prev_hash: bytes):
     #    self.peer_log[p_pk][sn] =
 
     def create_new_entry(self, p_id: bytes, entry_type: EntryType,
-                         cp_id: bytes, cp_seq_num: int,  message_hash: bytes) -> LogEntryPayload:
+                         cp_id: bytes, cp_seq_num: int, message: bytes) -> LogEntryPayload:
         sn = self.get_last_seq_num(p_id)
         prev_hash = self.log_hashes[p_id].get(sn, None) if sn > 1 else b'0'
-        new_entry = LogEntryPayload(p_id, sn + 1, entry_type, message_hash, prev_hash, cp_id, cp_seq_num)
+
+        new_entry = LogEntryPayload(p_id, sn + 1, entry_type, prev_hash, cp_id, cp_seq_num, message)
         self.entries[p_id][sn + 1] = new_entry
+
         self.log_hashes[p_id][sn + 1] = payload_hash(new_entry)
+        return new_entry
 
     def add_entry(self, p_id: str, seq_num: int, claimed_prev_hash: Any, entry: Any):
         prev_hash = self.log_hashes[p_id].get(seq_num, None) if seq_num > 1 else b'0'
@@ -91,8 +93,8 @@ class TamperEvidentLog:
         else:
             self.pending_hashes[p_id][seq_num] = tx_hash
 
-    def get_last_seq_num(self, p_id: str) -> int:
+    def get_last_seq_num(self, p_id: bytes) -> int:
         return self.last_seq_num[p_id]
 
-    def get_entry(self, p_id: str, seq_num: int) -> Optional[Any]:
+    def get_entry(self, p_id: bytes, seq_num: int) -> Optional[Any]:
         return self.peer_txs[p_id].get(seq_num, None)
