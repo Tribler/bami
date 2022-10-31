@@ -44,6 +44,9 @@ class SimulationSettings:
     # The duration of the simulation in seconds.
     duration: int = 120
 
+    # The duration for discovery
+    discovery_delay: int = 160
+
     # The logging level during the experiment.
     logging_level: str = "INFO"
 

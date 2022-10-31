@@ -1,4 +1,5 @@
 from asyncio import ensure_future
+import logging
 
 from ipv8.configuration import ConfigBuilder
 
@@ -26,9 +27,13 @@ class SimulatedBasalt(SimulatedCommunityMixin, PeerReviewCommunity):
 
 if __name__ == "__main__":
     settings = SimulationSettings()
-    settings.peers = 25
-    settings.duration = 20
-    settings.topology = connected_topology(25)
+    N = 100
+    settings.peers = N
+    settings.duration = 120
+    settings.topology = connected_topology(N)
+    settings.logging_level = 'WARNING'
+
+    print("E=", settings.topology.number_of_edges())
     settings.community_map = {'PeerReviewCommunity': PeerReviewCommunity}
 
     simulation = BasicPeerReviewSimulation(settings)

@@ -47,21 +47,13 @@ class TxsProofPayload:
 
 @dataclass(msg_id=6)
 class LoggedMessagePayload:
+    """Log entry with number sn in a tamper evident log of peer with public key pk."""
     pk: bytes
     sn: int
     p_hash: bytes
     sign: bytes
     msg: TransactionPayload
-
-
-@vp_compile
-class LoggedMessagePayload(VariablePayload):
-    """
-    Log entry in tamper-evident log of a peer
-    """
-    msg_id = 6
-    format_list = ["74s", "I", "32s", "64s", TransactionPayload, "32s"]
-    names = ["pk", "sn", "p_hash", "sign", "msg", "lh"]
+    lh: bytes
 
 
 @vp_compile
