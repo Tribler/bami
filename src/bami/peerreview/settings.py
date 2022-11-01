@@ -3,11 +3,11 @@ class PeerReviewSettings:
         # Transaction creation parameters
         self.script_size = 100  # in bytes
         self.tx_freq = 5  # in seconds
-        self.tx_delay = 0
+        self.tx_delay = 2
 
         # Reconciliation settings
-        self.recon_freq = 2  # in seconds
-        self.recon_fanout = 5  # selected peers for reconciliation
+        self.recon_freq = 1  # in seconds
+        self.recon_fanout = 7  # selected peers for reconciliation
         self.recon_delay = 0
 
         # Gossip settings

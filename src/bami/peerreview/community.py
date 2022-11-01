@@ -54,7 +54,6 @@ class PeerReviewCommunity(Community):
             self.start_tx_creation()
 
     def start_tasks(self):
-        print("The number of peers i'm connected to ", len(self.get_peers()))
         self.start_reconciliation()
         self.start_tx_creation()
 
@@ -73,7 +72,7 @@ class PeerReviewCommunity(Community):
 
         return new_entry, entry_hash, signature
 
-    def logged_push(self, p: Peer, payload: Payload):
+    def logged_push(self, p: Peer, payload: TransactionPayload):
         msg_hash = payload_hash(payload)
         new_entry, entry_hash, signature = self.create_new_log_entry(EntryType.SEND,
                                                                      p.public_key.key_to_bin(),
@@ -85,9 +84,10 @@ class PeerReviewCommunity(Community):
                                                   )
         self.ez_send(p, logged_msg_payload, sig=False)
 
-    def random_push(self, payload: Payload):
+    def random_push(self, payload: TransactionPayload):
         f = min(self.settings.fanout, len(self.get_peers()))
         selected = random.sample(self.get_peers(), f)
+        # selected = self.get_peers()
         for p in selected:
             self.logged_push(p, payload)
 
@@ -117,7 +117,7 @@ class PeerReviewCommunity(Community):
             "reconciliation",
             self.reconcile_with_neighbors,
             interval=self.settings.recon_freq,
-            delay=self.settings.recon_delay,
+            delay=random.random() + self.settings.recon_delay,
         )
 
     def reconcile_with_neighbors(self):
@@ -128,9 +128,9 @@ class PeerReviewCommunity(Community):
             p_id = p.public_key.key_to_bin()
             peer_state = self.known_peer_txs.get_peer_txs(p_id)
             set_diff = my_state - peer_state
-
-            request = TxsChallengePayload([TxId(s) for s in set_diff])
-            self.ez_send(p, request, sign=False)
+            if len(set_diff) > 0:
+                request = TxsChallengePayload([TxId(s) for s in set_diff])
+                self.ez_send(p, request, sign=False)
 
     @lazy_wrapper(TxsChallengePayload)
     def received_txs_challenge(self, p: Peer, payload: TxsChallengePayload):
@@ -174,13 +174,12 @@ class PeerReviewCommunity(Community):
         p_id = p.public_key.key_to_bin()
         tx_id = payload_hash(payload)
         self.known_peer_txs.add_tx_payload(tx_id, payload)
-
-        self.logger.info("{} Processing transaction {}".format(get_event_loop().time(), hexlify(tx_id)))
-
+        if tx_id not in self.known_peer_txs.get_peer_txs(self.my_peer_id):
+            self.logger.info("{} Processing transaction {}".format(get_event_loop().time(), hexlify(tx_id)))
+            self.known_peer_txs.add_peer_tx(self.my_peer_id, tx_id)
 
         self.known_peer_txs.add_peer_tx(
             p_id, tx_id)
-        self.known_peer_txs.add_peer_tx(self.my_peer_id, tx_id)
 
     @lazy_wrapper(TxsProofPayload)
     def received_txs_proof(self, p: Peer, payload: TxsProofPayload):

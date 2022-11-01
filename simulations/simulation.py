@@ -131,8 +131,9 @@ class BamiSimulation:
                 self.nodes[peer_id].overlays[0].walk_to(self.nodes[node_b_id].endpoint.wan_address)
         await sleep(self.settings.discovery_delay)
         print("IPv8 peer discovery complete")
+        self.nodes[1].overlays[0].start_tx_creation()
         for peer_id in self.nodes.keys():
-            self.nodes[peer_id].overlays[0].start_tasks()
+            self.nodes[peer_id].overlays[0].start_reconciliation()
 
     async def start_simulation(self) -> None:
         print("Starting simulation with %d peers..." % self.settings.peers)
@@ -166,10 +167,10 @@ class BamiSimulation:
 
     async def run(self) -> None:
         self.setup_directories()
-        start_time = time.time()
+        start_time = time.perf_counter()
         await self.start_ipv8_nodes()
         await self.ipv8_discover_peers()
         await self.on_ipv8_ready()
-        print("Simulation setup took %f seconds" % (time.time() - start_time))
+        print("Simulation setup took %f seconds" % (time.perf_counter() - start_time))
         await self.start_simulation()
         self.on_simulation_finished()
