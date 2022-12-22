@@ -27,6 +27,9 @@ class PeerTxDB:
     def get_peer_txs(self, p_id: Any) -> Set[Any]:
         return self.peer_txs[p_id]
 
+    def peer_clock(self, peer_id: Any):
+
+
 
 class TamperEvidentLog:
 

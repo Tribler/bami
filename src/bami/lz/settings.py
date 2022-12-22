@@ -18,7 +18,14 @@ class ReconciliationSettings:
 
 
 @dataclasses.dataclass
-class LZSettings(ClientSettings, ReconciliationSettings):
+class PeerClockSettings:
+    n_cells = 32
+
+
+@dataclasses.dataclass
+class LZSettings(ClientSettings,
+                 ReconciliationSettings,
+                 PeerClockSettings):
     enable_client = True
 
 
