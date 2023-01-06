@@ -9,7 +9,7 @@ from common.config import Config, Dist
 
 
 class DefaultLocations(Config):
-    locations = Dist('sample', {'weight': [0.6, 0.2, 0.2], 'values': ['Tokyo', 'Ireland', 'Ohio']})
+    locations = Dist('sample', {'weight': [0.3, 0.3, 0.4], 'values': ['Tokyo', 'Ireland', 'Ohio']})
     latencies = {
         'Ohio': {'Ohio': Dist('invgamma', (5.54090, 0.333305, 0.987249)),
                  'Ireland': Dist('norm', (73.6995, 1.19583092197097127)),
@@ -43,6 +43,9 @@ class SimulationSettings:
 
     # The duration of the simulation in seconds.
     duration: int = 120
+
+    # The duration for discovery
+    discovery_delay: int = 5
 
     # The logging level during the experiment.
     logging_level: str = "INFO"

@@ -27,4 +27,5 @@ class SimulatedNetwork:
         """
         loc1 = self.adr_location[src]
         loc2 = self.adr_location[dest]
-        return self.latencies.fetch(loc1, loc2)
+        # Latencies are in specified in ms
+        return self.latencies.fetch(loc1, loc2) / 1000

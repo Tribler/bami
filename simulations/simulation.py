@@ -117,14 +117,24 @@ class BamiSimulation:
             shutil.rmtree(self.data_dir)
         os.makedirs(self.data_dir, exist_ok=True)
 
+    def check_connected(self) -> bool:
+        for peer_id in self.nodes.keys():
+            neigh_set = list(self.settings.topology.neighbors(peer_id))
+            if len(self.nodes[peer_id].overlays[0].get_peers()) < len(neigh_set):
+                return False
+        return True
+
     async def ipv8_discover_peers(self) -> None:
         for peer_id in self.nodes.keys():
             neigh_set = self.settings.topology.neighbors(peer_id)
             for node_b_id in list(neigh_set):
                 self.nodes[peer_id].overlays[0].walk_to(self.nodes[node_b_id].endpoint.wan_address)
-        await sleep(5)  # Make sure peers have time to discover each other
-
+        await sleep(self.settings.discovery_delay)
         print("IPv8 peer discovery complete")
+        self.on_discovery_complete()
+
+    def on_discovery_complete(self):
+        pass
 
     async def start_simulation(self) -> None:
         print("Starting simulation with %d peers..." % self.settings.peers)
@@ -132,9 +142,9 @@ class BamiSimulation:
         if self.settings.profile:
             yappi.start(builtins=True)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         await asyncio.sleep(self.settings.duration)
-        print("Simulation took %f seconds" % (time.time() - start_time))
+        print("Simulation took %f seconds" % (time.perf_counter() - start_time))
 
         if self.settings.profile:
             yappi.stop()
@@ -158,10 +168,10 @@ class BamiSimulation:
 
     async def run(self) -> None:
         self.setup_directories()
-        start_time = time.time()
+        start_time = time.perf_counter()
         await self.start_ipv8_nodes()
         await self.ipv8_discover_peers()
         await self.on_ipv8_ready()
-        print("Simulation setup took %f seconds" % (time.time() - start_time))
+        print("Simulation setup took %f seconds" % (time.perf_counter() - start_time))
         await self.start_simulation()
         self.on_simulation_finished()
