@@ -1,18 +1,17 @@
-import random
 from asyncio import get_event_loop
 from binascii import hexlify, unhexlify
 from collections import defaultdict
-from typing import Tuple, NewType
+import random
+from typing import NewType, Tuple
 
 from ipv8.community import Community
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.messaging.interfaces.udp.endpoint import UDPv4Address
 from ipv8.peer import Peer
-from ipv8.types import Payload
 
-from bami.peerreview.database import TamperEvidentLog, PeerTxDB, EntryType
-from bami.peerreview.payload import LogEntryPayload, TransactionPayload, TxsChallengePayload, TxId, TxsRequestPayload, \
-    TxsProofPayload, LoggedMessagePayload, LoggedAuthPayload
+from bami.peerreview.database import EntryType, PeerTxDB, TamperEvidentLog
+from bami.peerreview.payload import LogEntryPayload, LoggedAuthPayload, LoggedMessagePayload, TransactionPayload, TxId, \
+    TxsChallengePayload, TxsProofPayload, TxsRequestPayload
 from bami.peerreview.settings import PeerReviewSettings
 from bami.peerreview.utils import get_random_string, payload_hash
 
@@ -48,10 +47,6 @@ class PeerReviewCommunity(Community):
         self.add_message_handler(LoggedAuthPayload, self.received_log_authenticator)
 
         self.my_peer_id = self.my_peer.public_key.key_to_bin()
-
-        if self.settings.start_immediately:
-            self.start_reconciliation()
-            self.start_tx_creation()
 
     def start_tasks(self):
         self.start_reconciliation()

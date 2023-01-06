@@ -2,62 +2,66 @@ from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
 from dataclasses import dataclass
 from ipv8.messaging.payload_dataclass import overwrite_dataclass
 
+from bami.lz.sketch.peer_clock import CompactClock
+
 dataclass = overwrite_dataclass(dataclass)
 
 
-@vp_compile
-class TransactionPayload(VariablePayload):
-    """
-    Raw transaction blob
-    """
-    msg_id = 1
-    format_list = ["varlenH"]
-    names = ["script"]
-
-
-@vp_compile
-class LogEntryPayload(VariablePayload):
-    """
-    Log entry in tamper-evident log of a peer
-    """
-    msg_id = 2
-    format_list = ["74s", "I", "?", "64s", "74s", "I", "varlenH"]
-    names = ["pk", "sn", "is_send", "p_hash", "cp_pk", "cp_sn", "msg"]
+@dataclass(msg_id=1)
+class TransactionPayload:
+    pk: bytes
+    t_id: bytes
+    sign: bytes
+    script: bytes
+    context: bytes
 
 
 @dataclass
-class TxId:
-    tx_id: bytes
+class CompactSketch:
+    data: bytes
+    seed: int
+    csum: bytes
 
 
-@dataclass(msg_id=3)
-class TxsChallengePayload:
-    tx_ids: [TxId]
+@dataclass
+class SketchData:
+    d: bytes
+    csum: bytes
 
 
-@dataclass(msg_id=4)
-class TxsRequestPayload:
-    tx_ids: [TxId]
+@dataclass
+class CompositeSketch:
+    seed: int
+    d: [SketchData]
 
 
-@dataclass(msg_id=5)
-class TxsProofPayload:
-    tx_ids: [TxId]
-
-
-@dataclass(msg_id=6)
-class LoggedMessagePayload:
-    """Log entry with number sn in a tamper evident log of peer with public key pk."""
-    pk: bytes
-    sn: int
-    p_hash: bytes
-    sign: bytes
-    msg: TransactionPayload
-    lh: bytes
+@dataclass(msg_id=2)
+class ReconciliationRequestPayload:
+    clock: CompactClock
+    sketch: CompactSketch
 
 
 @vp_compile
-class LoggedAuthPayload(VariablePayload):
-    msg_id = 7
-    format_list = ["74s", "I", "64s", "64s"]
-    names = ["pk", "sn", "lh", "sign"]
+class TransactionsChallengePayload(VariablePayload):
+    format_list = ["varlenH-list"]
+    names = ["txs"]
+    msg_id = 3
+
+
+@dataclass(msg_id=4)
+class ReconciliationResponsePayload:
+    clock: CompactClock
+    sketch: CompactSketch
+    txs: TransactionsChallengePayload
+
+
+@vp_compile
+class TransactionsRequestPayload(VariablePayload):
+    format_list = ["varlenH-list"]
+    names = ["txs"]
+    msg_id = 5
+
+
+@dataclass(msg_id=6)
+class TransactionBatchPayload:
+    txs: [TransactionPayload]

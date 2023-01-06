@@ -1,35 +1,35 @@
+from binascii import unhexlify
 import random
-from asyncio import get_event_loop
-from binascii import hexlify, unhexlify
-from collections import defaultdict
-from typing import Tuple, NewType
+from typing import NewType, Set, Tuple, Union
 
-from ipv8.community import Community
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
-from ipv8.messaging.interfaces.udp.endpoint import UDPv4Address
 from ipv8.peer import Peer
 
-from bami.lz.client import TransactionProducer
+from bami.lz.base import BaseCommunity
+from bami.lz.database.database import TransactionSyncDB
+from bami.lz.payload import CompactSketch, ReconciliationRequestPayload, ReconciliationResponsePayload, \
+    TransactionsRequestPayload, \
+    TransactionBatchPayload, TransactionsChallengePayload, TransactionPayload
 from bami.lz.settings import LZSettings
-from bami.peerreview.database import TamperEvidentLog, PeerTxDB, EntryType
-from bami.peerreview.payload import LogEntryPayload, TransactionPayload, TxsChallengePayload, TxId, TxsRequestPayload, \
-    TxsProofPayload, LoggedMessagePayload, LoggedAuthPayload
-from bami.peerreview.settings import PeerReviewSettings
-from bami.peerreview.utils import get_random_string, payload_hash
+from bami.lz.sketch.bloom import BloomFilter
+from bami.lz.sketch.peer_clock import clock_progressive, clocks_inconsistent, CompactClock, PeerClock
+from bami.lz.reconcile import ReconciliationSetsManager
+from bami.lz.utils import bytes_to_uint, get_random_string, payload_hash, uint_to_bytes
 
 EntryHash = NewType('EntryHash', bytes)
 EntrySignature = NewType('EntrySignature', bytes)
 
 
-class PeerReviewCommunity(Community, TransactionProducer):
+class SyncCommunity(BaseCommunity):
+    """Synchronize all transactions via set reconciliation"""
 
     @property
     def settings(self):
         return self._settings
 
     @property
-    def peer_db(self) -> PeerTxDB:
-        return self.known_peer_txs
+    def db(self) -> TransactionSyncDB:
+        return self._db
 
     @property
     def my_peer_id(self) -> bytes:
@@ -39,76 +39,89 @@ class PeerReviewCommunity(Community, TransactionProducer):
 
     def __init__(self, *args, **kwargs) -> None:
         """
-        Initialize the Basalt community and required variables.
+        Initialize item synchronization community
         """
         self._settings = kwargs.pop("settings", LZSettings())
+        self._db = kwargs.pop("db", TransactionSyncDB(self._settings))
         super().__init__(*args, **kwargs)
 
-        self.pr_logs = defaultdict(lambda: TamperEvidentLog())
-        self.log_auth = defaultdict(lambda: {})
-
-        self.known_peer_txs = PeerTxDB()
-
-        # Message state machine
+        # Message processing
         # Gossip messages
         self.add_message_handler(TransactionPayload, self.received_transaction)
-        self.add_message_handler(TxsChallengePayload, self.received_txs_challenge)
-        self.add_message_handler(TxsProofPayload, self.received_txs_proof)
-        self.add_message_handler(TxsRequestPayload, self.received_tx_request)
-
-        # PeerReview messages
-        self.add_message_handler(LogEntryPayload, self.received_log_entry)
-        self.add_message_handler(LoggedMessagePayload, self.received_logged_message)
-        self.add_message_handler(LoggedAuthPayload, self.received_log_authenticator)
+        self.add_message_handler(ReconciliationRequestPayload, self.on_received_reconciliation_request)
+        self.add_message_handler(ReconciliationResponsePayload, self.on_received_reconciliation_response)
+        self.add_message_handler(TransactionsChallengePayload, self.on_received_transactions_challenge)
+        self.add_message_handler(TransactionsRequestPayload, self.on_received_transactions_request)
+        self.add_message_handler(TransactionBatchPayload, self.on_received_transaction_batch)
 
         self._my_peer_id = self.my_peer.public_key.key_to_bin()
+        self.reconciliation_manager = ReconciliationSetsManager(self._my_peer_id,
+                                                                self._settings)
 
         if self.settings.start_immediately:
-            self.start_reconciliation()
-            self.start_tx_creation()
+            self.start_tasks()
 
     def start_tasks(self):
         if self.settings.enable_client:
             self.start_tx_creation()
-
         self.start_reconciliation()
-        self.start_tx_creation()
 
-    # --------------------  Client functions -----------
+    # ----- Introduction - add to reconciliation partners
+    def introduction_request_callback(self, peer, dist, payload):
+        p_id = peer.public_key.key_to_bin()
+        if p_id not in self.reconciliation_manager.known_partners:
+            self.reconciliation_manager.initialize_new_set(p_id)
+            self.reconciliation_manager.populate_with_all_known(p_id)
+        super().introduction_request_callback(peer, dist, payload)
 
-    def create_new_log_entry(self, entry_type: EntryType, cp_pk: bytes, cp_sn: int, msg_hash: bytes) -> \
-            Tuple[LogEntryPayload, EntryHash, EntrySignature]:
-        new_entry = self.pr_logs[self.my_peer_id].create_new_entry(self.my_peer_id,
-                                                                   entry_type,
-                                                                   cp_pk,
-                                                                   cp_sn,
-                                                                   msg_hash)
-        entry_hash = payload_hash(new_entry)
-        signature = self.crypto.create_signature(self.my_peer.key, entry_hash)
+    def introduction_response_callback(self, peer, dist, payload):
+        p_id = peer.public_key.key_to_bin()
+        if p_id not in self.reconciliation_manager.known_partners:
+            self.reconciliation_manager.initialize_new_set(p_id)
+            self.reconciliation_manager.populate_with_all_known(p_id)
+        super().introduction_response_callback(peer, dist, payload)
 
-        auth_payload = LoggedAuthPayload(new_entry.pk, new_entry.sn, entry_hash, signature)
-        self.log_auth[self.my_peer_id][new_entry.sn] = auth_payload
+    # ------ Dummy Transaction Creation ------------
+    def create_transaction(self):
+        for _ in range(self.settings.tx_batch):
+            script = get_random_string(self.settings.script_size)
+            context = get_random_string(self.settings.script_size)
+            new_tx = TransactionPayload(pk=self.my_peer_id, t_id=b'', sign=b'', script=script.encode(),
+                                        context=context.encode())
+            t_id = bytes_to_uint(payload_hash(new_tx), self.settings.tx_id_size)
+            new_tx.t_id = uint_to_bytes(t_id)
 
-        return new_entry, entry_hash, signature
+            sign = self.crypto.create_signature(self.my_peer.key,
+                                                self.prepare_packet(new_tx, sig=False))
+            new_tx.sign = sign
+            self.process_transaction(new_tx)
 
-    def logged_push(self, p: Peer, payload: TransactionPayload):
-        msg_hash = payload_hash(payload)
-        new_entry, entry_hash, signature = self.create_new_log_entry(EntryType.SEND,
-                                                                     p.public_key.key_to_bin(),
-                                                                     0,
-                                                                     msg_hash
-                                                                     )
-        logged_msg_payload = LoggedMessagePayload(self.my_peer_id, new_entry.sn, new_entry.p_hash,
-                                                  signature, payload, entry_hash
-                                                  )
-        self.ez_send(p, logged_msg_payload, sig=False)
+    def start_tx_creation(self):
+        self.register_task(
+            "create_transaction",
+            self.create_transaction,
+            interval=random.random() + self.settings.tx_freq,
+            delay=random.random() + self.settings.tx_delay,
+        )
 
-    def random_push(self, payload: TransactionPayload):
-        f = min(self.settings.fanout, len(self.get_peers()))
-        selected = random.sample(self.get_peers(), f)
-        # selected = self.get_peers()
-        for p in selected:
-            self.logged_push(p, payload)
+    # --------- Transaction Processing ---------------
+
+    @lazy_wrapper_unsigned(TransactionPayload)
+    def received_transaction(self, p: Peer, payload: TransactionPayload):
+        self.process_transaction(payload)
+
+    def process_transaction(self, payload: TransactionPayload):
+
+        t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
+        self.reconciliation_manager.populate_tx(t_id)
+
+        # self.logger.info("{}: Processing transaction {}".format(self.my_peer, t_id))
+
+        if not self._db.get_tx_payload(t_id):
+            self._db.add_tx_payload(t_id, payload)
+            self._db.peer_clock(self.my_peer_id).increment(t_id)
+
+    # --------------- Transaction Reconciliation -----------
 
     def start_reconciliation(self):
         self.register_task(
@@ -118,95 +131,103 @@ class PeerReviewCommunity(Community, TransactionProducer):
             delay=random.random() + self.settings.recon_delay,
         )
 
+    def prepare_reconciliation_data(self, other_peer_id: bytes) -> Tuple[CompactClock, CompactSketch]:
+        blm_filter = self.reconciliation_manager.get_filter(other_peer_id)
+        clock = self._db.peer_clock(self.my_peer_id)
+        return clock.compact_clock(), blm_filter.to_payload()
+
     def reconcile_with_neighbors(self):
-        my_state = self.known_peer_txs.get_peer_txs(self.my_peer_id)
+        """Select random neighbors and reconcile if required"""
         f = self.settings.recon_fanout
         selected = random.sample(self.get_peers(), min(f, len(self.get_peers())))
+        my_clock = self.db.peer_clock(self.my_peer_id)
         for p in selected:
             p_id = p.public_key.key_to_bin()
-            peer_state = self.known_peer_txs.get_peer_txs(p_id)
-            set_diff = my_state - peer_state
-            if len(set_diff) > 0:
-                request = TxsChallengePayload([TxId(s) for s in set_diff])
-                self.ez_send(p, request, sign=False)
+            other_clock = self.db.peer_clock(p_id)
+            if clock_progressive(my_clock, other_clock):
+                clock, sketch = self.prepare_reconciliation_data(p_id)
+                self.send_payload(p, ReconciliationRequestPayload(clock, sketch))
 
-    @lazy_wrapper(TxsChallengePayload)
-    def received_txs_challenge(self, p: Peer, payload: TxsChallengePayload):
+    def reconcile_from_payload(self,
+                               p_id: bytes,
+                               payload: Union[ReconciliationResponsePayload, ReconciliationRequestPayload]) -> Set[int]:
+        """Reconcile with an incoming payload and return transaction ids that peer p_id is potentially missing"""
+        new_sketch = BloomFilter.from_payload(payload.sketch)
+        return self.reconciliation_manager.recon_sets[p_id].reconcile(new_sketch)
 
-        self.logger.info("{} Received transactions challenge from peer {}".format(get_event_loop().time(), p))
+    def update_peer_clock(self, p_id: bytes, new_clock: PeerClock):
+        old_clock = self.db.peer_clock(p_id)
+        assert not clocks_inconsistent(old_clock, new_clock)
+        old_clock.merge_clock(new_clock)
 
-        my_state = self.known_peer_txs.get_peer_txs(self.my_peer_id)
-        to_request = []
-        to_prove = []
+    @lazy_wrapper(ReconciliationRequestPayload)
+    def on_received_reconciliation_request(self,
+                                           peer: Peer,
+                                           payload: ReconciliationRequestPayload):
+        p_id = peer.public_key.key_to_bin()
+        self.logger.info("Received request from {}".format(peer))
 
-        for t in payload.tx_ids:
-            if t.tx_id not in my_state:
-                to_request.append(t)
-            else:
-                to_prove.append(t)
+        new_clock = PeerClock.from_compact_clock(payload.clock)
+        self.update_peer_clock(p_id, new_clock)
 
-        if len(to_request) > 0:
-            request = TxsRequestPayload([t for t in to_request])
-            self.ez_send(p, request)
+        missing_txs = self.reconcile_from_payload(p_id, payload)
+        txs_bytes = [uint_to_bytes(t, self.settings.tx_id_size) for t in missing_txs]
+        txs_bytes = txs_bytes[:255]
+        clock, sketch = self.prepare_reconciliation_data(p_id)
+        response = ReconciliationResponsePayload(clock, sketch,
+                                                 TransactionsChallengePayload(txs_bytes))
+        self.send_payload(peer, response)
 
-        if len(to_prove):
-            proof = TxsProofPayload([t for t in to_request])
-            self.ez_send(p, proof)
+    @lazy_wrapper(ReconciliationResponsePayload)
+    def on_received_reconciliation_response(self, peer: Peer, payload: ReconciliationResponsePayload):
+        p_id = peer.public_key.key_to_bin()
+        self.logger.info("Received reconciliation response from {}".format(peer))
 
-    @lazy_wrapper(TxsRequestPayload)
-    def received_tx_request(self, p: Peer, payload: TxsRequestPayload):
-        self.logger.info("{} Received transactions request from peer {}".format(get_event_loop().time(), p))
-        for t in payload.tx_ids:
-            tx_payload = self.known_peer_txs.get_tx_payload(t.tx_id)
-            self.logged_push(p, tx_payload)
+        new_clock = PeerClock.from_compact_clock(payload.clock)
+        self.update_peer_clock(p_id, new_clock)
 
-    @lazy_wrapper(LogEntryPayload)
-    def received_log_entry(self, p: Peer, payload: LogEntryPayload):
-        self.logger.info("{} Received log entry from peer {}".format(get_event_loop().time(), p))
+        missing_txs = self.reconcile_from_payload(p_id, payload)
+        if len(missing_txs) > 0:
+            txs_bytes = [uint_to_bytes(t, self.settings.tx_id_size) for t in missing_txs]
+            txs_bytes = txs_bytes[:255]
+            self.send_payload(peer, TransactionsChallengePayload(txs_bytes))
 
-    @lazy_wrapper(TransactionPayload)
-    def received_transaction(self, p: Peer, payload: TransactionPayload):
-        self.process_transaction(p, payload)
+    @lazy_wrapper(TransactionsChallengePayload)
+    def on_received_transactions_challenge(self,
+                                           peer: Peer,
+                                           payload: TransactionsChallengePayload):
+        self.logger.info("Received new txs from {}".format(peer))
 
-    def process_transaction(self, p: Peer, payload: TransactionPayload):
-        p_id = p.public_key.key_to_bin()
-        tx_id = payload_hash(payload)
-        self.known_peer_txs.add_tx_payload(tx_id, payload)
-        if tx_id not in self.known_peer_txs.get_peer_txs(self.my_peer_id):
-            self.logger.info("{} Processing transaction {}".format(get_event_loop().time(), hexlify(tx_id)))
-            self.known_peer_txs.add_peer_tx(self.my_peer_id, tx_id)
+        tx_batch_request = []
+        for tid_bytes in payload.txs:
+            tid = bytes_to_uint(tid_bytes, self.settings.tx_id_size)
+            if not self._db.get_tx_payload(tid):
+                tx_batch_request.append(tid_bytes)
 
-        self.known_peer_txs.add_peer_tx(
-            p_id, tx_id)
+        response_payload = TransactionsRequestPayload(tx_batch_request)
+        self.send_payload(peer, response_payload, sig=True)
 
-    @lazy_wrapper(TxsProofPayload)
-    def received_txs_proof(self, p: Peer, payload: TxsProofPayload):
-        self.logger.info("{} Received transactions proofs from peer {}".format(get_event_loop().time(), p))
-        p_id = p.public_key.key_to_bin()
-        for t in payload.tx_ids:
-            self.known_peer_txs.add_peer_tx(p_id, t.tx_id)
+    @lazy_wrapper(TransactionsRequestPayload)
+    def on_received_transactions_request(self, peer: Peer, payload: TransactionsRequestPayload):
+        tx_batch = []
+        for tid_bytes in payload.txs:
+            tid = bytes_to_uint(tid_bytes, self.settings.tx_id_size)
+            payload = self._db.get_tx_payload(tid)
+            assert payload is not None
 
-    @lazy_wrapper_unsigned(LoggedMessagePayload)
-    def received_logged_message(self, p_address: UDPv4Address, payload: LoggedMessagePayload):
-        self.logger.info("{} Received logged message from {}".format(get_event_loop().time(), p_address))
-        auth_payload = LoggedAuthPayload(payload.pk, payload.sn, payload.lh, payload.sign)
-        self.log_auth[payload.pk][payload.sn] = auth_payload
-        peer = Peer(payload.pk, p_address)
+            tx_batch.append(payload)
+            if len(tx_batch) == self.settings.tx_batch_size:
+                response_payload = TransactionBatchPayload(tx_batch)
+                self.send_payload(peer, response_payload, sig=True)
+                tx_batch = []
+        if len(tx_batch) > 0:
+            response_payload = TransactionBatchPayload(tx_batch)
+            self.send_payload(peer, response_payload, sig=True)
 
-        self.process_transaction(peer, payload.msg)
-        # Respond with acknowledgement
-        self.acknowledge_message(p_address, payload)
-
-    def acknowledge_message(self, p: UDPv4Address, payload: LoggedMessagePayload):
-
-        new_entry, entry_hash, entry_sign = self.create_new_log_entry(EntryType.RECEIVE, payload.pk, payload.sn,
-                                                                      payload_hash(payload.msg))
-        # Respond with auth for the log
-        auth_payload = self.log_auth[self.my_peer_id][new_entry.sn]
-
-        self._ez_senda(p, auth_payload, sig=False)
-
-    @lazy_wrapper_unsigned(LoggedAuthPayload)
-    def received_log_authenticator(self, p: UDPv4Address, payload: LoggedAuthPayload):
-        self.logger.info("{} Received log authenticator from {}".format(get_event_loop().time(), p))
-        self.log_auth[payload.pk][payload.sn] = payload
+    @lazy_wrapper(TransactionBatchPayload)
+    def on_received_transaction_batch(self, peer: Peer, payload: TransactionBatchPayload):
+        v = self.prepare_packet(payload)
+        if len(v) > 60000:
+            self.logger.info("Received transaction {} payloads from {}. Size {}".format(len(payload.txs), peer, len(v)))
+        for t in payload.txs:
+            self.process_transaction(t)

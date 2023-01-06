@@ -16,7 +16,7 @@ class BasicPeerReviewSimulation(BamiSimulation):
         return builder
 
 
-class SimulatedBasalt(SimulatedCommunityMixin, PeerReviewCommunity):
+class SimulatedPeerReviewCommunity(SimulatedCommunityMixin, PeerReviewCommunity):
     received_txs_proof = time_mark(PeerReviewCommunity.received_txs_proof)
     received_tx_request = time_mark(PeerReviewCommunity.received_tx_request)
     received_txs_challenge = time_mark(PeerReviewCommunity.received_txs_challenge)
@@ -27,14 +27,14 @@ class SimulatedBasalt(SimulatedCommunityMixin, PeerReviewCommunity):
 
 if __name__ == "__main__":
     settings = SimulationSettings()
-    N = 50
+    N = 20
     settings.peers = N
-    settings.duration = 10
+    settings.duration = 40
     settings.topology = connected_topology(N)
     settings.logging_level = 'INFO'
     settings.discovery_delay = 5
 
-    settings.community_map = {'PeerReviewCommunity': PeerReviewCommunity}
+    settings.community_map = {'PeerReviewCommunity': SimulatedPeerReviewCommunity}
 
     simulation = BasicPeerReviewSimulation(settings)
     ensure_future(simulation.run())

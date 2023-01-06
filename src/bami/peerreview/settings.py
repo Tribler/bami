@@ -2,7 +2,7 @@ class PeerReviewSettings:
     def __init__(self):
         # Transaction creation parameters
         self.script_size = 100  # in bytes
-        self.tx_freq = 5  # in seconds
+        self.tx_freq = 15  # in seconds
         self.tx_delay = 2
 
         # Reconciliation settings
