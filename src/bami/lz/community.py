@@ -97,6 +97,7 @@ class SyncCommunity(BaseCommunity):
             self.process_transaction(new_tx)
 
     def start_tx_creation(self):
+        self.logger.debug("Starting dummy transaction creation")
         self.register_task(
             "create_transaction",
             self.create_transaction,
@@ -113,9 +114,8 @@ class SyncCommunity(BaseCommunity):
     def process_transaction(self, payload: TransactionPayload):
 
         t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
+        self.logger.debug("Processing transaction {}".format(t_id))
         self.reconciliation_manager.populate_tx(t_id)
-
-        # self.logger.info("{}: Processing transaction {}".format(self.my_peer, t_id))
 
         if not self._db.get_tx_payload(t_id):
             self._db.add_tx_payload(t_id, payload)
@@ -124,6 +124,7 @@ class SyncCommunity(BaseCommunity):
     # --------------- Transaction Reconciliation -----------
 
     def start_reconciliation(self):
+        self.logger.info("Starting reconciliation with neighbors")
         self.register_task(
             "reconciliation",
             self.reconcile_with_neighbors,

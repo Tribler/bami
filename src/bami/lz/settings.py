@@ -6,7 +6,7 @@ class ClientSettings:
     # Transaction creation parameters
     script_size = 100  # in bytes
     tx_freq = 1
-    tx_batch = 100  # 1 transaction in
+    tx_batch = 3  # 1 transaction in
     tx_delay = 0  # initial delay before starting
 
 
