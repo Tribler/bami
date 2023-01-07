@@ -29,7 +29,7 @@ if __name__ == "__main__":
     settings.peers = N
     settings.duration = 40
     settings.topology = connected_topology(N)
-    settings.logging_level = 'INFO'
+    settings.logging_level = 'DEBUG'
     settings.discovery_delay = 5
 
     settings.community_map = {'LZCommunity': SyncCommunity}
