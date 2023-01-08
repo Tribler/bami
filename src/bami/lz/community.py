@@ -111,6 +111,9 @@ class SyncCommunity(BaseCommunity):
     def received_transaction(self, p: Peer, payload: TransactionPayload):
         self.process_transaction(payload)
 
+    def on_process_new_transaction(self, t_id: int, tx_payload: TransactionPayload):
+        pass
+
     def process_transaction(self, payload: TransactionPayload):
 
         t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
@@ -120,6 +123,8 @@ class SyncCommunity(BaseCommunity):
         if not self._db.get_tx_payload(t_id):
             self._db.add_tx_payload(t_id, payload)
             self._db.peer_clock(self.my_peer_id).increment(t_id)
+            self.on_process_new_transaction(t_id, payload)
+
 
     # --------------- Transaction Reconciliation -----------
 
