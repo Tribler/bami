@@ -302,10 +302,10 @@ class SyncCommunity(BaseCommunity):
         try:
             txs_bytes_request, txs_bytes_challenge = self.reconcile_sketches(p_id, payload)
         except SketchError:
-            self.logger.error("Cannot reconcile sketch. Bisecting sketch. All txs {}".format(
-                len(self.reconciliation_manager.all_txs)))
             if new_sketch.t == self.reconciliation_manager.num_sections:
                 self.reconciliation_manager.change_num_sections()
+            self.logger.error("Cannot reconcile sketch. Bisecting sketch. All txs {}, {}".format(
+                len(self.reconciliation_manager.all_txs), self.reconciliation_manager.num_sections))
             txs_bytes_request = []
             txs_bytes_challenge = []
 

@@ -57,4 +57,5 @@ class LZSettings(ClientSettings,
 
     sketch_algorithm = SketchAlgorithm.MINISKETCH
     sketch_size: int = 100
+    max_sections = 500
 
