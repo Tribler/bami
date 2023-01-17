@@ -1,59 +1,65 @@
 import numpy as np
 
+from bami.lz.payload import CompactClock
 from bami.lz.settings import PeerClockSettings
 
-from ipv8.messaging.payload_dataclass import dataclass
-
-
-@dataclass
-class CompactClock:
-    add: int
-    seed: int
-    clock: bytes
-
-
-dummy_clock = CompactClock(0, 0, b'0')
+dummy_clock = CompactClock(add=0, data=b'0')
 
 
 class PeerClock:
+    CSUM_BITS = 32
 
     def __init__(self,
-                 n_cells: int = PeerClockSettings.n_cells,
-                 seed: int = 0):
+                 n_cells: int = PeerClockSettings.n_cells):
         self.n_cells = n_cells
-        self._clock = np.array([0] * self.n_cells, dtype=np.uint)
-        self.seed = seed
+        self.data = np.array([0] * self.n_cells, dtype=np.int64)
+        self.seed = 0
+        self.csum = [0] * self.n_cells
+        self.max_div = 2 ** PeerClock.CSUM_BITS
 
     def cell_id(self, item_val: int) -> int:
         """Get cell id associated with the item"""
         return (item_val ^ self.seed) % self.n_cells
 
     def increment(self, item_val: int) -> int:
-        """Increment the clock - adding item to the clock. Return index of updated cell"""
+        """Increment the data - adding item to the data. Return index of updated cell"""
         c = self.cell_id(item_val)
-        self._clock[c] += 1
+        self.csum[c] = self.csum[c] ^ (item_val % self.max_div)
+        self.data[c] += 1
         return c
 
     def compact_clock(self) -> CompactClock:
-        count = min(self._clock)
-        c = (self._clock - count).astype('uint16')
-        return CompactClock(count, self.seed, c.tobytes())
+        count = min(self.data)
+        c = (self.data - count).astype('uint16')
+        return CompactClock(add=count, data=c.tobytes())
 
     def __str__(self) -> str:
-        return str(self._clock)
+        return str(self.data)
 
     @staticmethod
     def from_compact_clock(compact_clock: CompactClock) -> 'PeerClock':
-        c = np.frombuffer(compact_clock.clock, np.uint16) + compact_clock.add
-        clock = PeerClock(len(c), seed=compact_clock.seed)
-        clock._clock = c.astype('uint')
+        c = np.frombuffer(compact_clock.data, np.uint16) + compact_clock.add
+        clock = PeerClock(len(c))
+        clock.data = c.astype('uint')
         return clock
 
     def merge_clock(self, clock: 'PeerClock'):
-        self._clock = np.maximum(self._clock, clock._clock)
+        self.data = np.maximum(self.data, clock.data)
 
     def diff(self, other_clock: 'PeerClock') -> np.array:
-        return self._clock - other_clock._clock
+        return self.data - other_clock.data
+
+
+class ClockTable(PeerClock):
+
+    def __init__(self, n_cells: int = PeerClockSettings.n_cells) -> object:
+        super().__init__(n_cells)
+
+        self.item_cells = [set() for _ in range(n_cells)]
+
+    def increment(self, item_val: int) -> int:
+        v = super().increment(item_val)
+        self.item_cells[v].add(item_val)
 
 
 def clocks_inconsistent(clock1: PeerClock, clock2: PeerClock) -> bool:

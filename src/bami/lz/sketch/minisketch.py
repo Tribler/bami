@@ -13,7 +13,7 @@ class SketchError(
     pass
 
 
-prefix = "/usr/local/lib/"
+prefix = os.getenv('VIRTUALENV_DIR', '/usr/local')+"/lib/"
 # Import the Minisketch library.
 # pylint: disable=invalid-name
 MinisketchLib: Any
@@ -31,6 +31,9 @@ MinisketchLib.minisketch_create.restype = c_void_p
 MinisketchLib.minisketch_add_uint64.argtypes = [c_void_p, c_uint64]
 MinisketchLib.minisketch_add_uint64.restype = None
 
+MinisketchLib.minisketch_set_seed.argtypes = [c_void_p, c_uint64]
+MinisketchLib.minisketch_set_seed.restype = None
+
 MinisketchLib.minisketch_serialize.argtypes = [c_void_p, c_void_p]
 MinisketchLib.minisketch_serialize.restype = None
 
@@ -41,7 +44,7 @@ MinisketchLib.minisketch_decode.argtypes = [c_void_p, c_size_t, c_void_p]
 MinisketchLib.minisketch_decode.restype = c_size_t
 
 
-class Sketch:
+class MiniSketch:
     def __init__(
             self,
             capacity: int
@@ -50,6 +53,7 @@ class Sketch:
         if self.capacity != 0:
             self.sketch: Any = MinisketchLib.minisketch_create(c_uint32(64), c_uint32(0), c_size_t(self.capacity))
         self.hashes: List[int] = []
+        # MinisketchLib.minisketch_set_seed(self.sketch, c_uint64(666))
 
     @staticmethod
     def hash(
@@ -68,11 +72,12 @@ class Sketch:
             self,
             sketchSalt: bytes,
             packet: bytes
-    ) -> None:
+    ) -> int:
         if self.capacity == 0:
             return
-        self.hashes.append(Sketch.hash(sketchSalt, packet))
-        MinisketchLib.minisketch_add_uint64(self.sketch, c_uint64(self.hashes[-1]))
+        val = MiniSketch.hash(sketchSalt, packet)
+        MinisketchLib.minisketch_add_uint64(self.sketch, c_uint64(val))
+        return val
 
     def serialize(
             self
@@ -104,7 +109,7 @@ class Sketch:
         decoded: Array[c_uint64] = (c_uint64 * self.capacity)()
         differences: int = MinisketchLib.minisketch_decode(self.sketch, c_size_t(self.capacity), byref(decoded))
 
-        if differences == -1:
+        if differences < 0 or differences > len(decoded):
             raise SketchError("The amount of differences is greater than the capacity.")
 
         result: List[int] = []

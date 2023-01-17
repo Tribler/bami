@@ -22,6 +22,8 @@ eth-brownie = "^1"
 py-evm = "^0.3.0-alpha.20"
 mmh3 = "^3.0.0"
 pympler = "^1.0.1"
+seaborn = "^0.12.2"
+sortedcontainers = "^2.4.0"
 
 [tool.poetry.scripts]
 console = "bami.console:main"

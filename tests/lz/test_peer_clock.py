@@ -16,4 +16,4 @@ def test_clock_packet_size():
     unpacked_payload = default_serializer.unpack_serializable(CompactClock, pack)[0]
     c2 = PeerClock.from_compact_clock(unpacked_payload)
     assert c.n_cells == c2.n_cells
-    assert np.all(c2._clock == c._clock)
+    assert np.all(c2.data == c.data)

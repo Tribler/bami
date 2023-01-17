@@ -2,9 +2,13 @@ from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
 from dataclasses import dataclass
 from ipv8.messaging.payload_dataclass import overwrite_dataclass
 
-from bami.lz.sketch.peer_clock import CompactClock
-
 dataclass = overwrite_dataclass(dataclass)
+
+
+@vp_compile
+class CompactClock(VariablePayload):
+    format_list = ['Q', 'varlenH']
+    names = ['add', 'data']
 
 
 @dataclass(msg_id=1)
@@ -17,28 +21,23 @@ class TransactionPayload:
 
 
 @dataclass
-class CompactSketch:
+class CompactBloomFilter:
     data: bytes
     seed: int
     csum: bytes
 
 
-@dataclass
-class SketchData:
-    d: bytes
-    csum: bytes
-
-
-@dataclass
-class CompositeSketch:
-    seed: int
-    d: [SketchData]
+@vp_compile
+class CompactMiniSketch(VariablePayload):
+    format_list = ["H", "H", "varlenH"]
+    names = ['o', 't', 'data']
 
 
 @dataclass(msg_id=2)
 class ReconciliationRequestPayload:
     clock: CompactClock
-    sketch: CompactSketch
+    sk_type: str
+    sketch: bytes
 
 
 @vp_compile
@@ -51,7 +50,8 @@ class TransactionsChallengePayload(VariablePayload):
 @dataclass(msg_id=4)
 class ReconciliationResponsePayload:
     clock: CompactClock
-    sketch: CompactSketch
+    sk_type: str
+    sketch: bytes
     txs: TransactionsChallengePayload
 
 

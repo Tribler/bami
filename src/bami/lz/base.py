@@ -44,6 +44,12 @@ class BaseCommunity(Community):
     def prepare_packet(self, payload: Payload, sig: bool = True) -> bytes:
         return self.ezr_pack(payload.msg_id, payload, sig=sig)
 
+    def pack_payload(self, serializable: Payload) -> bytes:
+        return self.serializer.pack_serializable(serializable)
+
+    def unpack_payload(self, payload_class: Type[Payload], data: bytes) -> Payload:
+        return self.serializer.unpack_serializable(payload_class, data)[0]
+
     def send_packet(self, address: Address, packet: bytes) -> None:
         self.endpoint.send(address, packet)
 

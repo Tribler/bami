@@ -15,6 +15,7 @@ from ipv8_service import IPv8
 from common.discrete_loop import DiscreteLoop
 from common.network import SimulatedNetwork
 from common.simulation_endpoint import SimulationEndpoint
+from common.utils import set_time_mark
 from simulations.settings import SimulationSettings
 
 
@@ -23,13 +24,18 @@ class SimulatedCommunityMixin:
     This also requires to assign _start_time in the start of critical zone using `set_time_mark`, or `time_mark`.
     """
 
-    def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
+    async def busy_wait(self):
         end_time = time.perf_counter()
         delta = end_time - self._start_time
-        get_event_loop().call_later(
-            delta,
-            super().ez_send,
-            peer, *payloads)
+        await asyncio.sleep(delta)
+
+    def end_point(self, task, *args):
+        end_time = time.perf_counter()
+        delta = end_time - self._start_time
+        get_event_loop().call_later(delta, task, *args)
+
+    def start_point(self):
+        set_time_mark(self)
 
 
 class BamiSimulation:
@@ -124,7 +130,11 @@ class BamiSimulation:
                 return False
         return True
 
+    def on_discovery_start(self):
+        pass
+
     async def ipv8_discover_peers(self) -> None:
+        self.on_discovery_start()
         for peer_id in self.nodes.keys():
             neigh_set = self.settings.topology.neighbors(peer_id)
             for node_b_id in list(neigh_set):

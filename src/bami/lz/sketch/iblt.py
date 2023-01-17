@@ -51,7 +51,6 @@ def reconcile_ibfs(ibf1: IBF, ibf2: IBF) -> Tuple[List[Tuple[int, int]], List[Tu
     peelable = True
     values1 = []
     values2 = []
-    print(sim_diff.counters)
     for i in range(sim_diff.size):
         if sim_diff.counters[i] == 1 or sim_diff.counters[i] == -1:
             value = sim_diff.sums[i]
@@ -109,14 +108,14 @@ class IBLT:
         for item in item_ids:
             hash_values = []
             for seed in self.seed_list:
-                hash_values.append(mmh3.hash128(str(item).encode(), seed))
+                hash_values.append(mmh3.hash(str(item).encode(), seed))
             for hash_value in hash_values:
                 index = hash_value % self.m
                 id_sum = bloom[index][0] ^ item
                 if bloom[index][1] == 0:
-                    hash_sum = mmh3.hash128(str(item).encode(), self.element_hash)
+                    hash_sum = mmh3.hash(str(item).encode(), self.element_hash)
                 else:
-                    hash_sum = bloom[index][1] ^ mmh3.hash128(str(item).encode(), self.element_hash)
+                    hash_sum = bloom[index][1] ^ mmh3.hash(str(item).encode(), self.element_hash)
                 count = bloom[index][2] + 1
                 bloom[index] = (id_sum, hash_sum, count)
         return bloom
@@ -153,7 +152,7 @@ class IBLT:
                 quick_check_pass = False
                 element = table3[index]
                 if element[2] == 1 or element[2] == -1:
-                    element_hash = mmh3.hash128(str(element[0]).encode(), self.element_hash)
+                    element_hash = mmh3.hash(str(element[0]).encode(), self.element_hash)
                     if element_hash == element[1]:
                         table3 = self.peel_element(element[0], table3, element[2])
                         decodable = True
@@ -182,9 +181,9 @@ class IBLT:
                 An updated invertible bloom lookup table with the given element removed.
         """
         hash_values = []
-        element_hash = mmh3.hash128(str(element_id).encode(), self.element_hash)
+        element_hash = mmh3.hash(str(element_id).encode(), self.element_hash)
         for seed in self.seed_list:
-            hash_values.append(mmh3.hash128(str(element_id).encode(), seed))
+            hash_values.append(mmh3.hash(str(element_id).encode(), seed))
         for hash_value in hash_values:
             index = hash_value % self.m
             id_sum = table[index][0] ^ element_id

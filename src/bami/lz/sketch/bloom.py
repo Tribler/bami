@@ -2,7 +2,7 @@ from typing import Iterator, List
 
 import numpy as np
 
-from bami.lz.payload import CompactSketch
+from bami.lz.payload import CompactBloomFilter
 from bami.lz.sketch import murmur
 
 
@@ -66,12 +66,12 @@ class BloomFilter:
                 return False
         return True
 
-    def to_payload(self) -> CompactSketch:
+    def to_payload(self) -> CompactBloomFilter:
         checksum = self.checksum.to_bytes(BloomFilter.MAX_BITS // 8, 'big', signed=False)
-        return CompactSketch(self.to_bytes(), self.seed_value, checksum)
+        return CompactBloomFilter(self.to_bytes(), self.seed_value, checksum)
 
     @staticmethod
-    def from_payload(payload: CompactSketch) -> 'BloomFilter':
+    def from_payload(payload: CompactBloomFilter) -> 'BloomFilter':
         c = BloomFilter.from_bytes(payload.data)
         c.seed_value = payload.seed
         c.checksum = int.from_bytes(payload.csum, 'big', signed=False)

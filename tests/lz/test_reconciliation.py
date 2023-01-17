@@ -1,7 +1,10 @@
 from typing import List
 
+import mmh3
+import numpy as np
+
 from bami.lz.sketch.bloom import BloomFilter
-from bami.lz.sketch.peer_clock import PeerClock
+from bami.lz.sketch.peer_clock import ClockTable, PeerClock
 from bami.lz.reconcile import CompactReconciliationSet
 from bami.lz.utils import *
 
@@ -31,7 +34,10 @@ def test_composite_reconciliation():
 
     all_vals = set()
     next_size = set()
-    def size(i, ns): return bm*4 if i in ns else bm
+
+    def size(i, ns):
+        return bm * 4 if i in ns else bm
+
     for k in range(10):
         f_id = uhash('peer1') ^ uhash('peer2') ^ k
 
@@ -61,8 +67,8 @@ def test_composite_reconciliation():
 def test_bloom_reconciliation():
     """Exchange transactions  between two peers"""
     m = 16
-    n = 6000
-    delta = 10
+    n = 5000
+    delta = 300
 
     data1 = [uhash(get_random_string(10)) for _ in range(n)]
     data2 = data1[:n - delta]
@@ -71,11 +77,11 @@ def test_bloom_reconciliation():
     all_vals = set()
     for k in range(10):
         f_id = uhash('peer1') ^ uhash('peer2') ^ k
-        bm = 2048
-        bloom1 = BloomFilter(bm, num_func=1, seed_value=f_id)
+        bm = 8*800
+        bloom1 = BloomFilter(bm, num_func=3, seed_value=f_id)
         pool1 = CompactReconciliationSet(bloom1)
 
-        bloom2 = BloomFilter(bm, num_func=1, seed_value=f_id)
+        bloom2 = BloomFilter(bm, num_func=3, seed_value=f_id)
         pool2 = CompactReconciliationSet(bloom2)
         # Prepare transactions for each of the peers
         for i in data1:
@@ -87,3 +93,38 @@ def test_bloom_reconciliation():
         diff_vals = pool1.reconcile(pool2.sketch)
         all_vals.update(diff_vals)
         print(len(diff_vals), len(all_vals))
+
+
+def test_clock_reconciliation():
+    """Exchange transactions  between two peers"""
+    m = 16
+    n = 5000
+    delta = 300
+
+    data1 = [uhash(get_random_string(10)) for _ in range(n)]
+    data2 = data1[:n - delta]
+    data2.extend([uhash(get_random_string(10)) for _ in range(delta)])
+
+    m = 64
+
+    all_vals = set()
+    for k in range(10):
+        f_id = uhash('peer1') ^ uhash('peer2') ^ k
+
+        p1 = PeerClock(m)
+        p1.seed = f_id
+        p2 = PeerClock(m)
+        p2.seed = f_id
+
+        for i in data1:
+            p1.increment(i)
+        for i in data2:
+            p2.increment(i)
+
+        print("---------")
+
+        print(p1.csum)
+        print(p2.csum)
+
+        print(p1.data - p2.data)
+

@@ -11,20 +11,20 @@ from common.config import Config, Dist
 class DefaultLocations(Config):
     locations = Dist('sample', {'weight': [0.3, 0.3, 0.4], 'values': ['Tokyo', 'Ireland', 'Ohio']})
     latencies = {
-        'Ohio': {'Ohio': Dist('invgamma', (5.54090, 0.333305, 0.987249)),
+        'Ohio': {'Ohio': Dist('invgamma', (10.54090, 0.333305, 0.987249)),
                  'Ireland': Dist('norm', (73.6995, 1.19583092197097127)),
                  'Tokyo': Dist('norm', (156.00904977375566, 0.09469886668079797))
                  },
-        'Ireland': {'Ireland': Dist('invgamma', (6.4360455224301525, 0.8312748033308526, 1.086191852963273)),
+        'Ireland': {'Ireland': Dist('invgamma', (12.4360455224301525, 0.8312748033308526, 1.086191852963273)),
                     'Tokyo': Dist('norm', (131.0275, 0.25834811785650774))
                     },
-        'Tokyo': {'Tokyo': Dist('invgamma', (11.104508341331055, 0.3371934865734555, 2.0258998705983737))}
+        'Tokyo': {'Tokyo': Dist('invgamma', (20.104508341331055, 0.3371934865734555, 2.0258998705983737))}
     }
 
 
 class LocalLocations(Config):
     locations = Dist('sample', ['local'])
-    latencies = {'local': {'local': 0}}
+    latencies = {'local': {'local': 1}}
 
 
 @dataclass
@@ -54,7 +54,7 @@ class SimulationSettings:
     enable_community_statistics: bool = False
 
     # Config class for latency specification, as latency distribution matrix
-    location_latency_generator: Config = DefaultLocations
+    location_latency_generator: Config = LocalLocations
 
     # Optional topology for the overlay network
     topology: Optional[nx.DiGraph] = None
