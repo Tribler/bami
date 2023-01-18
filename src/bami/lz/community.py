@@ -280,7 +280,7 @@ class SyncCommunity(BaseCommunity):
             p_id, val = min(self.mempool_candidates.items(), key=lambda x: x[1])
             all_settled = val - self.settled_txs
 
-            cur_settled = random.sample(all_settled, self.settings.settle_size)
+            cur_settled = random.sample(all_settled, min(self.settings.settle_size, len(all_settled)))
             self.blocks_size.append(len(cur_settled))
             self.settled_txs.update(cur_settled)
             self.on_settle_transactions(cur_settled)
@@ -288,7 +288,7 @@ class SyncCommunity(BaseCommunity):
             # Settle with all known mempool transactions
             new_settled = self.reconciliation_manager.all_txs - self.settled_txs
 
-            cur_settled = random.sample(new_settled, self.settings.settle_size)
+            cur_settled = random.sample(new_settled, min(self.settings.settle_size, len(new_settled)))
             self.blocks_size.append(len(cur_settled))
             self.settled_txs.update(cur_settled)
             self.on_settle_transactions(cur_settled)

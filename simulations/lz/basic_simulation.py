@@ -1,4 +1,5 @@
 from asyncio import ensure_future, get_event_loop
+from typing import Iterable
 
 from ipv8.configuration import ConfigBuilder
 
@@ -46,6 +47,7 @@ class BasicLZSimulation(BamiSimulation):
                 self.nodes[peer_id].overlays[0].start_tx_creation()
             else:
                 self.nodes[peer_id].overlays[0].start_reconciliation()
+                self.nodes[peer_id].overlays[0].start_periodic_settlement()
 
 
 DATA_FILE = "../../lz_visualize/data/tx_time_mem_n_{}_{}_d_{}_t_{:.2f}".format(N, LATENCY,
@@ -55,6 +57,7 @@ DATA_FILE = "../../lz_visualize/data/tx_time_mem_n_{}_{}_d_{}_t_{:.2f}".format(N
 TX_FILE = DATA_FILE + ".csv"
 STAT_FILE = DATA_FILE + "_rounds.csv"
 SD_FILE = DATA_FILE + "_data.csv"
+SETTLE_FILE = DATA_FILE + "_set.csv"
 
 
 class SimulateLZCommunity(SimulatedCommunityMixin, SyncCommunity):
@@ -68,6 +71,8 @@ class SimulateLZCommunity(SimulatedCommunityMixin, SyncCommunity):
     def __init__(self, *args, **kwargs) -> None:
         with open(TX_FILE, "w") as out:
             out.write("peer_id,tx_id,time\n")
+        with open(SETTLE_FILE, "w") as out:
+            out.write("peer_id,tx_id,time\n")
         super().__init__(*args, **kwargs)
 
     def on_process_new_transaction(self, t_id: int, tx_payload: TransactionPayload):
@@ -75,6 +80,12 @@ class SimulateLZCommunity(SimulatedCommunityMixin, SyncCommunity):
         with open(TX_FILE, "a") as out:
             out.write("{},{},{}\n".format(hash(self.my_peer), t_id, get_event_loop().time()))
         super().on_process_new_transaction(t_id, tx_payload)
+
+    def on_settle_transactions(self, settled_txs: Iterable[int]):
+        super().on_settle_transactions(settled_txs)
+        with open(SETTLE_FILE, "a") as out:
+            for t_id in settled_txs:
+                out.write("{},{},{}\n".format(hash(self.my_peer), t_id, get_event_loop().time()))
 
 
 if __name__ == "__main__":
