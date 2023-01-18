@@ -124,7 +124,7 @@ venv.bak/
 
 # Rope project settings
 .ropeproject
-
+lz_visualize/
 # mkdocs documentation
 /site
 

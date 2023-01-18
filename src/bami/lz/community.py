@@ -265,6 +265,7 @@ class SyncCommunity(BaseCommunity):
         old_clock.merge_clock(new_clock)
 
     def start_periodic_settlement(self):
+        self.logger.info("Start settlement for transactions")
         self.register_task(
             "settle_transactions",
             self.settle_transactions,
@@ -276,6 +277,7 @@ class SyncCommunity(BaseCommunity):
         pass
 
     def settle_transactions(self):
+        self.logger.debug("Settle current transactions")
         if self.settings.settle_strategy == SettlementStrategy.FAIR:
             p_id, val = min(self.mempool_candidates.items(), key=lambda x: x[1])
             all_settled = val - self.settled_txs
