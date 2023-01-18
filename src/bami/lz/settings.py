@@ -7,6 +7,11 @@ class SketchAlgorithm(Enum):
     BLOOM = 2
 
 
+class SettlementStrategy(Enum):
+    FAIR = 1
+    VANILLA = 2
+
+
 @dataclasses.dataclass
 class ClientSettings:
     # Transaction creation parameters
@@ -58,4 +63,9 @@ class LZSettings(ClientSettings,
     sketch_algorithm = SketchAlgorithm.MINISKETCH
     sketch_size: int = 100
     max_sections = 500
+
+    settle_freq = 5
+    settle_delay = 2
+    settle_strategy = SettlementStrategy.FAIR
+    settle_size = 100
 

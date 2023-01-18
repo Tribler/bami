@@ -12,7 +12,7 @@ from bami.lz.database.database import TransactionSyncDB
 from bami.lz.payload import CompactMiniSketch, ReconciliationRequestPayload, ReconciliationResponsePayload, \
     TransactionBatchPayload, TransactionPayload, TransactionsChallengePayload, TransactionsRequestPayload
 from bami.lz.reconcile import BloomReconciliation, MiniSketchReconciliation
-from bami.lz.settings import LZSettings, SketchAlgorithm
+from bami.lz.settings import LZSettings, SettlementStrategy, SketchAlgorithm
 from bami.lz.sketch.bloom import BloomFilter
 from bami.lz.sketch.minisketch import SketchError
 from bami.lz.sketch.peer_clock import clock_progressive, clocks_inconsistent, CompactClock, PeerClock
@@ -71,8 +71,9 @@ class SyncCommunity(BaseCommunity):
                                                                    )
             self.use_bloom = False
 
-        self.mempool_commitments = {}
+        self.settled_txs = set()
         self.mempool_candidates = {}
+        self.blocks_size = []
 
         self.last_reconciled_part = defaultdict(int)
 
@@ -262,6 +263,35 @@ class SyncCommunity(BaseCommunity):
         old_clock = self.memcache.peer_clock(p_id)
         assert not clocks_inconsistent(old_clock, new_clock)
         old_clock.merge_clock(new_clock)
+
+    def start_periodic_settlement(self):
+        self.register_task(
+            "settle_transactions",
+            self.settle_transactions,
+            interval=self.settings.settle_freq,
+            delay=random.random() + self.settings.settle_delay,
+        )
+
+    def on_settle_transactions(self, settled_txs: Iterable[int]):
+        pass
+
+    def settle_transactions(self):
+        if self.settings.settle_strategy == SettlementStrategy.FAIR:
+            p_id, val = min(self.mempool_candidates.items(), key=lambda x: x[1])
+            all_settled = val - self.settled_txs
+
+            cur_settled = random.sample(all_settled, self.settings.settle_size)
+            self.blocks_size.append(len(cur_settled))
+            self.settled_txs.update(cur_settled)
+            self.on_settle_transactions(cur_settled)
+        else:
+            # Settle with all known mempool transactions
+            new_settled = self.reconciliation_manager.all_txs - self.settled_txs
+
+            cur_settled = random.sample(new_settled, self.settings.settle_size)
+            self.blocks_size.append(len(cur_settled))
+            self.settled_txs.update(cur_settled)
+            self.on_settle_transactions(cur_settled)
 
     def reconcile_sketches(self, p_id: bytes,
                            payload: Union[ReconciliationResponsePayload,

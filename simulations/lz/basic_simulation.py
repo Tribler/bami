@@ -14,7 +14,7 @@ class SimSettings(LZSettings):
     recon_freq = 1
     recon_fanout = 3
     tx_batch = 3
-    tx_freq = 0.2
+    tx_freq = 0.1
     initial_fanout = 1
 
     sketch_size = 100
@@ -49,9 +49,9 @@ class BasicLZSimulation(BamiSimulation):
 
 
 DATA_FILE = "../../lz_visualize/data/tx_time_mem_n_{}_{}_d_{}_t_{:.2f}".format(N, LATENCY,
-                                                                      SimSettings.recon_freq,
-                                                                      SimSettings.tx_batch / SimSettings.tx_freq * N_CLIENTS
-                                                                      )
+                                                                               SimSettings.recon_freq,
+                                                                               SimSettings.tx_batch / SimSettings.tx_freq * N_CLIENTS
+                                                                               )
 TX_FILE = DATA_FILE + ".csv"
 STAT_FILE = DATA_FILE + "_rounds.csv"
 SD_FILE = DATA_FILE + "_data.csv"
