@@ -6,27 +6,6 @@ from ipv8.types import Payload
 from bami.lz.settings import LZSettings
 from bami.lz.sketch.peer_clock import PeerClock
 
-import lmdb
-
-
-class PersistentStore:
-
-    def __init__(self, block_dir='memcache'):
-        self.env = lmdb.open(block_dir, subdir=True, max_dbs=5, map_async=True)
-        self.commitments = self.env.open_db(key=b"commitments")
-
-    def add_commitment(self, pid: bytes, commitment: bytes) -> None:
-        with self.env.begin(write=True) as txn:
-            txn.put(pid, commitment, db=self.commitments)
-
-    def get_last_commitment(self, pid: bytes) -> bytes:
-        with self.env.begin() as txn:
-            val = txn.get(
-                pid,
-                db=self.commitments
-            )
-        return val
-
 
 class TransactionSyncDB:
     """Storage for transactions and peers that sync transactions"""

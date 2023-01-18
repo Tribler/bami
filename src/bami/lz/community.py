@@ -8,7 +8,7 @@ from ipv8.messaging.payload import IntroductionRequestPayload
 from ipv8.peer import Peer
 
 from bami.lz.base import BaseCommunity
-from bami.lz.database.database import PersistentStore, TransactionSyncDB
+from bami.lz.database.database import TransactionSyncDB
 from bami.lz.payload import CompactMiniSketch, ReconciliationRequestPayload, ReconciliationResponsePayload, \
     TransactionBatchPayload, TransactionPayload, TransactionsChallengePayload, TransactionsRequestPayload
 from bami.lz.reconcile import BloomReconciliation, MiniSketchReconciliation
@@ -45,7 +45,6 @@ class SyncCommunity(BaseCommunity):
         """
         self._settings = kwargs.pop("settings", LZSettings())
         self._memcache = kwargs.pop("memcache", TransactionSyncDB(self._settings))
-        self.persistent = PersistentStore(self._settings.dir_name)
 
         super().__init__(*args, **kwargs)
 
