@@ -7,7 +7,7 @@ from typing import Any
 import nox
 from nox.sessions import Session
 
-locations = "src", "tests", "noxfile.py", "docs/conf.py"
+locations = "simulation", "tests", "noxfile.py", "docs/conf.py"
 nox.options.sessions = (
     "black",
     "tests",

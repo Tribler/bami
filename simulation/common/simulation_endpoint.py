@@ -3,7 +3,7 @@ from asyncio import get_event_loop
 from ipv8.test.mocking.endpoint import AutoMockEndpoint
 from ipv8.util import succeed
 
-from common.network import SimulatedNetwork
+from simulation.common.network import SimulatedNetwork
 
 
 class SimulationEndpoint(AutoMockEndpoint):

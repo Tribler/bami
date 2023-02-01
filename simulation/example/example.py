@@ -7,12 +7,12 @@ from ipv8.lazy_community import lazy_wrapper
 from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
 from ipv8_service import IPv8
 
-from common.discrete_loop import DiscreteLoop
-from common.network import SimulatedNetwork
-from common.simulation_endpoint import SimulationEndpoint
-from common.utils import time_mark
-from settings import LocalLocations
-from simulation import SimulatedCommunityMixin
+from simulation.common.discrete_loop import DiscreteLoop
+from simulation.common.network import SimulatedNetwork
+from simulation.common.simulation_endpoint import SimulationEndpoint
+from simulation.common.utils import time_mark
+from simulation.common.settings import LocalLocations
+from simulation.common.simulation import SimulatedCommunityMixin
 
 
 @vp_compile
@@ -21,7 +21,7 @@ class PingMessage(VariablePayload):
 
 
 @vp_compile
-class PongMesage(VariablePayload):
+class PongMessage(VariablePayload):
     msg_id = 2
 
 
@@ -48,9 +48,9 @@ class PingPongCommunity(Community):
     def on_ping_message(self, peer, payload):
         self.logger.info("🔥 <t=%.1f> peer %s received ping", get_event_loop().time(), self.my_peer.address)
         self.logger.info("🧊 <t=%.1f> peer %s sending pong", get_event_loop().time(), self.my_peer.address)
-        self.ez_send(peer, PongMesage())
+        self.ez_send(peer, PongMessage())
 
-    @lazy_wrapper(PongMesage)
+    @lazy_wrapper(PongMessage)
     def on_pong_message(self, peer, payload):
         self.logger.info("🧊 <t=%.1f> peer %s received pong", get_event_loop().time(), self.my_peer.address)
 
@@ -65,7 +65,7 @@ async def start_communities():
     network = SimulatedNetwork(LocalLocations)
     for i in range(1, 6):
         builder = ConfigBuilder().clear_keys().clear_overlays()
-        builder.add_key("my peer", "medium", f"ec{i}.pem")
+        builder.add_key("my peer", "medium", f"../../certs/ec{i}.pem")
         builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
         endpoint = SimulationEndpoint(network)
 

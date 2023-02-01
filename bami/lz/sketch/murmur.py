@@ -12,7 +12,7 @@ and you only want a drop-in murmur3 implementation.
 As this is purely python it is FAR from performant and if performance is anything that is needed
 a proper c-module is suggested!
 
-This module is written to have the same format as mmh3 python package found here for simple conversions:
+This module is written to have the same format as mmh3 python package found here for simulation conversions:
 
 https://pypi.python.org/pypi/mmh3/2.3.1
 '''

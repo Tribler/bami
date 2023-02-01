@@ -1,4 +1,4 @@
-from common.config import Config, Dist, Func
+from simulation.common.config import Config, Dist, Func
 
 
 class TestConfig(Config):
