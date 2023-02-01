@@ -10,14 +10,8 @@ The goal of BAMI is to provide system designers simple tools to build secure led
 * **Inconsistency resolution**. BAMI has tools to quickly detect delibarate forks and accidental inconsistencies (e.g., as the result of a software bug). BAMI recovers from partitions in the network while ensuring availability and eventual consistency.
 * **Reconciliation and Synchronization**. All stored information is organized in groups, which we name communities. A community is identified by a public key and maintains a so-called community chain. Through a robust push-pull gossip algorithm it is guaranteed that peers will eventually received all the information within a single community.
 
+# Installation
+In order to build and run the project, we advise you to use `poetry` in combination with Python 3.18. To install `poetry`, follow the instructions on [their website](https://python-poetry.org/docs/#installation). Once `poetry` is installed, you can install the project dependencies by running `poetry install` in the root of the project. This will install all the dependencies in a virtual environment. You can then run the example simulation by running `example.py` located in the simulation package.
 
-## Data consistency and validity 
-
-
-The informaiton in BAMI is organised in two types of chains:
- - *Personal chain*: the information created by one peer is kept in the chain, linked with each other. This imposes a sequential order of information by a single writer (see [PRAM](https://jepsen.io/consistency/models/pram)). This is a convenient way to verify and synchronize related data.
- - *DAG representation of a chain*: if a fork is detected in sequential chain we stop interacting with the malicious peer and provide opportunity to fix this inconsistency. Chain as a DAG follows [Causal Consistency](https://jepsen.io/consistency/models/causal).
- 
-## BAMI science
-
-ToDo: describe how this is ongoing research. We aim to provide a toolbox for addressing Tragedy of the Commons problem in the digital realm. Our unique feature is that we evaluate our work within Tribler with real users, real scarce resource to manage, and real cheaters (whitewashing,Sybil). Viciously tested code, with a theoretical grounding. Garbage collection, conflict resolution repair, forgiveness-by-design, etc.
+# Jupyter notebook
+For this course, we provide you with instructions in the form of a Jupyter notebook. You can start the notebook by running `poetry run jupyter notebook` in the root of the project. This will open a browser window with the notebook. You can then run the cells in the notebook by pressing `Shift + Enter`.
