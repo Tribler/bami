@@ -1,18 +1,14 @@
 import os
-from asyncio import ensure_future, get_event_loop, set_event_loop, sleep
+from asyncio import ensure_future, get_event_loop
 
 from ipv8.community import Community
 from ipv8.configuration import ConfigBuilder
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
-from ipv8_service import IPv8
 
-from simulation.common.discrete_loop import DiscreteLoop
-from simulation.common.network import SimulatedNetwork
-from simulation.common.simulation_endpoint import SimulationEndpoint
-from simulation.common.utils import time_mark, connected_topology
-from simulation.common.settings import LocalLocations, SimulationSettings
+from simulation.common.settings import SimulationSettings
 from simulation.common.simulation import SimulatedCommunityMixin, BamiSimulation
+from simulation.common.utils import time_mark, connected_topology
 
 
 @vp_compile
@@ -72,7 +68,6 @@ if __name__ == "__main__":
     settings = SimulationSettings()
     settings.peers = 6
     settings.duration = 1000
-    settings.indefinite = True
     settings.topology = connected_topology(settings.peers)
     settings.community_map = {'PingPongCommunity': SimulatedPingPong}
 
