@@ -10,9 +10,9 @@ from ipv8_service import IPv8
 from simulation.common.discrete_loop import DiscreteLoop
 from simulation.common.network import SimulatedNetwork
 from simulation.common.simulation_endpoint import SimulationEndpoint
-from simulation.common.utils import time_mark
-from simulation.common.settings import LocalLocations
-from simulation.common.simulation import SimulatedCommunityMixin
+from simulation.common.utils import time_mark, connected_topology
+from simulation.common.settings import LocalLocations, SimulationSettings
+from simulation.common.simulation import SimulatedCommunityMixin, BamiSimulation
 
 
 @vp_compile
@@ -55,42 +55,27 @@ class PingPongCommunity(Community):
         self.logger.info("🧊 <t=%.1f> peer %s received pong", get_event_loop().time(), self.my_peer.address)
 
 
+class BasicPingPongSimulation(BamiSimulation):
+    def get_ipv8_builder(self, peer_id: int) -> ConfigBuilder:
+        builder = super().get_ipv8_builder(peer_id)
+        builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
+        return builder
+
+
 class SimulatedPingPong(SimulatedCommunityMixin, PingPongCommunity):
     send_ping = time_mark(PingPongCommunity.send_ping)
     on_ping_message = time_mark(PingPongCommunity.on_ping_message)
 
 
-async def start_communities():
-    instances = []
-    network = SimulatedNetwork(LocalLocations)
-    for i in range(1, 6):
-        builder = ConfigBuilder().clear_keys().clear_overlays()
-        builder.add_key("my peer", "medium", f"../../certs/ec{i}.pem")
-        builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
-        endpoint = SimulationEndpoint(network)
-
-        instance = IPv8(builder.finalize(), endpoint_override=endpoint,
-                        extra_communities={'PingPongCommunity': SimulatedPingPong})
-        await instance.start()
-        instances.append(instance)
-
-    # Introduce peers to each other
-    for from_instance in instances:
-        for to_instance in instances:
-            if from_instance == to_instance:
-                continue
-            from_instance.overlays[0].walk_to(to_instance.endpoint.wan_address)
-
-
-async def run_simulation():
-    await start_communities()
-    await sleep(10)
-    get_event_loop().stop()
-
-
 if __name__ == "__main__":
     # We use a discrete event loop to enable quick simulations.
-    loop = DiscreteLoop()
-    set_event_loop(loop)
-    ensure_future(run_simulation())
-    loop.run_forever()
+    settings = SimulationSettings()
+    settings.peers = 6
+    settings.duration = 1000
+    settings.indefinite = True
+    settings.topology = connected_topology(settings.peers)
+    settings.community_map = {'PingPongCommunity': SimulatedPingPong}
+
+    simulation = BasicPingPongSimulation(settings)
+    ensure_future(simulation.run())
+    simulation.loop.run_forever()
