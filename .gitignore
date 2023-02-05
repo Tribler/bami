@@ -142,6 +142,3 @@ dmypy.json
 # common data file
 simulations/**/data
 /lz_visualize/
-
-# certs
-certs/
