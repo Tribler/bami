@@ -12,6 +12,3 @@ The goal of BAMI is to provide system designers simple tools to build secure led
 
 # Installation
 In order to build and run the project, we advise you to use `poetry` in combination with Python 3.18. To install `poetry`, follow the instructions on [their website](https://python-poetry.org/docs/#installation). Once `poetry` is installed, you can install the project dependencies by running `poetry install` in the root of the project. This will install all the dependencies in a virtual environment. You can then run the example simulation by running `example.py` located in the simulation package.
-
-# Jupyter notebook
-For this course, we provide you with instructions in the form of a Jupyter notebook. You can start the notebook by running `poetry run jupyter notebook` in the root of the project. This will open a browser window with the notebook. You can then run the cells in the notebook by pressing `Shift + Enter`.
