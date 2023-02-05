@@ -2,8 +2,8 @@ from typing import Optional, Type
 
 import networkx as nx
 
-from common.config import Config
-from common.utils import Cache
+from simulation.common.config import Config
+from simulation.common.utils import Cache
 
 
 class SimulatedNetwork:

@@ -1,18 +1,14 @@
 import os
-from asyncio import ensure_future, get_event_loop, set_event_loop, sleep
+from asyncio import ensure_future, get_event_loop
 
 from ipv8.community import Community
 from ipv8.configuration import ConfigBuilder
 from ipv8.lazy_community import lazy_wrapper
 from ipv8.messaging.lazy_payload import VariablePayload, vp_compile
-from ipv8_service import IPv8
 
-from common.discrete_loop import DiscreteLoop
-from common.network import SimulatedNetwork
-from common.simulation_endpoint import SimulationEndpoint
-from common.utils import time_mark
-from settings import LocalLocations
-from simulation import SimulatedCommunityMixin
+from simulation.common.settings import SimulationSettings
+from simulation.common.simulation import SimulatedCommunityMixin, BamiSimulation
+from simulation.common.utils import time_mark, connected_topology
 
 
 @vp_compile
@@ -21,7 +17,7 @@ class PingMessage(VariablePayload):
 
 
 @vp_compile
-class PongMesage(VariablePayload):
+class PongMessage(VariablePayload):
     msg_id = 2
 
 
@@ -48,11 +44,18 @@ class PingPongCommunity(Community):
     def on_ping_message(self, peer, payload):
         self.logger.info("🔥 <t=%.1f> peer %s received ping", get_event_loop().time(), self.my_peer.address)
         self.logger.info("🧊 <t=%.1f> peer %s sending pong", get_event_loop().time(), self.my_peer.address)
-        self.ez_send(peer, PongMesage())
+        self.ez_send(peer, PongMessage())
 
-    @lazy_wrapper(PongMesage)
+    @lazy_wrapper(PongMessage)
     def on_pong_message(self, peer, payload):
         self.logger.info("🧊 <t=%.1f> peer %s received pong", get_event_loop().time(), self.my_peer.address)
+
+
+class BasicPingPongSimulation(BamiSimulation):
+    def get_ipv8_builder(self, peer_id: int) -> ConfigBuilder:
+        builder = super().get_ipv8_builder(peer_id)
+        builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
+        return builder
 
 
 class SimulatedPingPong(SimulatedCommunityMixin, PingPongCommunity):
@@ -60,37 +63,14 @@ class SimulatedPingPong(SimulatedCommunityMixin, PingPongCommunity):
     on_ping_message = time_mark(PingPongCommunity.on_ping_message)
 
 
-async def start_communities():
-    instances = []
-    network = SimulatedNetwork(LocalLocations)
-    for i in range(1, 6):
-        builder = ConfigBuilder().clear_keys().clear_overlays()
-        builder.add_key("my peer", "medium", f"ec{i}.pem")
-        builder.add_overlay("PingPongCommunity", "my peer", [], [], {}, [('started',)])
-        endpoint = SimulationEndpoint(network)
-
-        instance = IPv8(builder.finalize(), endpoint_override=endpoint,
-                        extra_communities={'PingPongCommunity': SimulatedPingPong})
-        await instance.start()
-        instances.append(instance)
-
-    # Introduce peers to each other
-    for from_instance in instances:
-        for to_instance in instances:
-            if from_instance == to_instance:
-                continue
-            from_instance.overlays[0].walk_to(to_instance.endpoint.wan_address)
-
-
-async def run_simulation():
-    await start_communities()
-    await sleep(10)
-    get_event_loop().stop()
-
-
 if __name__ == "__main__":
     # We use a discrete event loop to enable quick simulations.
-    loop = DiscreteLoop()
-    set_event_loop(loop)
-    ensure_future(run_simulation())
-    loop.run_forever()
+    settings = SimulationSettings()
+    settings.peers = 6
+    settings.duration = 1000
+    settings.topology = connected_topology(settings.peers)
+    settings.community_map = {'PingPongCommunity': SimulatedPingPong}
+
+    simulation = BasicPingPongSimulation(settings)
+    ensure_future(simulation.run())
+    simulation.loop.run_forever()

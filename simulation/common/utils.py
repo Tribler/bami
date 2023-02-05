@@ -127,8 +127,8 @@ class Cache:
         elif self.symmetric and len(args) == 2:
             if args[0] not in self.cache or args[1] not in self.cache.get(args[0]):
                 last, self.cache[args[1]][args[0]] = self.cache[args[1]][args[0]][-1], \
-                                                     self.cache[args[1]][args[0]][:-1]
+                    self.cache[args[1]][args[0]][:-1]
             else:
                 last, self.cache[args[0]][args[1]] = self.cache[args[0]][args[1]][-1], \
-                                                     self.cache[args[0]][args[1]][:-1]
+                    self.cache[args[0]][args[1]][:-1]
         return last
