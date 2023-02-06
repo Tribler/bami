@@ -9,14 +9,13 @@ from typing import Optional
 import yappi
 from ipv8.configuration import ConfigBuilder
 from ipv8.messaging.interfaces.statistics_endpoint import StatisticsEndpoint
-from ipv8.types import Peer, AnyPayload
 from ipv8_service import IPv8
 
-from common.discrete_loop import DiscreteLoop
-from common.network import SimulatedNetwork
-from common.simulation_endpoint import SimulationEndpoint
-from common.utils import set_time_mark
-from simulations.settings import SimulationSettings
+from simulation.common.discrete_loop import DiscreteLoop
+from simulation.common.network import SimulatedNetwork
+from simulation.common.settings import SimulationSettings
+from simulation.common.simulation_endpoint import SimulationEndpoint
+from simulation.common.utils import set_time_mark
 
 
 class SimulatedCommunityMixin:

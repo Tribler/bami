@@ -4,8 +4,8 @@ from typing import Optional, Dict, Type
 import networkx as nx
 from ipv8.types import Community
 
-from common.utils import random_topology
-from common.config import Config, Dist
+from simulation.common.utils import random_topology
+from simulation.common.config import Config, Dist
 
 
 class DefaultLocations(Config):

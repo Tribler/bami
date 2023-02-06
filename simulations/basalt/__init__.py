@@ -1,3 +1,0 @@
-"""
-Contains BASALT simulations.
-"""
