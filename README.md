@@ -13,4 +13,16 @@ The goal of BAMI is to provide system designers simple tools to build secure led
 BAMI is build with the [IPv8 library](https://github.com/Tribler/py-ipv8). Check the [documentation](https://py-ipv8.readthedocs.io/en/latest/) for more details.  
 
 # Installation
-In order to build and run the project, we advise you to use `poetry` in combination with Python 3.8. To install `poetry`, follow the instructions on [their website](https://python-poetry.org/docs/#installation). Once `poetry` is installed, you can install the project dependencies by running `poetry install` in the root of the project. This will install all the dependencies in a virtual environment. You can then run the example simulation by running `example.py` located in the simulation package.
+In order to build and run the project, we advise you to use `pip` in combination with Python 3.11. To install using `pip`, run `pip install -r requirements.txt`. In case you run into issues installing `aioquic` run the following commands before installing:
+
+```export CFLAGS=-I/usr/local/opt/openssl/include```
+
+```export LDFLAGS=-L/usr/local/opt/openssl/lib```
+
+Or for Mac M1 users:
+
+```export CFLAGS=-I/opt/homebrew/opt/openssl/include```
+
+```export LDLAGS=-L/opt/homebrew/opt/openssl/bin```
+
+You can then run the example simulation by running `example.py` located in the simulation package.

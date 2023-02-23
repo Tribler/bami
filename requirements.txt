@@ -1,0 +1,16 @@
+aioquic==0.9.20
+cachetools==5.3.0
+ipython==8.10.0
+lmdb==1.4.0
+mmh3==3.0.0
+msgpack==1.0.4
+networkx==3.0
+numpy==1.24.2
+orjson==3.8.6
+pyipv8==2.10.0
+PyYAML==6.0
+scipy==1.10.1
+starlette==0.25.0
+uvloop==0.17.0
+wsproto==1.2.0
+yappi==1.4.0
