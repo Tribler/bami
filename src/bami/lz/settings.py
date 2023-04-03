@@ -67,5 +67,5 @@ class LZSettings(ClientSettings,
     settle_freq = 5
     settle_delay = 2
     settle_strategy = SettlementStrategy.FAIR
-    settle_size = 100
+    settle_size = 300
 

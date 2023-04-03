@@ -4,6 +4,7 @@ from typing import Optional, Dict, Type
 import networkx as nx
 from ipv8.types import Community
 
+from bami.lz.settings import LZSettings
 from common.utils import random_topology
 from common.config import Config, Dist
 
@@ -31,6 +32,10 @@ class LocalLocations(Config):
 class SimulationSettings:
     # Number of IPv8 peers.
     peers: int = 100
+
+    clients: int = 20
+
+    faulty: int = 0
 
     # The name of the experiment.
     name: str = ""
@@ -65,6 +70,10 @@ class SimulationSettings:
 
     # A map for community_name: community class implementation to be used in simulation
     community_map: Optional[Dict[str, Type[Community]]] = None
+
+    overlay_settings: LZSettings = None
+
+    consts : Dict[str, str] = None
 
     def __post_init__(self):
         if not self.topology:

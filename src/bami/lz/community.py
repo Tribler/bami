@@ -81,8 +81,14 @@ class SyncCommunity(BaseCommunity):
         self.sketch_stat_has = []
         self.sketch_stat_miss = []
 
+        self.ignored_peers = set()
+
         if self.settings.start_immediately:
             self.start_tasks()
+
+    def censor_peer(self, pid: bytes):
+        self.logger.warn("Starting to censor client")
+        self.ignored_peers.add(pid)
 
     def make_light_client(self):
         self.is_light_client = True
@@ -174,6 +180,11 @@ class SyncCommunity(BaseCommunity):
     def process_transaction(self, payload: TransactionPayload):
 
         t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
+
+        if payload.pk in self.ignored_peers:
+            # Just ignore any transaction from the pk
+            self.logger.warn("Censoring tx")
+            return
 
         if not self.memcache.get_tx_payload(t_id):
             self.memcache.add_tx_payload(t_id, payload)
@@ -279,12 +290,15 @@ class SyncCommunity(BaseCommunity):
     def settle_transactions(self):
         self.logger.debug("Settle current transactions")
         if self.settings.settle_strategy == SettlementStrategy.FAIR:
-            p_id, val = min(self.mempool_candidates.items(), key=lambda x: x[1])
+            if len(self.mempool_candidates) < 1:
+                return
+            p_id, val = min(self.mempool_candidates.items(), key=lambda x: len(x[1]))
             all_settled = val - self.settled_txs
 
             cur_settled = random.sample(all_settled, min(self.settings.settle_size, len(all_settled)))
             self.blocks_size.append(len(cur_settled))
             self.settled_txs.update(cur_settled)
+            self.mempool_candidates.pop(p_id)
             self.on_settle_transactions(cur_settled)
         else:
             # Settle with all known mempool transactions

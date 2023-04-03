@@ -59,9 +59,9 @@ def to_hash(str_msg):
     return str(hex(abs(hash(str_msg))))
 
 
-def random_topology(num_peers=25, p=0.4):
+def random_topology(num_peers=25, d=8):
     # Create network topology
-    G = nx.erdos_renyi_graph(num_peers, p)
+    G = nx.random_regular_graph(d=8, n=num_peers)
     nx.relabel_nodes(G, {k: k + 1 for k in G.nodes()}, copy=False)
     return G
 

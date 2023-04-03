@@ -16,7 +16,8 @@ class Dist(object):
 
     def __init__(self, name: str, params):
         self.name = name
-        self.params = params
+        self.params = params   # type: dict
+
 
     def to_repr(self):
         return {self.__class__.__name__: {'name': self.name, 'params': str(self.params)}}
