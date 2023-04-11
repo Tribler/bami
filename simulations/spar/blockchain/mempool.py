@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from heapq import heappop, heappush
 import itertools
-from typing import Any
+from typing import Any, Tuple, List
 
 
 class Mempool:
@@ -16,18 +16,28 @@ class Mempool:
         entry = [tx_score, count, tx_id]
         heappush(self.pq, entry)
 
+    def remove(self, tx_id):
+        """Remove a transaction from the mempool"""
+        for entry in self.pq:
+            if entry[2] == tx_id:
+                self.pq.remove(entry)
+                break
+
     def pop(self) -> Any:
         """ Might raise IndexError if the heap is empty. """
         priority, count, tx_id = heappop(self.pq)
-        return tx_id
+        return priority, tx_id
 
-    def select_top_n(self, n: int) -> list:
+    def select_top_n(self, n: int) -> tuple[list[bytes], list[int]]:
         """ Select the top n transactions from the mempool.
         """
         selected = []
+        selected_fees = []
         for _ in range(n):
             try:
-                selected.append(self.pop())
+                priority, tx_id = self.pop()
+                selected.append(tx_id)
+                selected_fees.append(priority)
             except IndexError:
                 break
-        return selected
+        return selected, selected_fees

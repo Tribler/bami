@@ -44,22 +44,3 @@ class AbstractBlockchainSimulation(BamiSimulation):
                 self.nodes[peer_id].overlays[0].start_reconciliation()
                 self.nodes[peer_id].overlays[0].start_periodic_settlement()
 
-
-class BlockchainSPARCommunity(SPARCommunity, SimulatedCommunityMixin):
-
-    """Community to exchange transactions and blocks on the network overlay for a
-    Bitcoin-like blockchain.
-    1. Received transactions from some client. For the simulation we generate transaction at each peer randomly.
-    2. Create a block. Share the block with the neighbors.
-    3. Exchange blocks between each other. Syncronizing the blockchain.
-    When peer receives a message (transaction or block) it will remember the sender of the message.
-    Later the message is evaluated against the usefullness of the message. If the message is usefull, the sender is
-    rewarded.
-    """
-
-    @lazy_wrapper(TransactionPayload)
-    def received_transaction(self, tx: Transaction):
-        super().received_transaction(tx)
-        self.log("Received transaction %s from %s" % (tx.tx_id, tx.sender_id))
-
-
