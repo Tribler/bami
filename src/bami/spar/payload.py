@@ -12,33 +12,45 @@ class CompactClock(VariablePayload):
 
 
 @dataclass(msg_id=1)
-class TransactionPayload:
-    pk: bytes
-    t_id: bytes
-    sign: bytes
-    script: bytes
-    context: bytes
-    fee: float
-
-
-@dataclass(msg_id=2)
 class WorkCertificatePayload:
     pk: bytes
     o_pk: bytes
     score: int
     seq_num: int
     sign: bytes
+    clock: int
+
+
+@dataclass(msg_id=2)
+class CertificateRequestPayload:
+    topic: bytes
+    last_clock: int
 
 
 @dataclass(msg_id=3)
-class CertificateRequestPayload:
-    topic: bytes
-    last_clock: CompactClock
+class CertificateBatchPayload:
+    batch: [WorkCertificatePayload]
 
 
 @dataclass(msg_id=4)
-class CertificateBatchPayload:
-    batch: [WorkCertificatePayload]
+class ConnectionRequestPayload:
+    pass
+
+
+@dataclass(msg_id=5)
+class ConnectionRejectPayload:
+    pass
+
+
+@dataclass(msg_id=6)
+class UsefulBlobPayload:
+    blob_id: bytes
+    fee: int
+
+
+@dataclass(msg_id=7)
+class BlobBatchPayload:
+    batch: [UsefulBlobPayload]
 
 
 @dataclass
@@ -46,43 +58,3 @@ class CompactBloomFilter:
     data: bytes
     seed: int
     csum: bytes
-
-
-@vp_compile
-class CompactMiniSketch(VariablePayload):
-    format_list = ["H", "H", "varlenH"]
-    names = ['o', 't', 'data']
-
-
-@dataclass(msg_id=2)
-class ReconciliationRequestPayload:
-    clock: CompactClock
-    sk_type: str
-    sketch: bytes
-
-
-@vp_compile
-class TransactionsChallengePayload(VariablePayload):
-    format_list = ["varlenH-list"]
-    names = ["txs"]
-    msg_id = 3
-
-
-@dataclass(msg_id=4)
-class ReconciliationResponsePayload:
-    clock: CompactClock
-    sk_type: str
-    sketch: bytes
-    txs: TransactionsChallengePayload
-
-
-@vp_compile
-class TransactionsRequestPayload(VariablePayload):
-    format_list = ["varlenH-list"]
-    names = ["txs"]
-    msg_id = 5
-
-
-@dataclass(msg_id=6)
-class TransactionBatchPayload:
-    txs: [TransactionPayload]

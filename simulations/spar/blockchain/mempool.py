@@ -1,7 +1,8 @@
-from dataclasses import dataclass, field
-from heapq import heappop, heappush
 import itertools
-from typing import Any, Tuple, List
+from heapq import heappop, heappush
+from typing import Any
+
+from spar.blockchain.payload import TxID
 
 
 class Mempool:
@@ -28,7 +29,7 @@ class Mempool:
         priority, count, tx_id = heappop(self.pq)
         return priority, tx_id
 
-    def select_top_n(self, n: int) -> tuple[list[bytes], list[int]]:
+    def select_top_n(self, n: int) -> list[TxID]:
         """ Select the top n transactions from the mempool.
         """
         selected = []
@@ -36,8 +37,7 @@ class Mempool:
         for _ in range(n):
             try:
                 priority, tx_id = self.pop()
-                selected.append(tx_id)
-                selected_fees.append(priority)
+                selected.append((TxID(tx_id, priority)))
             except IndexError:
                 break
-        return selected, selected_fees
+        return selected

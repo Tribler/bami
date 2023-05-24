@@ -38,9 +38,7 @@ class AbstractBlockchainSimulation(BamiSimulation):
     def on_discovery_complete(self):
         super().on_discovery_complete()
         for i, peer_id in enumerate(self.nodes.keys()):
-            if self.nodes[peer_id].overlays[0].is_light_client:
                 self.nodes[peer_id].overlays[0].start_tx_creation()
-            else:
                 self.nodes[peer_id].overlays[0].start_reconciliation()
                 self.nodes[peer_id].overlays[0].start_periodic_settlement()
 

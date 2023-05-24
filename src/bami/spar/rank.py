@@ -11,6 +11,9 @@ import networkx as nx
 
 NodeId: TypeAlias = int
 
+ASSERT = False
+OPTIMIZE_INVALIDATION = True
+
 
 def sign(x: float) -> int:
     if x > 0:
@@ -21,6 +24,10 @@ def sign(x: float) -> int:
 
 
 class NodeDoesNotExist(Exception):
+    pass
+
+
+class SelfReferenceNotAllowed(Exception):
     pass
 
 
@@ -80,7 +87,7 @@ class WalkStorage:
     def __init__(self) -> None:
         self.__walks: Dict[NodeId, Dict[uuid.UUID, PosWalk]] = {}
 
-    def walks_starting_from_node(self, src: NodeId) -> list[RandomWalk]:
+    def get_walks_starting_from_node(self, src: NodeId) -> list[RandomWalk]:
         """ Returns the walks starting from the given node"""
         return [pos_walk.walk for pos_walk in
                 self.__walks.get(src, {}).values() if pos_walk.pos == 0]
@@ -91,7 +98,7 @@ class WalkStorage:
                 continue
             # Get existing walks for the node. If there is none,
             # create an empty dictionary for those
-            walks_with_node = self.__walks[node] = self.__walks.get(node, {})
+            walks_with_node = self.__walks.setdefault(node, {})
 
             # Avoid storing the same walk twice in case it visits the node
             # more than once. We're only interested in the first visit,
@@ -105,36 +112,76 @@ class WalkStorage:
             walks_with_node[walk.uuid] = PosWalk(pos, walk)
 
     def drop_walks_from_node(self, node: NodeId):
-        for walk in self.walks_starting_from_node(node):
+        for walk in self.get_walks_starting_from_node(node):
             for affected_node in walk:
-                del self.__walks[affected_node][walk.uuid]
+                if self.__walks[affected_node].get(walk.uuid):
+                    del self.__walks[affected_node][walk.uuid]
         self.__walks.get(node, {}).clear()
 
     def get_walks_through_node(self, node: NodeId):
         return self.__walks.get(node, {})
 
-    def invalidate_walks_through_node(self, invalidated_node: NodeId) -> \
+    def invalidate_walks_through_node(self, invalidated_node: NodeId,
+                                      dst_node: NodeId = None,
+                                      step_recalc_probability: float = 0.0,
+                                      alpha=None) -> \
             List[Tuple[RandomWalk, RandomWalk]]:
         if (walks := self.__walks.get(invalidated_node)) is None:
             return []
         invalidated_walks = []
         for uid, pos_walk in walks.items():
             pos, walk = pos_walk.pos, pos_walk.walk
+            # Optimization: try not to invalidate all the walks
+            # going through an ego node. Instead, only invalidate those
+            # walks that go through the deleted edge.
+            # The probability distribution of the remaining walks will still be
+            # correct, because removal of a single edge does not
+            # affect the relative weights of the remaining edges.
+            if OPTIMIZE_INVALIDATION:
+                if dst_node is not None:
+                    if step_recalc_probability == 0.0:
+                        # Edge deletion
+                        assert len(walk) > pos
+                        may_skip = True
+                        if pos == len(walk) - 1:
+                            may_skip = True
+                        else:
+                            for i in range(pos, len(walk) - 2 + 1):
+                                if walk[i: i + 2] == [invalidated_node,
+                                                      dst_node]:
+                                    pos = i
+                                    may_skip = False
+                                    break
+                        if may_skip:
+                            continue
+                    else:
+                        # Edge addition
+                        may_skip = True
+                        for i in range(pos, len(walk)):
+                            if walk[i] == invalidated_node:
+                                pos = i
+                                if random.random() <= step_recalc_probability:
+                                    may_skip = False
+                                    break
+
+                        if may_skip:
+                            continue
+
             # For every node mentioned in the invalidated subsequence,
-            # remove the corresponding entries in the bookkeeping dict
+            # remove the corresponding entries from the bookkeeping dict
             invalidated_segment = RandomWalk(walk[pos + 1:])
-            for affected_node in invalidated_segment:
-                # if the invalidated node is encountered in the invalidated
-                # subsequence (i.e. there was more than one copy in the
-                # original walk) - don't accidentally remove it, for not to
-                # shoot ourselves in the foot (it still belongs to the
-                # remaining segment).
-                if affected_node == invalidated_node:
-                    continue
-                self.__walks.get(affected_node, {}).pop(uid, None)
 
             # Remove the invalidated subsequence from the walk
             del walk[pos + 1:]
+
+            # !!!ACHTUNG!!!
+            # If a node is encountered in the invalidated
+            # subsequence, but there are still copies of it in the remaining
+            # walk, be sure not to accidentally remove any references to it!
+            for affected_node in set(invalidated_segment).difference(
+                    set(walk)):
+                self.__walks[affected_node].pop(uid)
+
             invalidated_walks.append((walk, invalidated_segment))
         return invalidated_walks
 
@@ -142,39 +189,46 @@ class WalkStorage:
         return self.__walks.get(node)
 
 
-class IncrementalPageRank:
-    def __init__(self, graph=None, persistent_storage=None) -> None:
+class IncrementalMeritRank:
+    def __init__(self, graph=None, persistent_storage=None, alpha: float = 0.6) -> None:
         self.__persistent_storage = persistent_storage
         # FIXME: graph vs persistent_storage options
         rank_calc_commands = None
         if self.__persistent_storage is not None:
             graph, rank_calc_commands = self.__persistent_storage.get_graph_and_calc_commands()
 
-        self.__graph = nx.DiGraph(graph)
+        self.graph = nx.DiGraph(graph)
         self.__walks = WalkStorage()
         self.__personal_hits: Dict[NodeId, Counter] = {}
         self.__neg_hits: Dict[NodeId, Dict[NodeId, float]] = {}
-        self.alpha = 0.85
+        self.alpha = alpha
+
+        for node in self.graph.nodes():
+            if self.graph.has_edge(node, node):
+                raise SelfReferenceNotAllowed
 
         if rank_calc_commands is not None:
             for node, num_walks in rank_calc_commands.items():
                 self.calculate(node, num_walks)
 
-    def get_walks_count_for_node(self, src: NodeId):
-        return len(self.__walks.walks_starting_from_node(src))
+    def get_graph(self):
+        return nx.to_dict_of_dicts(self.graph)
 
-    def calculate(self, ego: NodeId, num_walks: int = 1000):
+    def get_walks_count_for_node(self, src: NodeId):
+        return len(self.__walks.get_walks_starting_from_node(src))
+
+    def calculate(self, ego: NodeId, num_walks: int = 10000):
         """
-        Calculate the PageRank from the perspective of the given node.
+        Calculate the MeritRank from the perspective of the given node.
         If there are already walks for the node, drop them and calculate anew.
-        :param ego: The source node to calculate the PageRank for.
+        :param ego: The source node to calculate the MeritRank for.
         :param num_walks: The number of walks that should be used
         """
         if self.__persistent_storage is not None:
             self.__persistent_storage.put_rank_calc_command(ego, num_walks)
         self.__walks.drop_walks_from_node(ego)
 
-        if not self.__graph.has_node(ego):
+        if not self.graph.has_node(ego):
             raise NodeDoesNotExist
 
         negs = self.__neighbours_weighted(ego, positive=False)
@@ -182,25 +236,35 @@ class IncrementalPageRank:
         counter = self.__personal_hits[ego] = Counter()
         for _ in range(0, num_walks):
             walk = self.perform_walk(ego)
-            counter.update(walk[1:])
+            counter.update(set(walk))
             self.__walks.add_walk(walk)
             self.__update_negative_hits(walk, negs)
 
     def get_node_score(self, ego: NodeId, target: NodeId):
         counter = self.__personal_hits[ego]
         # TODO: optimize by caching the result?
-        assert ego not in counter
+        # assert ego not in counter
         hits = counter[target]
+        self_hits = counter[ego]
+
+        if ASSERT:
+            if hits > 0 and not nx.has_path(self.graph, ego, target):
+                assert False
 
         # TODO: normalize the negative hits?
         hits_penalized = hits + self.__neg_hits.get(ego, {}).get(target, 0)
-        return hits_penalized / counter.total()
+        return hits_penalized / (counter.total() - self_hits)
 
     def get_ranks(self, ego: NodeId, limit=None):
         # FIXME: optimize out repeated totals, etc.
         counter = self.__personal_hits[ego]
+        for key, value in list(counter.items()):
+            if float(value) == 0.0:
+                counter.pop(key)
         peer_scores = []
         for peer in counter.keys():
+            if peer == ego:
+                continue
             peer_scores.append((peer, self.get_node_score(ego, peer)))
 
         sorted_ranks = sorted(peer_scores, key=lambda x: x[1], reverse=True)[
@@ -214,17 +278,16 @@ class IncrementalPageRank:
 
     def perform_walk(self, start_node: NodeId) -> RandomWalk:
         walk = RandomWalk([start_node])
-        new_segment = self.__generate_walk_segment(
-            start_node, stop_node=start_node)
+        new_segment = self.__generate_walk_segment(start_node)
         walk.extend(new_segment)
         return walk
 
     def __neighbours_weighted(self, node: NodeId, positive=True) -> Dict[
         NodeId, float]:
         neighbours = {}
-        for nbr in self.__graph.neighbors(node):
+        for nbr in self.graph.neighbors(node):
             # Only return positive/negative neighbours
-            weight = self.__graph[node][nbr]['weight']
+            weight = self.graph[node][nbr]['weight']
             if weight == 0:
                 continue
             if positive and weight > 0 or not positive and weight < 0:
@@ -232,28 +295,28 @@ class IncrementalPageRank:
         return neighbours
 
     def __generate_walk_segment(self, start_node: NodeId,
-                                stop_node: NodeId) -> RandomWalk:
+                                skip_alpha_on_first_step=False) -> RandomWalk:
         node = start_node
         walk = RandomWalk()
         while ((neighbours := self.__neighbours_weighted(node))
-               and random.random() <= self.alpha):
+               and (skip_alpha_on_first_step or random.random() <= self.alpha)):
+            skip_alpha_on_first_step = False
             peers, weights = zip(*neighbours.items())
             next_step = random.choices(peers, weights=weights, k=1)[0]
-            if next_step == stop_node:
-                break
             walk.append(next_step)
             node = next_step
         return walk
 
     def get_edge(self, src: NodeId, dest: NodeId) -> float | None:
-        if not self.__graph.has_edge(src, dest):
+        if not self.graph.has_edge(src, dest):
             return None
-        return self.__graph[src][dest]['weight']
+        return self.graph[src][dest]['weight']
 
-    def get_node_edges(self, node: NodeId) -> list[tuple[NodeId, NodeId, float]] | None:
-        if not self.__graph.has_node(node):
+    def get_node_edges(self, node: NodeId) -> list[tuple[
+        NodeId, NodeId, float]] | None:
+        if not self.graph.has_node(node):
             return None
-        return list(self.__graph.edges(node, data='weight'))
+        return list(self.graph.edges(node, data='weight'))
 
     def __persist_edge(self, src: NodeId, dest: NodeId, weight: float = 1.0):
         if self.__persistent_storage is not None:
@@ -287,7 +350,7 @@ class IncrementalPageRank:
                 affected_walks.append(pw.walk)
 
         # Calculate penalties and update neg_hits for each affected walk
-        weight = self.__graph[src][dest]['weight']
+        weight = self.graph[src][dest]['weight']
         ego_neg_hits = self.__neg_hits.setdefault(src, {})
         for walk in affected_walks:
             penalties = walk.calculate_penalties({dest: weight})
@@ -296,7 +359,7 @@ class IncrementalPageRank:
                     penalty = -penalty
                 ego_neg_hits[node] = ego_neg_hits.setdefault(node, 0) + penalty
 
-    def __recalc_invalidated_walk(self, walk, invalidated_segment):
+    def __clear_invalidated_walk(self, walk, invalidated_segment):
         # Possible optimization: instead of dropping the walk and then
         # recalculating it, reuse fragments from previously dropped walks.
         # The problem is care must be taken to handle loops when going through
@@ -306,21 +369,52 @@ class IncrementalPageRank:
         # counter for the starting node of the invalidated walk.
         ego = walk[0]
         counter = self.__personal_hits[ego]
-        counter.subtract(invalidated_segment)
+        # !!!ACHTUNG!!!
+        # The invalidated fragment may include nodes that are
+        # still in the original walk. We must take special care not to
+        # subtract it from the counter by accident!
+        to_remove = set(invalidated_segment).difference(set(walk))
+        counter.subtract(to_remove)
+        if ASSERT:
+            for c in counter.values():
+                pass
+                assert c >= 0
+
+    def __recalc_invalidated_walk(self, walk: RandomWalk,
+                                  force_first_step: NodeId = None,
+                                  skip_alpha_on_first_step=False):
+        ego = walk[0]
+        counter = self.__personal_hits[ego]
 
         # Finish the invalidated walk. The stochastic nature of random
         # walks allows us to complete a walk by just continuing it until
         # it stops naturally.
         new_segment_start = len(walk)
-        new_segment = self.__generate_walk_segment(walk[-1], stop_node=ego)
+        first_step = force_first_step if force_first_step is not None else \
+        walk[-1]
+        if force_first_step is not None:
+            # Extra care must be taken not to bias the distribution
+            # by adding the first step without re-sampling the probability
+            # for stopping the walk.
+            if skip_alpha_on_first_step:
+                skip_alpha_on_first_step = False
+            else:
+                if random.random() >= self.alpha:
+                    return
+        new_segment = self.__generate_walk_segment(first_step,
+                                                   skip_alpha_on_first_step)
+        if force_first_step is not None:
+            new_segment.insert(0, first_step)
+        counter.update(set(new_segment).difference(set(walk)))
         walk.extend(new_segment)
 
-        counter.update(walk[new_segment_start:])
         self.__walks.add_walk(walk, start_pos=new_segment_start)
 
     def add_edge(self, src: NodeId, dest: NodeId, weight: float = 1.0):
+        if src == dest:
+            raise SelfReferenceNotAllowed
         old_edge = self.get_edge(src, dest)
-        old_weight = self.__graph[src][dest]['weight'] if old_edge else 0.0
+        old_weight = self.graph[src][dest]['weight'] if old_edge else 0.0
         if old_weight == weight:
             return
         self.__persist_edge(src, dest, weight)
@@ -337,8 +431,17 @@ class IncrementalPageRank:
             pass
 
         def zp(s, d, w):
-            # Clear penalties resulting from the invalidated walks
-            invalidated_walks = self.__walks.invalidate_walks_through_node(s)
+            # Clear the penalties resulting from the invalidated walks
+            step_recalc_probability = 0.0
+            if OPTIMIZE_INVALIDATION and w > 0.0 and self.graph.has_node(s):
+                g_edges = self.__neighbours_weighted(s)
+                sum_of_weights = sum(weight for weight in g_edges.values())
+                step_recalc_probability = w / (sum_of_weights + w)
+
+            invalidated_walks = self.__walks.invalidate_walks_through_node(s,
+                                                                           dst_node=d,
+                                                                           step_recalc_probability=step_recalc_probability,
+                                                                           alpha=self.alpha)
 
             negs_cache = {}
             for (walk, invalidated_segment) in invalidated_walks:
@@ -349,20 +452,52 @@ class IncrementalPageRank:
                 self.__update_negative_hits(
                     RandomWalk(walk + invalidated_segment), negs,
                     subtract=True)
-
-            if w == 0.0:
-                if self.__graph.has_edge(s, d):
-                    self.__graph.remove_edge(s, d)
+            if float(w) == 0.0:
+                if self.graph.has_edge(s, d):
+                    self.graph.remove_edge(s, d)
             else:
-                self.__graph.add_edge(s, d, weight=w)
+                self.graph.add_edge(s, d, weight=w)
 
+            pass
             # Restore the walks and recalculate the penalties
             for (walk, invalidated_segment) in invalidated_walks:
-                self.__recalc_invalidated_walk(walk, invalidated_segment)
+                self.__clear_invalidated_walk(walk, invalidated_segment)
+            pass
+            if ASSERT:
+                for ego, hits in self.__personal_hits.items():
+                    for peer, count in hits.items():
+                        if len(self.__walks.get_walks_through_node(
+                                peer)) != count:
+                            assert False
+                        if count > 0 and not nx.has_path(self.graph, ego,
+                                                         peer):
+                            assert False
+
+            pass
+            for (walk, invalidated_segment) in invalidated_walks:
+                self.__recalc_invalidated_walk(
+                    walk,
+                    force_first_step=d if step_recalc_probability > 0.0 else None,
+                    skip_alpha_on_first_step=OPTIMIZE_INVALIDATION and (w == 0.0)
+                )
+            pass
+
+            for (walk, invalidated_segment) in invalidated_walks:
                 self.__update_negative_hits(walk, negs_cache[walk[0]])
 
+            if ASSERT:
+                for ego, hits in self.__personal_hits.items():
+                    for peer, count in hits.items():
+                        if len(self.__walks.get_walks_through_node(
+                                peer)) != count:
+                            assert False
+                        if count > 0 and not nx.has_path(self.graph, ego,
+                                                         peer):
+                            pass
+                            assert False
+
         def zn(s, d, w):
-            self.__graph.add_edge(s, d, weight=w)
+            self.graph.add_edge(s, d, weight=w)
             self.__update_penalties_for_edge(s, d)
 
         def pz(s, d, _):
@@ -381,7 +516,7 @@ class IncrementalPageRank:
             # the respective ego node. Effectively, this means removing
             # all the negative walks starting from src and ending in dest.
             self.__update_penalties_for_edge(s, d, remove_penalties=True)
-            self.__graph.remove_edge(s, d)
+            self.graph.remove_edge(s, d)
 
         def np(*args):
             nz(*args)
