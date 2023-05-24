@@ -5,40 +5,42 @@ from ipv8.configuration import ConfigBuilder
 
 from bami.lz.community import SyncCommunity
 from bami.lz.payload import TransactionPayload
-from bami.lz.settings import LZSettings
-from common.utils import connected_topology, random_topology, time_mark
+from bami.lz.settings import LZSettings, SettlementStrategy
+from common.utils import random_topology, time_mark
 from simulations.settings import DefaultLocations, LocalLocations, SimulationSettings
 from simulations.simulation import BamiSimulation, SimulatedCommunityMixin
-
-
-class SimSettings(LZSettings):
-    recon_freq = 1
-    recon_fanout = 3
-    tx_batch = 3
-    tx_freq = 0.1
-    initial_fanout = 1
-
-    sketch_size = 100
-
-
-LATENCY = "global"
-N_CLIENTS = 20
-N_PEERS = 10
-N = N_CLIENTS + N_PEERS
 
 
 class BasicLZSimulation(BamiSimulation):
 
     def get_ipv8_builder(self, peer_id: int) -> ConfigBuilder:
         builder = super().get_ipv8_builder(peer_id)
-        builder.add_overlay("LZCommunity", "my peer", [], [], {"settings": SimSettings()}, [])
+        builder.add_overlay("LZCommunity", "my peer", [], [], {"settings": self.settings.overlay_settings}, [])
         return builder
 
     def on_discovery_start(self):
         super().on_discovery_start()
+
+        TX_FILE = self.settings.consts.get('TX_FILE')
+        SETTLE_FILE = self.settings.consts.get('SETTLE_FILE')
+
+        with open(TX_FILE, "w") as out:
+            out.write("peer_id,tx_id,time\n")
+        with open(SETTLE_FILE, "w") as out:
+            out.write("peer_id,tx_id,time\n")
+
+        client_to_ignore = None
+
         for i, peer_id in enumerate(self.nodes.keys()):
-            if i < N_CLIENTS:
+            self.nodes[peer_id].overlays[0].TX_FILE = TX_FILE
+            self.nodes[peer_id].overlays[0].SETTLE_FILE = SETTLE_FILE
+
+            if i < self.settings.clients:
                 self.nodes[peer_id].overlays[0].make_light_client()
+                if i == 0:
+                    client_to_ignore = self.nodes[peer_id].overlays[0].my_peer_id
+            if self.settings.clients < i < self.settings.clients + self.settings.faulty:
+                self.nodes[peer_id].overlays[0].censor_peer(client_to_ignore)
 
     def on_discovery_complete(self):
         super().on_discovery_complete()
@@ -50,16 +52,6 @@ class BasicLZSimulation(BamiSimulation):
                 self.nodes[peer_id].overlays[0].start_periodic_settlement()
 
 
-DATA_FILE = "../../lz_visualize/data/tx_time_mem_n_{}_{}_d_{}_t_{:.2f}".format(N, LATENCY,
-                                                                               SimSettings.recon_freq,
-                                                                               SimSettings.tx_batch / SimSettings.tx_freq * N_CLIENTS
-                                                                               )
-TX_FILE = DATA_FILE + ".csv"
-STAT_FILE = DATA_FILE + "_rounds.csv"
-SD_FILE = DATA_FILE + "_data.csv"
-SETTLE_FILE = DATA_FILE + "_set.csv"
-
-
 class SimulateLZCommunity(SimulatedCommunityMixin, SyncCommunity):
     on_received_reconciliation_request = time_mark(SyncCommunity.on_received_reconciliation_request)
     on_received_transactions_request = time_mark(SyncCommunity.on_received_transactions_request)
@@ -69,35 +61,74 @@ class SimulateLZCommunity(SimulatedCommunityMixin, SyncCommunity):
     on_received_transaction_batch = time_mark(SyncCommunity.on_received_transaction_batch)
 
     def __init__(self, *args, **kwargs) -> None:
-        with open(TX_FILE, "w") as out:
-            out.write("peer_id,tx_id,time\n")
-        with open(SETTLE_FILE, "w") as out:
-            out.write("peer_id,tx_id,time\n")
         super().__init__(*args, **kwargs)
 
     def on_process_new_transaction(self, t_id: int, tx_payload: TransactionPayload):
         # Write to the database - transaction added, time
-        with open(TX_FILE, "a") as out:
+        with open(self.TX_FILE, "a") as out:
             out.write("{},{},{}\n".format(hash(self.my_peer), t_id, get_event_loop().time()))
         super().on_process_new_transaction(t_id, tx_payload)
 
     def on_settle_transactions(self, settled_txs: Iterable[int]):
         super().on_settle_transactions(settled_txs)
-        with open(SETTLE_FILE, "a") as out:
+        with open(self.SETTLE_FILE, "a") as out:
             for t_id in settled_txs:
                 out.write("{},{},{}\n".format(hash(self.my_peer), t_id, get_event_loop().time()))
 
 
-if __name__ == "__main__":
-    settings = SimulationSettings()
-    settings.peers = N
-    settings.duration = 60
-    settings.topology = connected_topology(N)
-    settings.logging_level = 'INFO'
-    settings.discovery_delay = 5
-    settings.location_latency_generator = LocalLocations if LATENCY == 'local' else DefaultLocations
+def main(sim_settings: SimulationSettings = None):
+    if sim_settings:
+        settings = sim_settings
+    else:
+        LATENCY = "global"
+        N_CLIENTS = 20
+        N_PEERS = 300
+        N_FAULTS = 10
+        N = N_CLIENTS + N_PEERS
 
-    settings.community_map = {'LZCommunity': SimulateLZCommunity}
+        settings = SimulationSettings()
+        settings.clients = N_CLIENTS
+        settings.peers = N
+        settings.faulty = N_FAULTS
+        settings.duration = 60
+        d = 30
+        settings.topology = random_topology(N, d)
+        settings.logging_level = 'INFO'
+        settings.discovery_delay = 5
+        settings.location_latency_generator = LocalLocations if LATENCY == 'local' else DefaultLocations
+
+        settings.community_map = {'LZCommunity': SimulateLZCommunity}
+
+        class SimSettings(LZSettings):
+            recon_freq = 1
+            recon_fanout = 8
+            tx_batch = 1
+            tx_freq = 2
+            initial_fanout = 4
+
+            sketch_size = 100
+            settle_size = 350
+            settle_freq = 14
+            settle_delay = 14
+            settle_strategy = SettlementStrategy.FAIR
+
+        settings.overlay_settings = SimSettings()
+
+        DIR_PREFIX = "../../lz_visualize/data/sim"
+
+        DATA_FILE = DIR_PREFIX + "_n_{}_t_{}_f_{}_d_{}_t_{:.1f}_s_{}(2)".format(N,
+                                                                        d,
+                                                                        SimSettings.recon_fanout,
+                                                                        SimSettings.recon_freq,
+                                                                        SimSettings.tx_batch / SimSettings.tx_freq * N_CLIENTS,
+                                                                        SimSettings.settle_freq
+                                                                        )
+
+        TX_FILE = DATA_FILE + ".csv"
+        SD_FILE = DATA_FILE + "_data.csv"
+        SETTLE_FILE = DATA_FILE + "_set.csv"
+
+        settings.consts = {'TX_FILE': TX_FILE, "SD_FILE": SD_FILE, "SETTLE_FILE": SETTLE_FILE}
 
     simulation = BasicLZSimulation(settings)
     ensure_future(simulation.run())
@@ -105,6 +136,8 @@ if __name__ == "__main__":
 
     for peer_id in simulation.nodes.keys():
         print(peer_id, len(simulation.nodes[peer_id].overlays[0].memcache.tx_payloads))
+
+    SD_FILE = settings.consts.get("SD_FILE")
 
     with open(SD_FILE, "w") as out_data:
         for peer_id in simulation.nodes.keys():
@@ -114,3 +147,7 @@ if __name__ == "__main__":
                     simulation.nodes[peer_id].overlays[0].sketch_stat_has[i],
                     simulation.nodes[peer_id].overlays[0].sketch_stat_miss[i]
                 ))
+
+
+if __name__ == "__main__":
+    main()

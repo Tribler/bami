@@ -3,7 +3,7 @@ from asyncio import ensure_future
 from ipv8.configuration import ConfigBuilder
 
 from bami.basalt.community import BasaltCommunity
-from common.utils import connected_topology, set_time_mark, time_mark
+from common.utils import random_topology, set_time_mark, time_mark
 from simulations.settings import SimulationSettings
 from simulations.simulation import BamiSimulation, SimulatedCommunityMixin
 
@@ -30,9 +30,9 @@ class SimulatedBasalt(SimulatedCommunityMixin, BasaltCommunity):
 
 if __name__ == "__main__":
     settings = SimulationSettings()
-    settings.peers = 50
-    settings.duration = 20
-    settings.topology = connected_topology(50)
+    settings.peers = 25
+    settings.duration = 60
+    settings.topology = random_topology(25)
     settings.community_map = {'BasaltCommunity': SimulatedBasalt}
 
     simulation = BasicBasaltSimulation(settings)

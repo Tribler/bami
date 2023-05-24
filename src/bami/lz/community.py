@@ -183,7 +183,7 @@ class SyncCommunity(BaseCommunity):
 
         if payload.pk in self.ignored_peers:
             # Just ignore any transaction from the pk
-            self.logger.warn("Censoring tx")
+            # self.logger.warn("Censoring tx")
             return
 
         if not self.memcache.get_tx_payload(t_id):
