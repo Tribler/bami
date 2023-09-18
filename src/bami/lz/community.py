@@ -1,3 +1,4 @@
+import heapq
 from binascii import unhexlify
 from collections import defaultdict
 import random
@@ -9,6 +10,7 @@ from ipv8.peer import Peer
 
 from bami.lz.base import BaseCommunity
 from bami.lz.database.database import TransactionSyncDB
+from bami.lz.generator import generate_transaction_fee
 from bami.lz.payload import CompactMiniSketch, ReconciliationRequestPayload, ReconciliationResponsePayload, \
     TransactionBatchPayload, TransactionPayload, TransactionsChallengePayload, TransactionsRequestPayload
 from bami.lz.reconcile import BloomReconciliation, MiniSketchReconciliation
@@ -73,7 +75,13 @@ class SyncCommunity(BaseCommunity):
 
         self.settled_txs = set()
         self.mempool_candidates = {}
+
+        self.pending_transactions = []
+
+
         self.blocks_size = []
+
+        self.inject_mev = False
 
         self.last_reconciled_part = defaultdict(int)
 
@@ -130,23 +138,31 @@ class SyncCommunity(BaseCommunity):
         super().introduction_response_callback(peer, dist, payload)
 
     # ------ Transaction Creation ------------
+
+    def create_transaction_payload(self) -> TransactionPayload:
+        script = get_random_string(self.settings.script_size)
+        fee = generate_transaction_fee()
+        new_tx = TransactionPayload(pk=self.my_peer_id,
+                                    t_id=b'', sign=b'',
+                                    script=script.encode(),
+                                    fee=fee)
+        t_id = bytes_to_uint(payload_hash(new_tx), self.settings.tx_id_size)
+        new_tx.t_id = uint_to_bytes(t_id)
+
+        sign = self.crypto.create_signature(self.my_peer.key,
+                                            self.prepare_packet(new_tx, sig=False))
+        new_tx.sign = sign
+        return new_tx
+
     def create_transaction(self):
         for _ in range(self.settings.tx_batch):
-            script = get_random_string(self.settings.script_size)
-            context = get_random_string(self.settings.script_size)
-            new_tx = TransactionPayload(pk=self.my_peer_id, t_id=b'', sign=b'', script=script.encode(),
-                                        context=context.encode())
-            t_id = bytes_to_uint(payload_hash(new_tx), self.settings.tx_id_size)
-            new_tx.t_id = uint_to_bytes(t_id)
-
-            sign = self.crypto.create_signature(self.my_peer.key,
-                                                self.prepare_packet(new_tx, sig=False))
-            new_tx.sign = sign
+            new_tx = self.create_transaction_payload()
             self.process_transaction(new_tx)
 
             # This is a new transaction - push to neighbors
             selected = random.sample(self.get_full_nodes(),
-                                     min(self.settings.initial_fanout, len(self.get_full_nodes())))
+                                     min(self.settings.initial_fanout,
+                                         len(self.get_full_nodes())))
             for p in selected:
                 self.logger.debug("Sending transaction to {}".format(p))
                 self.ez_send(p, new_tx, sig=False)
@@ -182,14 +198,19 @@ class SyncCommunity(BaseCommunity):
         t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
 
         if payload.pk in self.ignored_peers:
-            # Just ignore any transaction from the pk
-            # self.logger.warn("Censoring tx")
             return
 
         if not self.memcache.get_tx_payload(t_id):
             self.memcache.add_tx_payload(t_id, payload)
             self.memcache.peer_clock(self.my_peer_id).increment(t_id)
             self.on_process_new_transaction(t_id, payload)
+            # Add tx_id with the fee to a queue
+
+            if self.settings.settle_strategy == SettlementStrategy.VANILLA:
+                heapq.heappush(self.pending_transactions, (-payload.fee, t_id))
+            else:
+                self.pending_transactions.append((t_id, payload.fee))
+
             self.reconciliation_manager.populate_tx(t_id)
         else:
             t = self.memcache.get_tx_payload(t_id)
@@ -227,7 +248,7 @@ class SyncCommunity(BaseCommunity):
         return clock.compact_clock(), 'bloom', self.pack_payload(blm_filter.to_payload())
 
     def prepare_reconciliation_data(self, other_peer_id: bytes, offset: int = None) -> Tuple[CompactClock,
-                                                                                             str, bytes]:
+    str, bytes]:
         if self._settings.sketch_algorithm == SketchAlgorithm.BLOOM:
             return self.prepare_bloom_data(other_peer_id)
         else:
@@ -287,31 +308,69 @@ class SyncCommunity(BaseCommunity):
     def on_settle_transactions(self, settled_txs: Iterable[int]):
         pass
 
+    def on_settle(self, witnesses):
+        pass
+
     def settle_transactions(self):
         self.logger.debug("Settle current transactions")
         if self.settings.settle_strategy == SettlementStrategy.FAIR:
             if len(self.mempool_candidates) < 1:
                 return
-            p_id, val = min(self.mempool_candidates.items(), key=lambda x: len(x[1]))
-            all_settled = val - self.settled_txs
 
-            cur_settled = random.sample(all_settled, min(self.settings.settle_size, len(all_settled)))
+            # Select transactions in a order of their addition to the mempool
+
+            p_id, val = min(self.mempool_candidates.items(),
+                            key=lambda x: len(x[1]))
+            all_unsettled = val - self.settled_txs
+
+            cur_settled = random.sample(all_unsettled,
+                                        min(self.settings.settle_size,
+                                            len(all_unsettled)))
+
             self.blocks_size.append(len(cur_settled))
             self.settled_txs.update(cur_settled)
             self.mempool_candidates.pop(p_id)
+
+            self.on_settle(self.mempool_candidates.keys())
+
+            for p_id, val in list(self.mempool_candidates.items()):
+                self.mempool_candidates[p_id] = val - set(cur_settled)
+                if len(self.mempool_candidates[p_id]) == 0:
+                    self.mempool_candidates.pop(p_id)
+
             self.on_settle_transactions(cur_settled)
+        elif self.settings.settle_strategy == SettlementStrategy.LOCAL_ORDER:
+
+            i = 0
+            to_settle = []
+            while len(self.pending_transactions) > 0 \
+                    and i <= self.settings.settle_size:
+                tx_id, fee = self.pending_transactions.pop()
+                if fee < self.settings.min_fee:
+                    continue
+                to_settle.append(tx_id)
+                i += 1
+
+            self.blocks_size.append(len(to_settle))
+            self.settled_txs.update(to_settle)
+            self.on_settle_transactions(to_settle)
         else:
             # Settle with all known mempool transactions
-            new_settled = self.reconciliation_manager.all_txs - self.settled_txs
+            i = 0
+            to_settle = []
+            while len(self.pending_transactions) > 0 \
+                    and i <= self.settings.settle_size:
+                fee, tx_id = heapq.heappop(self.pending_transactions)
+                to_settle.append(tx_id)
+                i += 1
 
-            cur_settled = random.sample(new_settled, min(self.settings.settle_size, len(new_settled)))
-            self.blocks_size.append(len(cur_settled))
-            self.settled_txs.update(cur_settled)
-            self.on_settle_transactions(cur_settled)
+            self.blocks_size.append(len(to_settle))
+            self.settled_txs.update(to_settle)
+            self.on_settle_transactions(to_settle)
 
     def reconcile_sketches(self, p_id: bytes,
                            payload: Union[ReconciliationResponsePayload,
-                                          ReconciliationRequestPayload]) -> Tuple[List[int], List[int]]:
+                           ReconciliationRequestPayload]) -> Tuple[List[int], List[int]]:
         diff_txs = self.reconcile_from_payload(p_id, payload)
 
         common_txs = self.reconciliation_manager.all_txs - set(diff_txs)

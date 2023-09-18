@@ -10,6 +10,7 @@ class SketchAlgorithm(Enum):
 class SettlementStrategy(Enum):
     FAIR = 1
     VANILLA = 2
+    LOCAL_ORDER = 3
 
 
 @dataclasses.dataclass
@@ -66,6 +67,8 @@ class LZSettings(ClientSettings,
 
     settle_freq = 5
     settle_delay = 2
-    settle_strategy = SettlementStrategy.FAIR
+    settle_strategy = SettlementStrategy.LOCAL_ORDER
     settle_size = 300
+
+    min_fee = 0.0
 

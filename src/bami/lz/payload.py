@@ -17,7 +17,7 @@ class TransactionPayload:
     t_id: bytes
     sign: bytes
     script: bytes
-    context: bytes
+    fee: int
 
 
 @dataclass

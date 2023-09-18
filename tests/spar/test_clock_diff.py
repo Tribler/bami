@@ -1,3 +1,6 @@
+from bami.spar.sync_clock import ClockTable
+
+
 def test_numpy_diff():
     import numpy as np
 
@@ -14,3 +17,18 @@ def test_numpy_diff():
     # Print the sorted differences and their indices
     print("Sorted differences:", diff[sorted_indices])
     print("Indices:", sorted_indices)
+
+
+def test_clock_diff():
+    c = ClockTable()
+    c.increment(1)
+
+    c2 = ClockTable()
+    c2.increment(2)
+
+    v = c2.compact_clock()
+    v2 = ClockTable.from_compact_clock(v)
+
+    vals = c.sorted_diff(v2)
+    for val in vals:
+        print(val)

@@ -61,7 +61,7 @@ def to_hash(str_msg):
 
 def random_topology(num_peers=25, d=8):
     # Create network topology
-    G = nx.random_regular_graph(d=8, n=num_peers)
+    G = nx.random_regular_graph(d=d, n=num_peers)
     nx.relabel_nodes(G, {k: k + 1 for k in G.nodes()}, copy=False)
     return G
 
