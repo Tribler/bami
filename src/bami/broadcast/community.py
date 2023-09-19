@@ -21,7 +21,7 @@ class MempoolBroadcastCommunity(Community):
 
     def __init__(self, *args, **kwargs) -> None:
         self.settings = kwargs.pop("settings", MempoolBroadcastSettings())
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, max_peers=1000, **kwargs)
 
         self.latency_sim = self.settings.simulate_network_latency
         self.pending_transactions = []
@@ -63,7 +63,6 @@ class MempoolBroadcastCommunity(Community):
         #                                 super().ez_send,
         #                                 peer, payloads
         #                                 delay=latency)
-
 
     def create_introduction_request(self, socket_address, extra_bytes=b'', new_style=False, prefix=None):
         extra_bytes = self.is_transaction_creator.to_bytes(1, 'big')
@@ -228,16 +227,17 @@ class MempoolBroadcastCommunity(Community):
     @lazy_wrapper(HeaderPayload)
     def receive_header(self, p: Peer, header: HeaderPayload):
         """Receive new header"""
-        missing_batches = [b_obj.batch_id for b_obj in header.batches if b_obj.batch_id not in self.batches]
+        missing_batches = [b_obj for b_obj in header.batches if b_obj.batch_id not in self.batches]
         if len(missing_batches) > 0:
             self.ez_send(p, BatchRequestPayload(missing_batches))
             # Add time to the missing batches
             header_id = payload_hash(header)
-            for batch_id in missing_batches:
+            for batch_obj in missing_batches:
+                batch_id = batch_obj.batch_id
                 self.pending_batch_requests[batch_id] = get_event_loop().time()
                 self.batch_to_header[batch_id] = header_id
 
-            self.awaited_headers[header_id] = set(missing_batches)
+            self.awaited_headers[header_id] = set([b_obj.batch_id for b_obj in missing_batches])
             self.pending_headers[header_id] = header
         else:
             # trigger on new header
