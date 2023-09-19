@@ -7,6 +7,7 @@ class MempoolBroadcastSettings:
     script_size: int = 200  # in bytes
     tx_freq: float = 1 / 200  # x/k: k transaction in x second
     tx_delay: float = 0.05  # Maximum delay before starting transaction creation
+    initial_fanout: int = 8  # number of peers to send the transaction to
 
     # BatchMaker parameters
     batch_size: int = 250  # number of transactions
@@ -26,3 +27,4 @@ class MempoolBroadcastSettings:
     header_freq: float = 0.2  # in seconds
 
     start_immediately: bool = False
+    simulate_network_latency: bool = True

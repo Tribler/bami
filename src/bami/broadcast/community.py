@@ -2,14 +2,17 @@ import random
 from asyncio import get_event_loop
 from binascii import unhexlify
 from collections import defaultdict
+from typing import Iterable, List
 
 from ipv8.community import Community
 from ipv8.lazy_community import lazy_wrapper
-from ipv8.types import Peer
+from ipv8.messaging.payload import IntroductionRequestPayload
+from ipv8.types import Peer, AnyPayload
 
 from bami.broadcast.payload import TransactionPayload, TxBatchPayload, BatchAckPayload, HeaderPayload, \
     BatchRequestPayload
 from bami.broadcast.settings import MempoolBroadcastSettings
+from bami.common.network import SimulatedNetwork
 from bami.lz.utils import get_random_string, payload_hash
 
 
@@ -20,10 +23,19 @@ class MempoolBroadcastCommunity(Community):
         self.settings = kwargs.pop("settings", MempoolBroadcastSettings())
         super().__init__(*args, **kwargs)
 
+        self.latency_sim = self.settings.simulate_network_latency
         self.pending_transactions = []
         self.batches = {}
 
+        self.my_peer_id = self.my_peer.public_key.key_to_bin()
+
+        if self.latency_sim:
+            self.sim_net = SimulatedNetwork()
+            self.sim_net.fix_location(self.my_peer_id)
+
         self.is_transaction_creator = False
+
+        self.connected_clients = set()
 
         self.batch_confirms = defaultdict(set)
         self.batch_finalized = set()
@@ -41,13 +53,66 @@ class MempoolBroadcastCommunity(Community):
         self.add_message_handler(BatchAckPayload, self.receive_batch_ack)
         self.add_message_handler(HeaderPayload, self.receive_header)
         self.add_message_handler(BatchRequestPayload, self.receive_batch_request)
+        self.add_message_handler(TransactionPayload, self.received_transaction)
+
+    def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
+        if self.latency_sim:
+            latency = self.sim_net.get_link_latency(self.my_peer_id, peer.public_key.key_to_bin())
+            self.register_anonymous_task("send",
+                                         super().ez_send,
+                                         peer, *payloads, **kwargs,
+                                         delay=latency)
+        else:
+            super().ez_send(peer, *payloads, **kwargs)
+
+    def create_introduction_request(self, socket_address, extra_bytes=b'', new_style=False, prefix=None):
+        extra_bytes = self.is_transaction_creator.to_bytes(1, 'big')
+        return super().create_introduction_request(socket_address, extra_bytes, new_style, prefix)
+
+    def create_introduction_response(self, lan_socket_address, socket_address, identifier, introduction=None,
+                                     extra_bytes=b'', prefix=None, new_style=False):
+        extra_bytes = self.is_transaction_creator.to_bytes(1, 'big')
+        return super().create_introduction_response(lan_socket_address, socket_address, identifier, introduction,
+                                                    extra_bytes, prefix, new_style)
+
+    def introduction_request_callback(self, peer, dist, payload: IntroductionRequestPayload):
+        p_id = peer.public_key.key_to_bin()
+        is_client = bool.from_bytes(payload.extra_bytes, 'big')
+        if is_client:
+            self.connected_clients.add(p_id)
+        if self.latency_sim:
+            self.sim_net.fix_location(p_id)
+        super().introduction_request_callback(peer, dist, payload)
+
+    def introduction_response_callback(self, peer, dist, payload):
+        p_id = peer.public_key.key_to_bin()
+        is_client = bool.from_bytes(payload.extra_bytes, 'big')
+        if is_client:
+            self.connected_clients.add(p_id)
+        if self.latency_sim:
+            self.sim_net.fix_location(p_id)
+        super().introduction_response_callback(peer, dist, payload)
+
+    def get_full_nodes(self) -> List[Peer]:
+        return [p for p in self.get_peers() if p.public_key.key_to_bin() not in self.connected_clients]
 
     def create_transaction(self):
         script = get_random_string(self.settings.script_size).encode()
         new_tx = TransactionPayload(b"", script)
         new_tx.tx_id = payload_hash(new_tx)
         self.on_transaction_created(new_tx)
-        self.feed_batch_maker(new_tx)
+
+        # This is a new transaction - push to neighbors
+        full_nodes = self.get_full_nodes()
+        selected = random.sample(full_nodes,
+                                 min(self.settings.initial_fanout, len(full_nodes)))
+        for p in selected:
+            self.ez_send(p, new_tx)
+
+    @lazy_wrapper(TransactionPayload)
+    def received_transaction(self, p: Peer, tx: TransactionPayload):
+        """Receive new transaction"""
+        self.feed_batch_maker(tx)
 
     def start_tx_creation(self):
         self.register_task(
@@ -97,14 +162,14 @@ class MempoolBroadcastCommunity(Community):
 
     def broadcast(self, message_payload) -> bytes:
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
-        for p in self.get_peers():
+        for p in self.get_full_nodes():
             self.ez_send(p, message_payload)
         return payload_hash(message_payload)
 
     def lucky_broadcast(self, message_payload, num_nodes=None):
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
         sample_size = num_nodes if num_nodes else self.settings.sync_retry_nodes
-        lucky_peers = random.sample(self.get_peers(), sample_size)
+        lucky_peers = random.sample(self.get_full_nodes(), sample_size)
         self.ez_send(lucky_peers, message_payload)
 
     @lazy_wrapper(TxBatchPayload)
@@ -205,6 +270,7 @@ class MempoolBroadcastCommunity(Community):
     def run(self):
         if self.is_transaction_creator:
             self.start_tx_creation()
-        self.start_batch_making()
-        self.start_header_making()
-        self.start_sync_timer()
+        else:
+            self.start_batch_making()
+            self.start_header_making()
+            self.start_sync_timer()

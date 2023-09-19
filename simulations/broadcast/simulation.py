@@ -56,7 +56,6 @@ class SimulatedBroadcastCommunity(SimulatedCommunityMixin, MempoolBroadcastCommu
     # noinspection PyUnreachableCode
     def on_transaction_created(self, new_tx: TransactionPayload):
         # Write time when we've first seen the transaction
-        return None
         print("Peer {}: New transaction {} at time {}".format(self.my_peer_num,
                                                               new_tx.tx_id,
                                                               get_event_loop().time()))
