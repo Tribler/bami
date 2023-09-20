@@ -120,7 +120,8 @@ class SyncCommunity(BaseCommunity):
     def start_tasks(self):
         if self.settings.enable_client:
             self.start_tx_creation()
-        self.start_reconciliation()
+        else:
+            self.start_reconciliation()
 
     def create_introduction_request(self, socket_address, extra_bytes=b'', new_style=False, prefix=None):
         extra_bytes = self.is_light_client.to_bytes(1, 'big')
@@ -169,7 +170,7 @@ class SyncCommunity(BaseCommunity):
         new_tx.sign = sign
         return new_tx
 
-    def on_transaction_created(self, tx: TransactionPayload):
+    def on_transaction_created(self, tx_id: int):
         pass
 
     def create_transaction(self):
@@ -177,7 +178,9 @@ class SyncCommunity(BaseCommunity):
             new_tx = self.create_transaction_payload()
             self.process_transaction(new_tx)
 
-            self.on_transaction_created(new_tx)
+            t_id = bytes_to_uint(new_tx.t_id, self.settings.tx_id_size)
+
+            self.on_transaction_created(t_id)
 
             # This is a new transaction - push to neighbors
             selected = random.sample(self.get_full_nodes(),
