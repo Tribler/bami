@@ -7,7 +7,9 @@ from typing import Iterable, List, NewType, Set, Tuple, Union
 from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
 from ipv8.messaging.payload import IntroductionRequestPayload
 from ipv8.peer import Peer
+from ipv8.types import AnyPayload
 
+from bami.common.network import SimulatedNetwork
 from bami.lz.base import BaseCommunity
 from bami.lz.database.database import TransactionSyncDB
 from bami.lz.generator import generate_transaction_fee
@@ -60,6 +62,11 @@ class SyncCommunity(BaseCommunity):
         self.add_message_handler(TransactionBatchPayload, self.on_received_transaction_batch)
 
         self._my_peer_id = self.my_peer.public_key.key_to_bin()
+        self.latency_sim = self.settings.simulate_network_latency
+        if self.latency_sim:
+            self.sim_net = SimulatedNetwork()
+            self.sim_net.fix_location(self._my_peer_id)
+
         self.is_light_client = False
         self.connected_clients = set()
 
@@ -78,7 +85,6 @@ class SyncCommunity(BaseCommunity):
 
         self.pending_transactions = []
 
-
         self.blocks_size = []
 
         self.inject_mev = False
@@ -93,6 +99,16 @@ class SyncCommunity(BaseCommunity):
 
         if self.settings.start_immediately:
             self.start_tasks()
+
+    def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
+        if self.latency_sim:
+            latency = self.sim_net.get_link_latency(self.my_peer_id, peer.public_key.key_to_bin())
+            self.register_anonymous_task("send",
+                                         super().ez_send,
+                                         peer, *payloads, **kwargs,
+                                         delay=latency)
+        else:
+            super().ez_send(peer, *payloads, **kwargs)
 
     def censor_peer(self, pid: bytes):
         self.logger.warn("Starting to censor client")
@@ -117,24 +133,23 @@ class SyncCommunity(BaseCommunity):
                                                     extra_bytes, prefix, new_style)
 
     # ----- Introduction - add to reconciliation partners
-    def introduction_request_callback(self, peer, dist, payload: IntroductionRequestPayload):
+    def introduction_routine(self, peer, dist, payload):
         p_id = peer.public_key.key_to_bin()
         is_client = bool.from_bytes(payload.extra_bytes, 'big')
+        if self.latency_sim:
+            self.sim_net.fix_location(p_id)
         if is_client:
             self.connected_clients.add(p_id)
         else:
             if p_id not in self.reconciliation_manager.known_partners:
                 self.reconciliation_manager.init_new_partner(p_id)
+
+    def introduction_request_callback(self, peer, dist, payload: IntroductionRequestPayload):
+        self.introduction_routine(peer, dist, payload)
         super().introduction_request_callback(peer, dist, payload)
 
     def introduction_response_callback(self, peer, dist, payload):
-        p_id = peer.public_key.key_to_bin()
-        is_client = bool.from_bytes(payload.extra_bytes, 'big')
-        if is_client:
-            self.connected_clients.add(p_id)
-        else:
-            if p_id not in self.reconciliation_manager.known_partners:
-                self.reconciliation_manager.init_new_partner(p_id)
+        self.introduction_routine(peer, dist, payload)
         super().introduction_response_callback(peer, dist, payload)
 
     # ------ Transaction Creation ------------
@@ -154,15 +169,21 @@ class SyncCommunity(BaseCommunity):
         new_tx.sign = sign
         return new_tx
 
+    def on_transaction_created(self, tx: TransactionPayload):
+        pass
+
     def create_transaction(self):
         for _ in range(self.settings.tx_batch):
             new_tx = self.create_transaction_payload()
             self.process_transaction(new_tx)
 
+            self.on_transaction_created(new_tx)
+
             # This is a new transaction - push to neighbors
             selected = random.sample(self.get_full_nodes(),
                                      min(self.settings.initial_fanout,
                                          len(self.get_full_nodes())))
+
             for p in selected:
                 self.logger.debug("Sending transaction to {}".format(p))
                 self.ez_send(p, new_tx, sig=False)
@@ -317,7 +338,7 @@ class SyncCommunity(BaseCommunity):
             if len(self.mempool_candidates) < 1:
                 return
 
-            # Select transactions in a order of their addition to the mempool
+            # Select transactions in the order of their addition to the mempool
 
             p_id, val = min(self.mempool_candidates.items(),
                             key=lambda x: len(x[1]))
@@ -368,9 +389,10 @@ class SyncCommunity(BaseCommunity):
             self.settled_txs.update(to_settle)
             self.on_settle_transactions(to_settle)
 
-    def reconcile_sketches(self, p_id: bytes,
-                           payload: Union[ReconciliationResponsePayload,
-                           ReconciliationRequestPayload]) -> Tuple[List[int], List[int]]:
+    def reconcile_sketches(self,
+                           p_id: bytes,
+                           payload: Union[ReconciliationResponsePayload, ReconciliationRequestPayload]) \
+            -> tuple[list[bytes], list[bytes]]:
         diff_txs = self.reconcile_from_payload(p_id, payload)
 
         common_txs = self.reconciliation_manager.all_txs - set(diff_txs)
