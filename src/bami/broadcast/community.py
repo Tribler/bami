@@ -169,7 +169,8 @@ class MempoolBroadcastCommunity(Community):
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
         sample_size = num_nodes if num_nodes else self.settings.sync_retry_nodes
         lucky_peers = random.sample(self.get_full_nodes(), sample_size)
-        self.ez_send(lucky_peers, message_payload)
+        for peer in lucky_peers:
+            self.ez_send(peer, message_payload)
 
     @lazy_wrapper(TxBatchPayload)
     def receive_new_batch(self, p: Peer, batch: TxBatchPayload):
