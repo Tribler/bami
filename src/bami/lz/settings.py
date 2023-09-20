@@ -52,7 +52,6 @@ class LZSettings(ClientSettings,
                  PeerClockSettings,
                  BloomFilterSettings
                  ):
-    start_immediately = False
 
     # Default sketch for reconciliation is Bloom Filter
     tx_id_size = 32  # in bits
@@ -72,3 +71,5 @@ class LZSettings(ClientSettings,
 
     min_fee = 0.0
 
+    simulate_network_latency: bool = True
+    start_immediately: bool = False
