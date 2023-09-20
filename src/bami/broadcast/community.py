@@ -2,7 +2,7 @@ import random
 from asyncio import get_event_loop
 from binascii import unhexlify
 from collections import defaultdict
-from typing import Iterable, List
+from typing import List
 
 from ipv8.community import Community
 from ipv8.lazy_community import lazy_wrapper
@@ -56,13 +56,14 @@ class MempoolBroadcastCommunity(Community):
         self.add_message_handler(TransactionPayload, self.received_transaction)
 
     def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
-        super().ez_send(peer, *payloads, **kwargs)
-        # if self.latency_sim:
-        #    latency = self.sim_net.get_link_latency(self.my_peer_id, peer.public_key.key_to_bin())
-        #    self.register_anonymous_task("send",
-        #                                 super().ez_send,
-        #                                 peer, payloads
-        #                                 delay=latency)
+        if self.latency_sim:
+            latency = self.sim_net.get_link_latency(self.my_peer_id, peer.public_key.key_to_bin())
+            self.register_anonymous_task("send",
+                                         super().ez_send,
+                                         peer, *payloads, **kwargs,
+                                         delay=latency)
+        else:
+            super().ez_send(peer, *payloads, **kwargs)
 
     def create_introduction_request(self, socket_address, extra_bytes=b'', new_style=False, prefix=None):
         extra_bytes = self.is_transaction_creator.to_bytes(1, 'big')
