@@ -186,7 +186,7 @@ class SyncCommunity(BaseCommunity):
 
             for p in selected:
                 self.logger.debug("Sending transaction to {}".format(p))
-                self.ez_send(p, new_tx, sig=False)
+                self.ez_send(p, new_tx)
 
     def get_full_nodes(self) -> Iterable[Peer]:
         return [p for p in self.get_peers() if p.public_key.key_to_bin() not in self.connected_clients]
@@ -205,8 +205,8 @@ class SyncCommunity(BaseCommunity):
 
     # --------- Transaction Processing ---------------
 
-    @lazy_wrapper_unsigned(TransactionPayload)
-    def received_transaction(self, p: Peer, payload: TransactionPayload):
+    @lazy_wrapper(TransactionPayload)
+    def received_transaction(self, _: Peer, payload: TransactionPayload):
         if self.is_light_client:
             self.logger.warn("Client received transaction")
         self.process_transaction(payload)
@@ -473,7 +473,7 @@ class SyncCommunity(BaseCommunity):
             for t in new_request:
                 self.pending_requests[t] += 1
             response_payload = TransactionsRequestPayload(new_request)
-            self.send_payload(peer, response_payload, sig=True)
+            self.send_payload(peer, response_payload)
 
     def process_tx_challenge_payload(self, peer: Peer, payload: TransactionsChallengePayload):
         tx_batch_request = []

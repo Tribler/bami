@@ -54,7 +54,7 @@ class BaseCommunity(Community):
         self.endpoint.send(address, packet)
 
     def send_payload(self, peer: Peer, payload: Payload, sig: bool = True) -> None:
-        self.ez_send(peer, payload, sig=sig)
+        self.ez_send(peer, payload)
 
     def parse_raw_packet(
         self,
