@@ -27,9 +27,9 @@ class ClientSettings:
 @dataclasses.dataclass
 class ReconciliationSettings:
     # Reconciliation settings
-    recon_freq = 5  # Reconciliation round frequency
-    recon_fanout = 10  # selected peers for reconciliation
-    recon_delay = 0  # start first round after the delay
+    recon_freq = 1  # Reconciliation round frequency
+    recon_fanout = 5  # selected peers for reconciliation
+    recon_delay = 1  # start first round after the delay
 
     max_pending_requests = 1
 
@@ -63,6 +63,11 @@ class LZSettings(ClientSettings,
     sketch_algorithm = SketchAlgorithm.MINISKETCH
     sketch_size: int = 100
     max_sections = 500
+
+    # BatchMaker parameters
+    batch_size: int = 250  # number of transactions
+    batch_freq: float = 0.5  # in seconds
+    batch_delay: float = 0.6  # in seconds, delay before starting batch creation
 
     settle_freq = 5
     settle_delay = 2

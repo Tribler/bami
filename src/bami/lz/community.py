@@ -1,10 +1,10 @@
 import heapq
+import random
 from binascii import unhexlify
 from collections import defaultdict
-import random
 from typing import Iterable, List, NewType, Set, Tuple, Union
 
-from ipv8.lazy_community import lazy_wrapper, lazy_wrapper_unsigned
+from ipv8.lazy_community import lazy_wrapper
 from ipv8.messaging.payload import IntroductionRequestPayload
 from ipv8.peer import Peer
 from ipv8.types import AnyPayload
@@ -121,6 +121,7 @@ class SyncCommunity(BaseCommunity):
         if self.settings.enable_client:
             self.start_tx_creation()
         else:
+            self.start_batch_making()
             self.start_reconciliation()
 
     def create_introduction_request(self, socket_address, extra_bytes=b'', new_style=False, prefix=None):
@@ -183,15 +184,14 @@ class SyncCommunity(BaseCommunity):
             self.on_transaction_created(t_id)
 
             # This is a new transaction - push to neighbors
-            selected = random.sample(self.get_full_nodes(),
-                                     min(self.settings.initial_fanout,
-                                         len(self.get_full_nodes())))
+            selected = random.sample(self.get_full_nodes(), min(self.settings.initial_fanout,
+                                                                len(self.get_full_nodes())))
 
             for p in selected:
                 self.logger.debug("Sending transaction to {}".format(p))
                 self.ez_send(p, new_tx)
 
-    def get_full_nodes(self) -> Iterable[Peer]:
+    def get_full_nodes(self) -> List[Peer]:
         return [p for p in self.get_peers() if p.public_key.key_to_bin() not in self.connected_clients]
 
     def start_tx_creation(self):
@@ -217,6 +217,37 @@ class SyncCommunity(BaseCommunity):
     def on_process_new_transaction(self, t_id: int, tx_payload: TransactionPayload):
         pass
 
+    def seal_new_batch(self):
+        if len(self.pending_transactions) > 0:
+            # select first k transactions for the batch
+            selected = self.pending_transactions[:self.settings.batch_size]
+            batch = TransactionBatchPayload(selected)
+            self.broadcast(batch)
+            self.pending_transactions = self.pending_transactions[self.settings.batch_size:]
+
+    def broadcast(self, message_payload):
+        """Broadcast message to all peers and return the awaited id for acknowledgement"""
+        for p in self.get_full_nodes():
+            self.ez_send(p, message_payload)
+
+    def feed_batch_maker(self, new_tx: TransactionPayload):
+        self.pending_transactions.append(new_tx)
+        if len(self.pending_transactions) >= self.settings.batch_size:
+            self.replace_task(
+                "batch_maker",
+                self.seal_new_batch,
+                interval=self.settings.batch_freq,
+                delay=0,
+            )
+
+    def start_batch_making(self):
+        self.register_task(
+            "batch_maker",
+            self.seal_new_batch,
+            interval=self.settings.batch_freq,
+            delay=random.random() * self.settings.batch_delay,
+        )
+
     def process_transaction(self, payload: TransactionPayload):
 
         t_id = bytes_to_uint(payload.t_id, self.settings.tx_id_size)
@@ -225,6 +256,7 @@ class SyncCommunity(BaseCommunity):
             return
 
         if not self.memcache.get_tx_payload(t_id):
+            self.feed_batch_maker(payload)
             self.memcache.add_tx_payload(t_id, payload)
             self.memcache.peer_clock(self.my_peer_id).increment(t_id)
             self.on_process_new_transaction(t_id, payload)
