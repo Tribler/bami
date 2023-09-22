@@ -84,6 +84,7 @@ class SyncCommunity(BaseCommunity):
         self.mempool_candidates = {}
 
         self.pending_transactions = []
+        self.pending_tx_payloads = []
 
         self.blocks_size = []
 
@@ -218,12 +219,12 @@ class SyncCommunity(BaseCommunity):
         pass
 
     def seal_new_batch(self):
-        if len(self.pending_transactions) > 0:
+        if len(self.pending_tx_payloads) > 0:
             # select first k transactions for the batch
-            selected = self.pending_transactions[:self.settings.batch_size]
+            selected = self.pending_tx_payloads[:self.settings.batch_size]
             batch = TransactionBatchPayload(selected)
             self.broadcast(batch)
-            self.pending_transactions = self.pending_transactions[self.settings.batch_size:]
+            self.pending_transactions = self.pending_tx_payloads[self.settings.batch_size:]
 
     def broadcast(self, message_payload):
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
@@ -231,8 +232,8 @@ class SyncCommunity(BaseCommunity):
             self.ez_send(p, message_payload)
 
     def feed_batch_maker(self, new_tx: TransactionPayload):
-        self.pending_transactions.append(new_tx)
-        if len(self.pending_transactions) >= self.settings.batch_size:
+        self.pending_tx_payloads.append(new_tx)
+        if len(self.pending_tx_payloads) >= self.settings.batch_size:
             self.replace_task(
                 "batch_maker",
                 self.seal_new_batch,
