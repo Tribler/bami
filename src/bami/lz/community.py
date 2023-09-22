@@ -228,7 +228,12 @@ class SyncCommunity(BaseCommunity):
 
     def broadcast(self, message_payload):
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
-        for p in self.get_full_nodes():
+        # This is a new transaction - push to neighbors
+        selected = random.sample(self.get_full_nodes(), min(self.settings.initial_fanout,
+                                                            len(self.get_full_nodes())))
+
+        for p in selected:
+            self.logger.debug("Sending transaction to {}".format(p))
             self.ez_send(p, message_payload)
 
     def feed_batch_maker(self, new_tx: TransactionPayload):
@@ -242,6 +247,7 @@ class SyncCommunity(BaseCommunity):
             )
 
     def start_batch_making(self):
+        self.logger.info("Start batch maker")
         self.register_task(
             "batch_maker",
             self.seal_new_batch,
@@ -354,13 +360,16 @@ class SyncCommunity(BaseCommunity):
         old_clock.merge_clock(new_clock)
 
     def start_periodic_settlement(self):
-        self.logger.info("Start settlement for transactions")
-        self.register_task(
-            "settle_transactions",
-            self.settle_transactions,
-            interval=self.settings.settle_freq,
-            delay=random.random() + self.settings.settle_delay,
-        )
+        if self.is_light_client:
+            self.logger.warn("Attempted to launch full protocol at client")
+        else:
+            self.logger.info("Start settlement for transactions")
+            self.register_task(
+                "settle_transactions",
+                self.settle_transactions,
+                interval=self.settings.settle_freq,
+                delay=random.random() + self.settings.settle_delay,
+            )
 
     def on_settle_transactions(self, settled_txs: Iterable[int]):
         pass
