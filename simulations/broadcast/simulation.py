@@ -47,28 +47,19 @@ class SimulatedBroadcastCommunity(SimulatedCommunityMixin, MempoolBroadcastCommu
         self.my_peer_num = - 1
         super().__init__(*args, **kwargs)
 
-    def on_new_batch_created(self, new_batch: TxBatchPayload):
-        super().on_new_batch_created(new_batch)
-        print("Peer {}: New batch with {} # txs created at time {}".format(self.my_peer_num,
-                                                                           len(new_batch.txs),
-                                                                           get_event_loop().time()))
+        self.tx_start_time = {}
+        self.tx_ready_time = {}
 
     # noinspection PyUnreachableCode
     def on_transaction_created(self, new_tx: TransactionPayload):
         # Write time when we've first seen the transaction
-        print("Peer {}: New transaction {} at time {}".format(self.my_peer_num,
-                                                              new_tx.tx_id,
-                                                              get_event_loop().time()))
+        self.tx_start_time[new_tx.tx_id] = get_event_loop().time()
+        super().on_transaction_created(new_tx)
 
-    def on_new_header(self, new_header: HeaderPayload):
-        super().on_new_header(new_header)
-        # Write the time when transaction is finalized
-        for batch_ack in new_header.batches:
-            batch = self.batches[batch_ack.batch_id]
-            print("Peer {}: Number of transactions finalized {} at time {}".format(
-                self.my_peer_num,
-                len(batch.txs),
-                get_event_loop().time()))
+    def on_transaction_finalized(self, tx: TransactionPayload):
+        # Write time when transaction is finalized
+        self.tx_ready_time[tx.tx_id] = get_event_loop().time()
+        super().on_transaction_finalized(tx)
 
 
 def main(prefix="", sim_settings: SimulationSettings = None):
@@ -77,7 +68,7 @@ def main(prefix="", sim_settings: SimulationSettings = None):
     else:
         LATENCY = "global"
         N_CLIENTS = 10
-        N = 40
+        N = 200
 
         settings = SimulationSettings()
         settings.clients = N_CLIENTS
@@ -98,7 +89,33 @@ def main(prefix="", sim_settings: SimulationSettings = None):
     simulation.loop.run_forever()
 
     for peer_id in simulation.nodes.keys():
-        print(peer_id, len(simulation.nodes[peer_id].overlays[0].batches))
+        print(peer_id,
+              simulation.nodes[peer_id].overlays[0].receive_counter,
+              simulation.nodes[peer_id].overlays[0].send_counter,
+              )
+
+    # Collect transaction start time, merge dictionaries
+    total_tx_start_times = {}
+    for peer_id in simulation.nodes.keys():
+        total_tx_start_times.update(simulation.nodes[peer_id].overlays[0].tx_start_time)
+
+    # Collect transaction ready time, merge dictionaries
+    total_tx_ready_times = {}
+    for peer_id in simulation.nodes.keys():
+        for tx_id, ready_time in simulation.nodes[peer_id].overlays[0].tx_ready_time.items():
+            # Start time
+            latency = ready_time - total_tx_start_times[tx_id]
+            if tx_id not in total_tx_ready_times:
+                total_tx_ready_times[tx_id] = []
+            total_tx_ready_times[tx_id].append(latency)
+    # Report for 10 random transaction min, avg, max
+    import random
+    random_tx_ids = random.sample(list(total_tx_ready_times.keys()), min(10, len(total_tx_ready_times.keys())))
+    for tx_id in random_tx_ids:
+        print(len(total_tx_ready_times[tx_id]),
+              min(total_tx_ready_times[tx_id]),
+              sum(total_tx_ready_times[tx_id]) / len(total_tx_ready_times[tx_id]),
+              max(total_tx_ready_times[tx_id]))
 
 
 if __name__ == "__main__":
@@ -108,4 +125,4 @@ if __name__ == "__main__":
     # input_value = int(sys.argv[1])
     input_value = 1
     prefix = ""
-    main("net_data/" + str(input_value) + prefix)
+    main()

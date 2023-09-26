@@ -66,8 +66,8 @@ class LZSettings(ClientSettings,
 
     # BatchMaker parameters
     batch_size: int = 250  # number of transactions
-    batch_freq: float = 0.5  # in seconds
-    batch_delay: float = 0.6  # in seconds, delay before starting batch creation
+    batch_freq: float = 1.0  # in seconds
+    batch_delay: float = 0.1  # in seconds, delay before starting batch creation
 
     settle_freq = 5
     settle_delay = 2

@@ -48,12 +48,23 @@ class MempoolBroadcastCommunity(Community):
         self.pending_headers = {}
         self.batch_to_header = {}
 
+        self.receive_counter = 0
+        self.send_counter = 0
+
         # Message state machine
         self.add_message_handler(TxBatchPayload, self.receive_new_batch)
         self.add_message_handler(BatchAckPayload, self.receive_batch_ack)
         self.add_message_handler(HeaderPayload, self.receive_header)
         self.add_message_handler(BatchRequestPayload, self.receive_batch_request)
         self.add_message_handler(TransactionPayload, self.received_transaction)
+
+    def on_packet(self, packet, warn_unknown=True):
+        self.receive_counter += len(packet)
+        super().on_packet(packet, warn_unknown)
+
+    def ezr_pack(self, msg_num: int, *payloads: AnyPayload, **kwargs) -> bytes:
+        self.send_counter += len(payloads)
+        return super().ezr_pack(msg_num, *payloads, **kwargs)
 
     def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
         if self.latency_sim:
@@ -128,12 +139,7 @@ class MempoolBroadcastCommunity(Community):
     def feed_batch_maker(self, new_tx: TransactionPayload):
         self.pending_transactions.append(new_tx)
         if len(self.pending_transactions) >= self.settings.batch_size:
-            self.replace_task(
-                "batch_maker",
-                self.seal_new_batch,
-                interval=self.settings.batch_freq,
-                delay=0,
-            )
+            self.seal_new_batch()
 
     def start_batch_making(self):
         self.register_task(

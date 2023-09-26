@@ -54,12 +54,15 @@ class SyncCommunity(BaseCommunity):
 
         # Message processing
         # Gossip messages
-        self.add_message_handler(TransactionPayload, self.received_transaction)
+        self.add_message_handler(TransactionPayload, self.on_received_transaction)
         self.add_message_handler(ReconciliationRequestPayload, self.on_received_reconciliation_request)
         self.add_message_handler(ReconciliationResponsePayload, self.on_received_reconciliation_response)
         self.add_message_handler(TransactionsChallengePayload, self.on_received_transactions_challenge)
         self.add_message_handler(TransactionsRequestPayload, self.on_received_transactions_request)
         self.add_message_handler(TransactionBatchPayload, self.on_received_transaction_batch)
+
+        self.receive_counter = 0
+        self.send_counter = 0
 
         self._my_peer_id = self.my_peer.public_key.key_to_bin()
         self.latency_sim = self.settings.simulate_network_latency
@@ -100,6 +103,14 @@ class SyncCommunity(BaseCommunity):
 
         if self.settings.start_immediately:
             self.start_tasks()
+
+    def on_packet(self, packet, warn_unknown=True):
+        self.receive_counter += len(packet)
+        super().on_packet(packet, warn_unknown)
+
+    def ezr_pack(self, msg_num: int, *payloads: AnyPayload, **kwargs) -> bytes:
+        self.send_counter += len(payloads)
+        return super().ezr_pack(msg_num, *payloads, **kwargs)
 
     def ez_send(self, peer: Peer, *payloads: AnyPayload, **kwargs) -> None:
         if self.latency_sim:
@@ -178,16 +189,11 @@ class SyncCommunity(BaseCommunity):
     def create_transaction(self):
         for _ in range(self.settings.tx_batch):
             new_tx = self.create_transaction_payload()
-            self.process_transaction(new_tx)
-
             t_id = bytes_to_uint(new_tx.t_id, self.settings.tx_id_size)
-
             self.on_transaction_created(t_id)
-
             # This is a new transaction - push to neighbors
             selected = random.sample(self.get_full_nodes(), min(self.settings.initial_fanout,
                                                                 len(self.get_full_nodes())))
-
             for p in selected:
                 self.logger.debug("Sending transaction to {}".format(p))
                 self.ez_send(p, new_tx)
@@ -210,7 +216,7 @@ class SyncCommunity(BaseCommunity):
     # --------- Transaction Processing ---------------
 
     @lazy_wrapper(TransactionPayload)
-    def received_transaction(self, _: Peer, payload: TransactionPayload):
+    def on_received_transaction(self, _: Peer, payload: TransactionPayload):
         if self.is_light_client:
             self.logger.warn("Client received transaction")
         self.process_transaction(payload)
@@ -224,7 +230,7 @@ class SyncCommunity(BaseCommunity):
             selected = self.pending_tx_payloads[:self.settings.batch_size]
             batch = TransactionBatchPayload(selected)
             self.broadcast(batch)
-            self.pending_transactions = self.pending_tx_payloads[self.settings.batch_size:]
+            self.pending_tx_payloads = self.pending_tx_payloads[self.settings.batch_size:]
 
     def broadcast(self, message_payload):
         """Broadcast message to all peers and return the awaited id for acknowledgement"""
@@ -239,12 +245,7 @@ class SyncCommunity(BaseCommunity):
     def feed_batch_maker(self, new_tx: TransactionPayload):
         self.pending_tx_payloads.append(new_tx)
         if len(self.pending_tx_payloads) >= self.settings.batch_size:
-            self.replace_task(
-                "batch_maker",
-                self.seal_new_batch,
-                interval=self.settings.batch_freq,
-                delay=0,
-            )
+            self.seal_new_batch()
 
     def start_batch_making(self):
         self.logger.info("Start batch maker")
@@ -280,7 +281,8 @@ class SyncCommunity(BaseCommunity):
             if t.script != payload.script:
                 self.logger.warn("ID collision detected")
             else:
-                self.logger.warn("Received duplicate")
+                # self.logger.warn("Received duplicate")
+                pass
 
     # --------------- Transaction Reconciliation -----------
 
